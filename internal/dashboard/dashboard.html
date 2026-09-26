@@ -15,7 +15,7 @@
 html{background:var(--bg)}
 body{background:transparent;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:20px;max-width:1400px;margin:0 auto;position:relative;overflow-x:hidden}
 /* ── Subtle welcome-page background animation (issue #11) ──────────────── */
-#dashboard-flow{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.26}
+#dashboard-flow{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.42;mix-blend-mode:screen}
 .dashboard-content{position:relative;z-index:1}
 header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
 header h1{font-size:22px;font-weight:600;color:var(--blue)}
@@ -395,10 +395,10 @@ tr.clickable{cursor:pointer}
   }
   function draw(ts){
     ctx.clearRect(0,0,width,height);
-    var line="rgba(88,166,255,.24)",soft="rgba(139,148,158,.42)",price="rgba(88,166,255,.65)";
+    var line="rgba(88,166,255,.42)",soft="rgba(169,182,198,.68)",price="rgba(112,184,255,.9)";
     var glow=ctx.createLinearGradient(gate-28,0,gate+28,0);
     glow.addColorStop(0,"rgba(88,166,255,0)");
-    glow.addColorStop(.5,"rgba(88,166,255,.035)");
+    glow.addColorStop(.5,"rgba(88,166,255,.07)");
     glow.addColorStop(1,"rgba(88,166,255,0)");
     ctx.fillStyle=glow;ctx.fillRect(gate-28,0,56,height);
     ctx.strokeStyle=line;ctx.lineWidth=1;ctx.setLineDash([3,7]);
@@ -422,7 +422,7 @@ tr.clickable{cursor:pointer}
 
   resize();
   window.addEventListener("resize",resize,{passive:true});
-  for(var i=0;i<14;i++){var token=spawn();token.x=Math.random()*gate;tokens.push(token);}
+  for(var i=0;i<22;i++){var token=spawn();token.x=Math.random()*gate;tokens.push(token);}
   if(reduced)draw(0);else window.requestAnimationFrame(draw);
   document.addEventListener("visibilitychange",function(){
     if(reduced)return;
