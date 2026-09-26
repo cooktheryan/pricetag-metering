@@ -422,7 +422,7 @@ tr.clickable{cursor:pointer}
 
   resize();
   window.addEventListener("resize",resize,{passive:true});
-  for(var i=0;i<120;i++){var token=spawn();token.x=Math.random()*gate;tokens.push(token);}
+  for(var i=0;i<80;i++){var token=spawn();token.x=Math.random()*gate;tokens.push(token);}
   if(reduced)draw(0);else window.requestAnimationFrame(draw);
   document.addEventListener("visibilitychange",function(){
     if(reduced)return;
