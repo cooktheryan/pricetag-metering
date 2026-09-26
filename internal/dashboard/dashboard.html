@@ -386,7 +386,7 @@ tr.clickable{cursor:pointer}
     width=window.innerWidth;height=window.innerHeight;
     canvas.width=width*dpr;canvas.height=height*dpr;
     ctx.setTransform(dpr,0,0,dpr,0,0);
-    gate=Math.max(36,Math.min(width-36,width*.8));
+    gate=Math.max(36,Math.min(width-36,width*.5));
   }
   function spawn(){
     return {x:-28,y:24+Math.random()*Math.max(1,height-48),
@@ -422,7 +422,7 @@ tr.clickable{cursor:pointer}
 
   resize();
   window.addEventListener("resize",resize,{passive:true});
-  for(var i=0;i<22;i++){var token=spawn();token.x=Math.random()*gate;tokens.push(token);}
+  for(var i=0;i<220;i++){var token=spawn();token.x=Math.random()*gate;tokens.push(token);}
   if(reduced)draw(0);else window.requestAnimationFrame(draw);
   document.addEventListener("visibilitychange",function(){
     if(reduced)return;
