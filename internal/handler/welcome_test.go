@@ -18,7 +18,7 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 		},
 		MonthlyTokenQuota: 10_000_000_000,
 	})
-	req := httptest.NewRequest(http.MethodGet, "/welcome", nil)
+	req := httptest.NewRequest(http.MethodGet, "https://dashboard.test/welcome", nil)
 	rec := httptest.NewRecorder()
 	h.ServeWelcome(rec, req)
 
@@ -37,6 +37,9 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 		"effortLevel",
 		"Set up Hermes CLI",
 		"~/.hermes/config.yaml",
+		"opencode-enmaas",
+		"XDG_CONFIG_HOME",
+		"gpt-5.6-luna",
 		"/v1/messages",
 		"/v1/chat/completions",
 		"/v1/responses",
@@ -61,7 +64,7 @@ var anyPlaceholder = regexp.MustCompile(`\{\{[A-Z_]+\}\}`)
 
 func TestServeWelcomeFallbacks(t *testing.T) {
 	h := NewDashboardHandler(nil, config.Config{MonthlyTokenQuota: 100_000_000})
-	req := httptest.NewRequest(http.MethodGet, "/welcome", nil)
+	req := httptest.NewRequest(http.MethodGet, "https://dashboard.test/welcome", nil)
 	rec := httptest.NewRecorder()
 	h.ServeWelcome(rec, req)
 
@@ -70,7 +73,7 @@ func TestServeWelcomeFallbacks(t *testing.T) {
 		t.Errorf("unsubstituted placeholder %s in served page", m)
 	}
 	for _, want := range []string{
-		welcomeGatewayFallback, welcomeDashboardFallback,
+		welcomeGatewayFallback, "https://dashboard.test",
 		"100M monthly allowance",
 	} {
 		if !strings.Contains(body, want) {

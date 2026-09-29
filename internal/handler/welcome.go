@@ -9,13 +9,26 @@ import (
 	"github.com/redhat-et/pricetag-metering/internal/dashboard"
 )
 
-// placeholder hosts keep the page readable (in local development or any
-// deployment that forgot the env) while making it obvious the URLs are
-// stand-ins.
+// The gateway fallback remains a visible local-development placeholder. The
+// dashboard fallback is derived from the request host because welcome and
+// dashboard are served by the same application and therefore share an origin.
 const (
-	welcomeGatewayFallback   = "https://gateway.example.com"
-	welcomeDashboardFallback = "https://dashboard.example.com"
+	welcomeGatewayFallback = "https://gateway.example.com"
 )
+
+func requestOrigin(r *http.Request) string {
+	scheme := r.Header.Get("X-Forwarded-Proto")
+	if scheme == "" {
+		scheme = "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+	}
+	if r.Host == "" {
+		return ""
+	}
+	return scheme + "://" + r.Host
+}
 
 // ServeWelcome renders the public onboarding page. It is intentionally
 // unauthenticated — it is what you send to a new user before they have a
@@ -35,7 +48,10 @@ func (h *DashboardHandler) ServeWelcome(w http.ResponseWriter, r *http.Request) 
 	}
 	dash := h.cfg.Welcome.DashboardURL
 	if dash == "" {
-		dash = welcomeDashboardFallback
+		dash = requestOrigin(r)
+		if dash == "" {
+			dash = welcomeGatewayFallback
+		}
 	}
 	page := strings.NewReplacer(
 		"{{GATEWAY_URL}}", gateway,
