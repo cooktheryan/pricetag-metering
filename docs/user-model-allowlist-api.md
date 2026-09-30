@@ -7,7 +7,7 @@ This API lets the authorized budget integration replace or clear one MaaS user's
 All endpoints require:
 
 ```http
-Authorization: Bearer <M2M_SHARED_SECRET>
+Authorization: Bearer <MODEL_POLICY_API_SECRET>
 ```
 
 The partner API fails closed: it returns `503` if no shared secret is configured and `401` for missing/invalid credentials. Never expose the secret in browser code.

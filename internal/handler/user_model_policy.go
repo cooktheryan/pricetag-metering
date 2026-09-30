@@ -22,13 +22,13 @@ func NewUserModelPolicyHandler(store *storage.Store) *UserModelPolicyHandler {
 // the restriction and returns the user to baseline gateway policy.
 func (h *UserModelPolicyHandler) HandleUserModelPolicy(w http.ResponseWriter, r *http.Request) {
 	const prefix = "/api/v1/model-policies/users/"
-	if !strings.HasPrefix(r.URL.Path, prefix) {
-		http.NotFound(w, r)
-		return
-	}
-	username, err := url.PathUnescape(strings.TrimPrefix(r.URL.Path, prefix))
-	if err != nil || strings.TrimSpace(username) == "" || strings.Contains(username, "/") {
-		http.Error(w, "invalid username path segment", http.StatusBadRequest)
+	username, err := parseUserModelPolicyUsername(r.URL.EscapedPath(), prefix)
+	if err != nil {
+		if errors.Is(err, errModelPolicyPathNotFound) {
+			http.NotFound(w, r)
+		} else {
+			http.Error(w, "invalid username path segment", http.StatusBadRequest)
+		}
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -72,4 +72,21 @@ func (h *UserModelPolicyHandler) HandleUserModelPolicy(w http.ResponseWriter, r 
 		w.Header().Set("Allow", "GET, PUT, DELETE")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+var errModelPolicyPathNotFound = errors.New("model policy path not found")
+
+func parseUserModelPolicyUsername(path, prefix string) (string, error) {
+	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, "/allowlist") {
+		return "", errModelPolicyPathNotFound
+	}
+	escapedUsername := strings.TrimSuffix(strings.TrimPrefix(path, prefix), "/allowlist")
+	if escapedUsername == "" || strings.Contains(escapedUsername, "/") {
+		return "", errors.New("invalid model policy username path")
+	}
+	username, err := url.PathUnescape(escapedUsername)
+	if err != nil || strings.TrimSpace(username) == "" || strings.Contains(username, "/") {
+		return "", errors.New("invalid model policy username path")
+	}
+	return username, nil
 }
