@@ -10,7 +10,13 @@ Send the dedicated `USAGE_REPORT_API_SECRET` as a bearer token:
 Authorization: Bearer <USAGE_REPORT_API_SECRET>
 ```
 
-This partner endpoint fails closed: if the secret is missing from service configuration it returns `503`; missing or incorrect bearer credentials return `401`. Do not place the secret in browser code. The EnMaaS Route must be HTTPS and path-scoped to `/api/v1/usage/users`.
+This partner endpoint fails closed: if the secret is missing from service configuration it returns `503`; missing or incorrect bearer credentials return `401`. Do not place the secret in browser code. The bearer secret is partner-wide: anyone holding it can request a report for any username in the service's tenant, so the Atlas backend must derive the username from its verified identity rather than accept an arbitrary browser-supplied username.
+
+## Deployment status and boundary
+
+The current PriceTag EnMaaS deployment does not configure `USAGE_REPORT_API_SECRET` or expose `/api/v1/usage/users` through a public Route. Until Atlas's service identity, network path, and secret-distribution process are approved, keep this endpoint unavailable; an unset secret returns `503`.
+
+When enabling Atlas access, either keep the call on an approved private service path or add a dedicated HTTPS Route scoped only to `/api/v1/usage/users`. Do not add the endpoint to a catch-all dashboard Route. Deliver the same secret to the Atlas backend through an approved secret store; never expose it to browser code.
 
 ## Request
 
