@@ -73,7 +73,6 @@ type Config struct {
 	// ModelPolicyAPISecret protects the model-policy management API. It is a
 	// separate credential so usage readers cannot change access policy.
 	ModelPolicyAPISecret string
-
 	// OrgInviteTTLHours bounds a key invite link: a single-use token that
 	// nobody opened is worthless once it expires.
 	OrgInviteTTLHours int
