@@ -178,6 +178,7 @@ func main() {
 	orgHandler := handler.NewOrgHandler(store, cfg, maasClient)
 	quotaHandler := handler.NewQuotaHandler(store, cfg)
 	usageReportHandler := handler.NewUsageReportHandler(store)
+	userModelPolicyHandler := handler.NewUserModelPolicyHandler(store)
 	auth := authHandler.RequireAuth
 
 	mux := http.NewServeMux()
@@ -186,9 +187,10 @@ func main() {
 	m2mAuth := func(next http.HandlerFunc) http.HandlerFunc { return handler.RequireM2MAuth(cfg, next) }
 	mux.HandleFunc("/api/v1/events", m2mAuth(eventsHandler.HandleEvent))
 	mux.HandleFunc("/api/v1/customers/", m2mAuth(entitlementsHandler.HandleEntitlement))
-	// Partner reporting is read-only and has its own fail-closed auth wrapper;
-	// M2M_AUTH_REQUIRED stays independently switchable for gateway compatibility.
+	// Partner APIs require endpoint-specific bearer secrets, independently
+	// of the legacy gateway M2M toggle.
 	mux.HandleFunc("/api/v1/usage/users/", handler.RequirePartnerAPIAuth(cfg.UsageReportAPISecret, usageReportHandler.HandleUserUsage))
+	mux.HandleFunc("/api/v1/model-policies/users/", handler.RequirePartnerAPIAuth(cfg.ModelPolicyAPISecret, userModelPolicyHandler.HandleUserModelPolicy))
 	// /api/v1/team-usage was REMOVED on purpose: it sat outside auth, took
 	// the group from the query string, and defaulted to a hard-coded team.
 	// Its replacement is /api/v1/org/usage below, which is authenticated

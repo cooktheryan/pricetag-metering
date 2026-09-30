@@ -41,10 +41,11 @@ type UsageEvent struct {
 // filters, useful for the dashboard. A denial is a 429 in the gateway with a
 // fixed plaintext body — this JSON never reaches the client.
 type UsageStats struct {
-	HasAccess bool    `json:"hasAccess"`
-	Balance   float64 `json:"balance"`
-	Usage     float64 `json:"usage"`
-	Overage   float64 `json:"overage"`
+	HasAccess    bool    `json:"hasAccess"`
+	Balance      float64 `json:"balance"`
+	Usage        float64 `json:"usage"`
+	Overage      float64 `json:"overage"`
+	ModelAllowed bool    `json:"modelAllowed"`
 
 	// Dollar quota (see quota.go). QuotaUSD is the effective monthly limit
 	// including grants; SpendUSD the month-to-date spend on the same basis
@@ -387,6 +388,7 @@ func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exe
 	stats.QuotaUSD = decision.LimitUSD
 	stats.SpendUSD = decision.SpentUSD
 	stats.MonthEnds = decision.MonthEnds.UTC().Format(time.RFC3339)
+	stats.ModelAllowed = decision.ModelAllowed(model)
 	allowed := decision.Allowed()
 	if !allowed && decision.ModelAllowedOverLimit(model) {
 		// Post-cap allowance (issue #22): an admin-listed model passes
@@ -396,7 +398,7 @@ func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exe
 		allowed = true
 		stats.OverLimitModel = true
 	}
-	stats.HasAccess = stats.HasAccess && allowed
+	stats.HasAccess = stats.HasAccess && allowed && stats.ModelAllowed
 	return stats, nil
 }
 
@@ -1049,6 +1051,9 @@ func (s *Store) migrate(ctx context.Context) error {
 	}
 	// Last: the quota tables FK to people.
 	if err := s.migrateQuota(ctx); err != nil {
+		return err
+	}
+	if err := s.migrateUserModelPolicy(ctx); err != nil {
 		return err
 	}
 	slog.Info("database migrations complete")

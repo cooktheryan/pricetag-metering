@@ -1,13 +1,14 @@
 package storage
 
 import (
-	"github.com/lib/pq"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 // Lifecycle sentinels the handler maps to HTTP statuses. Validation stays
@@ -364,22 +365,26 @@ const quotaAllowanceMax = 50
 // included), priced by the shared costUSDExpr, summed across every login
 // linked to the person.
 type QuotaDecision struct {
-	HasPerson bool      `json:"has_person"`
-	Enforced  bool      `json:"enforced"` // the policy flag
-	Exempt    bool      `json:"exempt"`   // super-admin — never gated
-	BaseUSD   float64   `json:"base_usd"` // user/group override or policy default
-	GrantUSD  float64   `json:"grant_usd"`
-	LimitUSD  float64   `json:"limit_usd"` // base + this month's grants
-	SpentUSD  float64   `json:"spent_usd"`
+	HasPerson bool `json:"has_person"`
+	Enforced  bool `json:"enforced"` // the policy flag
+	Exempt    bool `json:"exempt"`   // super-admin — never gated
+	// User model allowlist is enforcement state internal to the entitlement
+	// decision; the dedicated model-policy endpoint owns its public schema.
+	ModelPolicyActive bool     `json:"-"`
+	UserAllowedModels []string `json:"-"`
+	BaseUSD           float64  `json:"base_usd"` // user/group override or policy default
+	GrantUSD          float64  `json:"grant_usd"`
+	LimitUSD          float64  `json:"limit_usd"` // base + this month's grants
+	SpentUSD          float64  `json:"spent_usd"`
 	// Post-cap allowance (issue #22): admin-listed exact model identifiers
 	// that pass when the dollar gate denies, and the optional SOFT ceiling
 	// on how far a month may ride the allowance (0 = unlimited). Soft:
 	// in-flight requests and the 15s decision cache can overshoot it by
 	// roughly a request plus the cache window.
-	OverLimitModels   []string `json:"over_limit_models,omitempty"`
-	OverCapCeilingUSD float64  `json:"over_cap_ceiling_usd,omitempty"`
-	Month     string    `json:"month"`
-	MonthEnds time.Time `json:"month_ends"`
+	OverLimitModels   []string  `json:"over_limit_models,omitempty"`
+	OverCapCeilingUSD float64   `json:"over_cap_ceiling_usd,omitempty"`
+	Month             string    `json:"month"`
+	MonthEnds         time.Time `json:"month_ends"`
 }
 
 // EffectiveEnforced reports whether gating actually applies to this caller.
@@ -461,7 +466,7 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 			FROM quota_grants WHERE person_slug = $1 AND month = to_char(date_trunc('month', NOW()), 'YYYY-MM')
 		) g ON true`,
 		slugArg, groupName,
-		).Scan(&defaultUSD, &d.Enforced, pq.Array(&d.OverLimitModels), &overCapNull,
+	).Scan(&defaultUSD, &d.Enforced, pq.Array(&d.OverLimitModels), &overCapNull,
 		&userOv, &groupOv, &grantUSD, &d.Month, &d.MonthEnds)
 	if err != nil {
 		return d, fmt.Errorf("quota policy lookup: %w", err)
@@ -493,6 +498,12 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	if err != nil {
 		return d, fmt.Errorf("quota spend lookup: %w", err)
 	}
+	modelPolicy, err := s.GetUserModelAllowlist(ctx, username)
+	if err != nil {
+		return d, fmt.Errorf("model allowlist lookup: %w", err)
+	}
+	d.ModelPolicyActive = modelPolicy.Enabled
+	d.UserAllowedModels = modelPolicy.Models
 	return d, nil
 }
 

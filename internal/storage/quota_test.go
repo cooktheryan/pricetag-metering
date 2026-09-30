@@ -41,3 +41,27 @@ func TestModelAllowedOverLimit(t *testing.T) {
 		})
 	}
 }
+
+func TestUserModelAllowlistDecision(t *testing.T) {
+	tests := []struct {
+		name     string
+		decision QuotaDecision
+		model    string
+		want     bool
+	}{
+		{name: "no policy preserves baseline", decision: QuotaDecision{}, model: "any-model", want: true},
+		{name: "allowlisted exact id", decision: QuotaDecision{ModelPolicyActive: true, UserAllowedModels: []string{"model-a"}}, model: "model-a", want: true},
+		{name: "not listed is denied", decision: QuotaDecision{ModelPolicyActive: true, UserAllowedModels: []string{"model-a"}}, model: "model-b", want: false},
+		{name: "exact case match", decision: QuotaDecision{ModelPolicyActive: true, UserAllowedModels: []string{"model-a"}}, model: "Model-A", want: false},
+		{name: "missing request model fails closed", decision: QuotaDecision{ModelPolicyActive: true, UserAllowedModels: []string{"model-a"}}, model: "", want: false},
+		{name: "empty active list blocks all", decision: QuotaDecision{ModelPolicyActive: true, UserAllowedModels: []string{}}, model: "model-a", want: false},
+		{name: "superadmin exempt", decision: QuotaDecision{Exempt: true, ModelPolicyActive: true, UserAllowedModels: []string{}}, model: "model-a", want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.decision.ModelAllowed(tt.model); got != tt.want {
+				t.Fatalf("ModelAllowed(%q) = %v, want %v", tt.model, got, tt.want)
+			}
+		})
+	}
+}
