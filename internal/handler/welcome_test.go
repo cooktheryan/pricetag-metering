@@ -18,7 +18,7 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 		},
 		MonthlyTokenQuota: 10_000_000_000,
 	})
-	req := httptest.NewRequest(http.MethodGet, "/welcome", nil)
+	req := httptest.NewRequest(http.MethodGet, "https://dashboard.test/welcome", nil)
 	rec := httptest.NewRecorder()
 	h.ServeWelcome(rec, req)
 
@@ -37,6 +37,9 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 		"effortLevel",
 		"Set up Hermes CLI",
 		"~/.hermes/config.yaml",
+		"opencode-enmaas",
+		"XDG_CONFIG_HOME",
+		"gpt-5.6-luna",
 		"/v1/messages",
 		"/v1/chat/completions",
 		"/v1/responses",
@@ -61,7 +64,7 @@ var anyPlaceholder = regexp.MustCompile(`\{\{[A-Z_]+\}\}`)
 
 func TestServeWelcomeFallbacks(t *testing.T) {
 	h := NewDashboardHandler(nil, config.Config{MonthlyTokenQuota: 100_000_000})
-	req := httptest.NewRequest(http.MethodGet, "/welcome", nil)
+	req := httptest.NewRequest(http.MethodGet, "https://dashboard.test/welcome", nil)
 	rec := httptest.NewRecorder()
 	h.ServeWelcome(rec, req)
 
@@ -75,6 +78,46 @@ func TestServeWelcomeFallbacks(t *testing.T) {
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("fallback page missing %q", want)
+		}
+	}
+}
+
+func TestServeWelcomeFallbackIgnoresForwardedOrigin(t *testing.T) {
+	h := NewDashboardHandler(nil, config.Config{MonthlyTokenQuota: 100_000_000})
+	req := httptest.NewRequest(http.MethodGet, "https://attacker.example/welcome", nil)
+	req.Host = `evil.example"><script>alert(1)</script>`
+	req.Header.Set("X-Forwarded-Proto", `javascript:alert(1)//`)
+	rec := httptest.NewRecorder()
+	h.ServeWelcome(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, welcomeDashboardFallback) {
+		t.Fatalf("fallback page missing trusted dashboard fallback %q", welcomeDashboardFallback)
+	}
+	for _, forbidden := range []string{"attacker.example", "evil.example", "javascript:alert"} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("fallback page contains request-controlled value %q", forbidden)
+		}
+	}
+}
+
+func TestServeWelcomeEscapesConfiguredURLs(t *testing.T) {
+	h := NewDashboardHandler(nil, config.Config{Welcome: config.Welcome{
+		GatewayURL:   `https://gateway.test/?q="<script>`,
+		DashboardURL: `https://dashboard.test/?q="<script>`,
+	}})
+	rec := httptest.NewRecorder()
+	h.ServeWelcome(rec, httptest.NewRequest(http.MethodGet, "https://dashboard.test/welcome", nil))
+
+	body := rec.Body.String()
+	for _, raw := range []string{`https://gateway.test/?q="`, `https://dashboard.test/?q="`} {
+		if strings.Contains(body, raw) {
+			t.Fatalf("configured URL was inserted as raw HTML: %q", raw)
+		}
+	}
+	for _, escaped := range []string{"&#34;", "&lt;script&gt;"} {
+		if !strings.Contains(body, escaped) {
+			t.Errorf("escaped configured URL missing %q", escaped)
 		}
 	}
 }

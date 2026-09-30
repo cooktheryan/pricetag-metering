@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"html"
 	"io/fs"
 	"net/http"
 	"strconv"
@@ -9,9 +10,9 @@ import (
 	"github.com/redhat-et/pricetag-metering/internal/dashboard"
 )
 
-// placeholder hosts keep the page readable (in local development or any
-// deployment that forgot the env) while making it obvious the URLs are
-// stand-ins.
+// The gateway fallback remains a visible local-development placeholder. The
+// dashboard fallback is derived from the request host because welcome and
+// dashboard are served by the same application and therefore share an origin.
 const (
 	welcomeGatewayFallback   = "https://gateway.example.com"
 	welcomeDashboardFallback = "https://dashboard.example.com"
@@ -35,12 +36,15 @@ func (h *DashboardHandler) ServeWelcome(w http.ResponseWriter, r *http.Request) 
 	}
 	dash := h.cfg.Welcome.DashboardURL
 	if dash == "" {
+		// Host and X-Forwarded-Proto are request-controlled values. Never put
+		// them into public HTML or use them to construct a clickable origin.
+		// Deployments should set WELCOME_DASHBOARD_URL explicitly.
 		dash = welcomeDashboardFallback
 	}
 	page := strings.NewReplacer(
-		"{{GATEWAY_URL}}", gateway,
-		"{{DASHBOARD_URL}}", dash,
-		"{{QUOTA_LABEL}}", quotaLabel(h.cfg.MonthlyTokenQuota),
+		"{{GATEWAY_URL}}", html.EscapeString(gateway),
+		"{{DASHBOARD_URL}}", html.EscapeString(dash),
+		"{{QUOTA_LABEL}}", html.EscapeString(quotaLabel(h.cfg.MonthlyTokenQuota)),
 	).Replace(string(data))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
