@@ -46,9 +46,9 @@ func TestRequireM2MAuthAcceptsBearerSecret(t *testing.T) {
 	}
 }
 
-func TestRequirePartnerM2MAuthFailsClosedWithoutSecret(t *testing.T) {
+func TestRequirePartnerAPIAuthFailsClosedWithoutSecret(t *testing.T) {
 	reached := false
-	h := RequirePartnerM2MAuth(config.Config{}, func(http.ResponseWriter, *http.Request) { reached = true })
+	h := RequirePartnerAPIAuth("", func(http.ResponseWriter, *http.Request) { reached = true })
 	w := httptest.NewRecorder()
 	h(w, httptest.NewRequest(http.MethodGet, "/", nil))
 	if w.Code != http.StatusServiceUnavailable {
@@ -59,9 +59,8 @@ func TestRequirePartnerM2MAuthFailsClosedWithoutSecret(t *testing.T) {
 	}
 }
 
-func TestRequirePartnerM2MAuthRejectsBadBearer(t *testing.T) {
-	cfg := config.Config{M2MSharedSecret: "partner-secret"}
-	h := RequirePartnerM2MAuth(cfg, func(http.ResponseWriter, *http.Request) { t.Fatal("handler should not be reached") })
+func TestRequirePartnerAPIAuthRejectsBadBearer(t *testing.T) {
+	h := RequirePartnerAPIAuth("partner-secret", func(http.ResponseWriter, *http.Request) { t.Fatal("handler should not be reached") })
 	for _, header := range []string{"", "Bearer wrong", "partner-secret"} {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		if header != "" {
@@ -75,10 +74,9 @@ func TestRequirePartnerM2MAuthRejectsBadBearer(t *testing.T) {
 	}
 }
 
-func TestRequirePartnerM2MAuthAcceptsBearerSecret(t *testing.T) {
+func TestRequirePartnerAPIAuthAcceptsBearerSecret(t *testing.T) {
 	reached := false
-	cfg := config.Config{M2MSharedSecret: "partner-secret"}
-	h := RequirePartnerM2MAuth(cfg, func(http.ResponseWriter, *http.Request) { reached = true })
+	h := RequirePartnerAPIAuth("partner-secret", func(http.ResponseWriter, *http.Request) { reached = true })
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer partner-secret")
 	h(httptest.NewRecorder(), req)

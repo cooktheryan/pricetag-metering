@@ -188,7 +188,7 @@ func main() {
 	mux.HandleFunc("/api/v1/customers/", m2mAuth(entitlementsHandler.HandleEntitlement))
 	// Partner reporting is read-only and has its own fail-closed auth wrapper;
 	// M2M_AUTH_REQUIRED stays independently switchable for gateway compatibility.
-	mux.HandleFunc("/api/v1/usage/users/", handler.RequirePartnerM2MAuth(cfg, usageReportHandler.HandleUserUsage))
+	mux.HandleFunc("/api/v1/usage/users/", handler.RequirePartnerAPIAuth(cfg.UsageReportAPISecret, usageReportHandler.HandleUserUsage))
 	// /api/v1/team-usage was REMOVED on purpose: it sat outside auth, took
 	// the group from the query string, and defaulted to a hard-coded team.
 	// Its replacement is /api/v1/org/usage below, which is authenticated

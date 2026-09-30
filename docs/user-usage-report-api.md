@@ -4,10 +4,10 @@
 
 ## Authentication
 
-Send the configured metering M2M shared secret as a bearer token:
+Send the dedicated `USAGE_REPORT_API_SECRET` as a bearer token:
 
 ```http
-Authorization: Bearer <M2M_SHARED_SECRET>
+Authorization: Bearer <USAGE_REPORT_API_SECRET>
 ```
 
 This partner endpoint fails closed: if the secret is missing from service configuration it returns `503`; missing or incorrect bearer credentials return `401`. Do not place the secret in browser code. The EnMaaS Route must be HTTPS and path-scoped to `/api/v1/usage/users`.
