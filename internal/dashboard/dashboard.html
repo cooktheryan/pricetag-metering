@@ -377,7 +377,7 @@ tr.clickable{cursor:pointer}
   var reduced=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var ctx=canvas.getContext("2d");
   var dpr=Math.min(window.devicePixelRatio||1,2);
-  var width=0,height=0,gate=0,running=!reduced&&!document.hidden;
+  var width=0,height=0,gate=0,running=!reduced&&!document.hidden,frameId=null;
   var tokens=[];
   var glyphs=["tok","{ }","42","1010","⧉",">>","…"];
   var prices=["$0.15","$0.47","$0.016","$1.20"];
@@ -393,7 +393,12 @@ tr.clickable{cursor:pointer}
       vx:.18+Math.random()*.38,g:glyphs[(Math.random()*glyphs.length)|0],
       priced:false,stamp:prices[(Math.random()*prices.length)|0],born:0,alpha:0};
   }
+  function schedule(){
+    if(running&&frameId===null)frameId=window.requestAnimationFrame(draw);
+  }
   function draw(ts){
+    frameId=null;
+    if(!running&&!reduced)return;
     ctx.clearRect(0,0,width,height);
     var line="rgba(88,166,255,.42)",soft="rgba(169,182,198,.68)",price="rgba(112,184,255,.9)";
     var glow=ctx.createLinearGradient(gate-28,0,gate+28,0);
@@ -417,17 +422,22 @@ tr.clickable{cursor:pointer}
       ctx.globalAlpha=1;
       if((token.priced&&ts-token.born>3600)||token.x>width+40)tokens[i]=spawn();
     }
-    if(running)window.requestAnimationFrame(draw);
+    schedule();
   }
 
   resize();
   window.addEventListener("resize",resize,{passive:true});
   for(var i=0;i<80;i++){var token=spawn();token.x=Math.random()*gate;tokens.push(token);}
-  if(reduced)draw(0);else window.requestAnimationFrame(draw);
+  if(reduced)draw(0);else schedule();
   document.addEventListener("visibilitychange",function(){
     if(reduced)return;
-    running=!document.hidden;
-    if(running)window.requestAnimationFrame(draw);
+    if(document.hidden){
+      running=false;
+      if(frameId!==null){window.cancelAnimationFrame(frameId);frameId=null;}
+    }else{
+      running=true;
+      schedule();
+    }
   });
 })();
 </script>
