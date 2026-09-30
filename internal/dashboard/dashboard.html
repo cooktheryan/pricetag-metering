@@ -12,7 +12,11 @@
   --text:#e0e3e8;--text2:#8b949e;--blue:#58a6ff;--green:#3fb950;
   --orange:#d29922;--red:#f85149;--purple:#bc8cff;--cyan:#39d2c0;
 }
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:20px;max-width:1400px;margin:0 auto}
+html{background:var(--bg)}
+body{background:transparent;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:20px;max-width:1400px;margin:0 auto;position:relative;overflow-x:hidden}
+/* ── Subtle welcome-page background animation (issue #11) ──────────────── */
+#dashboard-flow{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.25;mix-blend-mode:screen}
+.dashboard-content{position:relative;z-index:1}
 header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
 header h1{font-size:22px;font-weight:600;color:var(--blue)}
 header h1 span{color:var(--text2);font-weight:400;font-size:14px;margin-left:8px}
@@ -158,6 +162,10 @@ tr.clickable{cursor:pointer}
 </head>
 <body>
 
+<!-- Decorative only: keep this block easy to remove if the effect is not useful. -->
+<canvas id="dashboard-flow" aria-hidden="true"></canvas>
+
+<main class="dashboard-content">
 <header class="appbar">
   <a class="logo" href="/dashboard">Price<em>Tag</em></a>
   <nav>
@@ -356,6 +364,83 @@ tr.clickable{cursor:pointer}
   </div>
   <canvas id="timeline-chart"></canvas>
 </div>
+
+</main>
+
+<!-- ── Subtle welcome-page background animation (issue #11) ────────────── -->
+<script>
+(function(){
+  "use strict";
+  var canvas=document.getElementById("dashboard-flow");
+  if(!canvas||!canvas.getContext)return;
+
+  var reduced=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var ctx=canvas.getContext("2d");
+  var dpr=Math.min(window.devicePixelRatio||1,2);
+  var width=0,height=0,gate=0,running=!reduced&&!document.hidden,frameId=null;
+  var tokens=[];
+  var glyphs=["tok","{ }","42","1010","⧉",">>","…"];
+  var prices=["$0.15","$0.47","$0.016","$1.20"];
+
+  function resize(){
+    width=window.innerWidth;height=window.innerHeight;
+    canvas.width=width*dpr;canvas.height=height*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    gate=Math.max(36,Math.min(width-36,width*.5));
+  }
+  function spawn(){
+    return {x:-28,y:24+Math.random()*Math.max(1,height-48),
+      vx:.18+Math.random()*.38,g:glyphs[(Math.random()*glyphs.length)|0],
+      priced:false,stamp:prices[(Math.random()*prices.length)|0],born:0,alpha:0};
+  }
+  function schedule(){
+    if(running&&frameId===null)frameId=window.requestAnimationFrame(draw);
+  }
+  function draw(ts){
+    frameId=null;
+    if(!running&&!reduced)return;
+    ctx.clearRect(0,0,width,height);
+    var line="rgba(88,166,255,.42)",soft="rgba(169,182,198,.68)",price="rgba(112,184,255,.9)";
+    var glow=ctx.createLinearGradient(gate-28,0,gate+28,0);
+    glow.addColorStop(0,"rgba(88,166,255,0)");
+    glow.addColorStop(.5,"rgba(88,166,255,.07)");
+    glow.addColorStop(1,"rgba(88,166,255,0)");
+    ctx.fillStyle=glow;ctx.fillRect(gate-28,0,56,height);
+    ctx.strokeStyle=line;ctx.lineWidth=1;ctx.setLineDash([3,7]);
+    ctx.beginPath();ctx.moveTo(gate,0);ctx.lineTo(gate,height);ctx.stroke();ctx.setLineDash([]);
+    ctx.textBaseline="middle";
+
+    for(var i=0;i<tokens.length;i++){
+      var token=tokens[i];
+      if(!token.priced&&token.x>=gate){token.priced=true;token.born=ts;}
+      token.x+=token.vx*(token.priced?.35:1);
+      token.alpha=Math.min(token.alpha+.02,1);
+      ctx.globalAlpha=token.alpha*(token.priced?.7:.55);
+      ctx.fillStyle=token.priced?price:soft;
+      ctx.font=token.priced?'500 11px ui-monospace,SFMono-Regular,Menlo,monospace':'400 11px ui-monospace,SFMono-Regular,Menlo,monospace';
+      ctx.fillText(token.priced?token.stamp:token.g,token.x,token.y);
+      ctx.globalAlpha=1;
+      if((token.priced&&ts-token.born>3600)||token.x>width+40)tokens[i]=spawn();
+    }
+    schedule();
+  }
+
+  resize();
+  window.addEventListener("resize",resize,{passive:true});
+  for(var i=0;i<80;i++){var token=spawn();token.x=Math.random()*gate;tokens.push(token);}
+  if(reduced)draw(0);else schedule();
+  document.addEventListener("visibilitychange",function(){
+    if(reduced)return;
+    if(document.hidden){
+      running=false;
+      if(frameId!==null){window.cancelAnimationFrame(frameId);frameId=null;}
+    }else{
+      running=true;
+      schedule();
+    }
+  });
+})();
+</script>
 
 <script>
 let range='mtd', groupFilter='', userFilter=[], modelFilter='', tlGroupBy='model';
