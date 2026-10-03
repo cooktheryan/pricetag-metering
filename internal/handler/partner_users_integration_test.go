@@ -142,6 +142,22 @@ func TestPartnerUserAPIEndToEnd(t *testing.T) {
 	if code, out := do(http.MethodGet, "/api/v1/users?tag.department=eng&unknown=1", nil); code != http.StatusBadRequest {
 		t.Fatalf("unsupported query = %d %v", code, out)
 	}
+	// PATCH is a partial update for Atlas/SSO profile refreshes: supplied tags
+	// change while omitted identity and directory attributes survive.
+	if code, out := do(http.MethodPatch, "/api/v1/users/"+alice, map[string]any{"tags": map[string]any{"first_name": "Alicia", "department": "platform"}}); code != http.StatusOK {
+		t.Fatalf("partial profile patch = %d %v", code, out)
+	} else {
+		patched := out["tags"].(map[string]any)
+		if patched["first_name"] != "Alicia" || patched["department"] != "platform" || patched["email"] != "alice@example.com" || patched["last_name"] != "Example" {
+			t.Fatalf("partial profile patch did not preserve omitted tags: %v", patched)
+		}
+	}
+	if code, _ := do(http.MethodPatch, "/api/v1/users/"+carol, map[string]any{"tags": map[string]any{"first_name": "Carol"}}); code != http.StatusNotFound {
+		t.Fatalf("patch unknown user = %d, want 404", code)
+	}
+	if code, _ := do(http.MethodPatch, "/api/v1/users/"+alice, map[string]any{"tags": map[string]any{}}); code != http.StatusBadRequest {
+		t.Fatalf("empty profile patch = %d, want 400", code)
+	}
 
 	if code, out := do(http.MethodPost, "/api/v1/users/"+alice+"/keys", map[string]any{"name": "primary"}); code != http.StatusOK || out["key"] != "sk-test-secret-key-1" {
 		t.Fatalf("mint = %d %v", code, out)

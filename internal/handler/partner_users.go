@@ -140,10 +140,27 @@ func (h *PartnerUsersHandler) HandleUsers(w http.ResponseWriter, r *http.Request
 			return
 		}
 		writeJSON(w, user)
+	case http.MethodPatch:
+		var body struct {
+			Tags map[string]any `json:"tags"`
+		}
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		if body.Tags == nil {
+			http.Error(w, "tags is required", http.StatusBadRequest)
+			return
+		}
+		user, err := h.store.PatchPartnerUser(r.Context(), partnerActor(r), userID, body.Tags)
+		if err != nil {
+			h.userError(w, r, err)
+			return
+		}
+		writeJSON(w, user)
 	case http.MethodDelete:
 		h.deactivate(w, r, userID)
 	default:
-		w.Header().Set("Allow", "GET, PUT, DELETE")
+		w.Header().Set("Allow", "GET, PUT, PATCH, DELETE")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }

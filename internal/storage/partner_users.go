@@ -522,32 +522,68 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
+// UpdatePartnerUser replaces the complete tag set. It is the storage path for
+// PUT, whose handler may upsert a missing user.
 func (s *Store) UpdatePartnerUser(ctx context.Context, actor, userID string, tags map[string]any) (PartnerUser, error) {
+	return s.updatePartnerUser(ctx, actor, userID, tags, false)
+}
+
+// PatchPartnerUser merges supplied tags into an existing user. Omitted tags
+// are preserved; supplied values replace the old value. manager_uuid may be
+// null to clear it, matching the full-tag contract. PATCH never creates a user.
+// The merge happens while holding the user row lock so concurrent Atlas/SSO
+// refreshes cannot overwrite one another with stale reads.
+func (s *Store) PatchPartnerUser(ctx context.Context, actor, userID string, tags map[string]any) (PartnerUser, error) {
+	if len(tags) == 0 {
+		return PartnerUser{}, fmt.Errorf("%w: tags must contain at least one entry", ErrInvalidPartnerUser)
+	}
+	return s.updatePartnerUser(ctx, actor, userID, tags, true)
+}
+
+func (s *Store) updatePartnerUser(ctx context.Context, actor, userID string, tags map[string]any, merge bool) (PartnerUser, error) {
 	id, err := normalizePartnerUserID(userID)
 	if err != nil {
 		return PartnerUser{}, err
 	}
-	cleanTags, email, err := normalizePartnerUserTags(tags)
-	if err != nil {
-		return PartnerUser{}, err
-	}
-	tagsJSON, err := json.Marshal(cleanTags)
-	if err != nil {
-		return PartnerUser{}, err
+	var cleanTags map[string]any
+	var email string
+	if !merge {
+		cleanTags, email, err = normalizePartnerUserTags(tags)
+		if err != nil {
+			return PartnerUser{}, err
+		}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return PartnerUser{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	var currentTagsJSON []byte
 	var active, revocationPending bool
-	if err := tx.QueryRowContext(ctx, `SELECT active,key_revocation_pending FROM partner_users WHERE user_id=$1 FOR UPDATE`, id).Scan(&active, &revocationPending); errors.Is(err, sql.ErrNoRows) {
+	if err := tx.QueryRowContext(ctx, `SELECT tags,active,key_revocation_pending FROM partner_users WHERE user_id=$1 FOR UPDATE`, id).Scan(&currentTagsJSON, &active, &revocationPending); errors.Is(err, sql.ErrNoRows) {
 		return PartnerUser{}, ErrPartnerUserNotFound
 	} else if err != nil {
 		return PartnerUser{}, err
 	}
 	if !active || revocationPending {
 		return PartnerUser{}, ErrPartnerUserInactive
+	}
+	if merge {
+		var merged map[string]any
+		if err := json.Unmarshal(currentTagsJSON, &merged); err != nil {
+			return PartnerUser{}, fmt.Errorf("decode current partner user tags: %w", err)
+		}
+		for key, value := range tags {
+			merged[key] = value
+		}
+		cleanTags, email, err = normalizePartnerUserTags(merged)
+		if err != nil {
+			return PartnerUser{}, err
+		}
+	}
+	tagsJSON, err := json.Marshal(cleanTags)
+	if err != nil {
+		return PartnerUser{}, err
 	}
 	var currentEmail string
 	if err := tx.QueryRowContext(ctx, `SELECT username FROM partner_user_logins WHERE user_id=$1 AND is_current`, id).Scan(&currentEmail); err != nil {
@@ -583,7 +619,13 @@ func (s *Store) UpdatePartnerUser(ctx context.Context, actor, userID string, tag
 	if err := syncPartnerUserProfiles(ctx, tx, id, cleanTags["first_name"].(string), cleanTags["last_name"].(string)); err != nil {
 		return PartnerUser{}, err
 	}
-	if err := s.auditTx(ctx, tx, actor, "partner_user.update", id, map[string]any{"tag_keys": partnerTagKeys(cleanTags), "email_changed": email != currentEmail}); err != nil {
+	action := "partner_user.update"
+	auditTags := cleanTags
+	if merge {
+		action = "partner_user.patch"
+		auditTags = tags
+	}
+	if err := s.auditTx(ctx, tx, actor, action, id, map[string]any{"tag_keys": partnerTagKeys(auditTags), "email_changed": email != currentEmail}); err != nil {
 		return PartnerUser{}, err
 	}
 	if err := tx.Commit(); err != nil {

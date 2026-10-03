@@ -101,3 +101,42 @@ func TestPartnerUserDirectoryPolicyAndHistoricalUsage(t *testing.T) {
 		t.Fatalf("ReactivatePartnerUser = %#v, err %v", reactivated, err)
 	}
 }
+
+func TestPatchPartnerUserMergesTagsAndUpdatesEmail(t *testing.T) {
+	s, ctx := openTestStore(t)
+	const id = "123e4567-e89b-12d3-a456-426614174010"
+	_, err := s.CreatePartnerUser(ctx, "partner-m2m", id, map[string]any{
+		"email": "patch.old@example.com", "first_name": "Patch", "last_name": "User",
+		"manager_uuid": nil, "department": "engineering", "country": "US",
+	})
+	if err != nil {
+		t.Fatalf("CreatePartnerUser: %v", err)
+	}
+
+	patched, err := s.PatchPartnerUser(ctx, "partner-m2m:atlas", id, map[string]any{
+		"first_name": "Patched", "department": "platform",
+	})
+	if err != nil {
+		t.Fatalf("PatchPartnerUser partial update: %v", err)
+	}
+	if patched.Tags["first_name"] != "Patched" || patched.Tags["department"] != "platform" ||
+		patched.Tags["email"] != "patch.old@example.com" || patched.Tags["last_name"] != "User" || patched.Tags["country"] != "US" {
+		t.Fatalf("patch did not merge/preserve tags: %#v", patched.Tags)
+	}
+
+	patched, err = s.PatchPartnerUser(ctx, "partner-m2m:atlas", id, map[string]any{"email": "patch.new@example.com"})
+	if err != nil || patched.Tags["email"] != "patch.new@example.com" {
+		t.Fatalf("PatchPartnerUser email update = %#v, err %v", patched, err)
+	}
+	logins, err := s.ListPartnerUsernames(ctx, id)
+	if err != nil || len(logins) != 2 {
+		t.Fatalf("email patch must retain login history: %v, err %v", logins, err)
+	}
+
+	if _, err := s.PatchPartnerUser(ctx, "partner-m2m:atlas", id, map[string]any{}); !errors.Is(err, ErrInvalidPartnerUser) {
+		t.Fatalf("empty patch error = %v, want ErrInvalidPartnerUser", err)
+	}
+	if _, err := s.PatchPartnerUser(ctx, "partner-m2m:atlas", "123e4567-e89b-12d3-a456-426614174011", map[string]any{"first_name": "Missing"}); !errors.Is(err, ErrPartnerUserNotFound) {
+		t.Fatalf("missing user patch error = %v, want ErrPartnerUserNotFound", err)
+	}
+}

@@ -41,3 +41,16 @@ func TestPartnerActorHeader(t *testing.T) {
 		}
 	}
 }
+
+func TestPartnerUserResourceAllowHeaderIncludesPatch(t *testing.T) {
+	h := NewPartnerUsersHandler(nil, nil, "GE")
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/users/123e4567-e89b-12d3-a456-426614174000", nil)
+	h.HandleUsers(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("OPTIONS user = %d, want 405", rec.Code)
+	}
+	if got, want := rec.Header().Get("Allow"), "GET, PUT, PATCH, DELETE"; got != want {
+		t.Fatalf("Allow = %q, want %q", got, want)
+	}
+}

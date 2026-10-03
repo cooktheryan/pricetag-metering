@@ -149,6 +149,8 @@ Day-to-day ops: [docs/db-backup.md](docs/db-backup.md).
 
 ## Related
 
+- [Partner user API](docs/partner-user-api.md) — Atlas/LDAP directory sync,
+  partial profile updates, key lifecycle, and method semantics
 - [Praxis](https://github.com/praxis-proxy/praxis) — the proxy this service was built against
 - [Praxis AI](https://github.com/praxis-proxy/ai) — AI filters, including the `external_metering` filter that sends events to this service
 - [OpenMeter](https://openmeter.io) — production-grade usage metering
