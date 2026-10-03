@@ -76,3 +76,52 @@ func TestUserScopedKeyCallsPresentTheOwner(t *testing.T) {
 		t.Fatal("revoke without owner should fail locally")
 	}
 }
+
+func TestCreateAPIKeyCompletesKnownMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/api-keys" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("X-MaaS-Username"); got != "alice@example.com" {
+			t.Errorf("X-MaaS-Username = %q", got)
+		}
+		if got := r.Header.Get("X-MaaS-Tenant"); got != "models-as-a-service" {
+			t.Errorf("X-MaaS-Tenant = %q", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id": "key-1", "key": "sk-test-secret", "name": "atlas",
+		})
+	}))
+	defer server.Close()
+
+	c := NewClient(server.URL, "models-as-a-service")
+	key, err := c.CreateAPIKey(context.Background(), " alice@example.com ", "GE", "atlas")
+	if err != nil {
+		t.Fatalf("CreateAPIKey: %v", err)
+	}
+	if key.ID != "key-1" || key.Key != "sk-test-secret" || key.Name != "atlas" ||
+		key.Username != "alice@example.com" || key.Tenant != "models-as-a-service" || key.Status != "active" {
+		t.Fatalf("CreateAPIKey response = %#v", key)
+	}
+	if key.Subscription != "" || key.CreationDate != "" || key.ExpirationDate != "" {
+		t.Fatalf("CreateAPIKey invented unknown metadata: %#v", key)
+	}
+}
+
+func TestCreateAPIKeyPreservesMetadataReturnedByMaaS(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id": "key-1", "key": "sk-test-secret", "name": "atlas",
+			"username": "canonical@example.com", "tenant": "canonical-tenant", "status": "pending",
+		})
+	}))
+	defer server.Close()
+
+	key, err := NewClient(server.URL, "request-tenant").CreateAPIKey(context.Background(), "request@example.com", "GE", "atlas")
+	if err != nil {
+		t.Fatalf("CreateAPIKey: %v", err)
+	}
+	if key.Username != "canonical@example.com" || key.Tenant != "canonical-tenant" || key.Status != "pending" {
+		t.Fatalf("MaaS metadata was overwritten: %#v", key)
+	}
+}

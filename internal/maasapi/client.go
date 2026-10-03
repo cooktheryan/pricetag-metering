@@ -54,6 +54,7 @@ func NewClient(baseURL, tenant string) *Client {
 }
 
 func (c *Client) CreateAPIKey(ctx context.Context, username, group, keyName string) (*APIKeyResponse, error) {
+	username = strings.TrimSpace(username)
 	body, _ := json.Marshal(map[string]string{"name": keyName})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/api-keys", bytes.NewReader(body))
 	if err != nil {
@@ -78,6 +79,20 @@ func (c *Client) CreateAPIKey(ctx context.Context, username, group, keyName stri
 	var result APIKeyResponse
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	// MaaS intentionally returns the one-time secret from create, but some
+	// versions omit metadata that is only populated by the subsequent list
+	// representation. Complete only fields this request knows authoritatively
+	// so create and list expose a consistent resource without a second MaaS
+	// round trip. Never overwrite richer metadata if MaaS starts returning it.
+	if result.Username == "" {
+		result.Username = username
+	}
+	if result.Tenant == "" {
+		result.Tenant = c.tenant
+	}
+	if result.Status == "" {
+		result.Status = "active"
 	}
 	return &result, nil
 }
