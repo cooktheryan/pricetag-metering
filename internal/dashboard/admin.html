@@ -1946,7 +1946,7 @@ function openPartnerDetails(index) {
   var u=partnerUsersAll[index]; if(!u)return;
   var t=u.tags||{}, name=((t.first_name||'')+' '+(t.last_name||'')).trim()||t.email||u.user_id;
   var rows=[['role',u.role||'user'],['active',String(u.active)],['manager_user_id',u.manager_user_id||'']];
-  Object.keys(t).sort().forEach(function(k){rows.push([k,typeof t[k]==='object'?JSON.stringify(t[k]):t[k]);});
+  Object.keys(t).sort().forEach(function(k){rows.push([k,typeof t[k]==='object'?JSON.stringify(t[k]):t[k]]);});
   document.getElementById('partner-detail-title').innerHTML=countryFlag(t.country)+esc(name);
   document.getElementById('partner-detail-body').innerHTML='<div class="partner-detail-grid">'+rows.map(function(r){return '<div class="partner-detail-key">'+esc(r[0])+'</div><div class="partner-detail-value">'+esc(r[1])+'</div>';}).join('')+'</div>';
   document.getElementById('partner-detail-ov').classList.add('show');
