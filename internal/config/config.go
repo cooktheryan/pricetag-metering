@@ -135,8 +135,11 @@ type Config struct {
 	DashboardUseRollups bool
 
 	// LiveRollupsEnabled controls synchronous usage_hourly updates on the
-	// ingestion path. Keep this off while rollup reads are off: maintenance
-	// still rebuilds usage_hourly in bounded batches from usage_events.
+	// ingestion path. When LIVE_ROLLUPS_ENABLED is unset, its default follows
+	// DashboardUseRollups: raw-read deployments avoid needless hour locks,
+	// while rollup-read deployments retain current-hour freshness. An explicit
+	// false is permitted for eventually consistent rollup reads, but must be
+	// monitored through the rollup status endpoint.
 	LiveRollupsEnabled bool
 
 	// RollupRefreshSeconds is how often the maintenance loop refreshes
@@ -231,6 +234,13 @@ func (k Kubernetes) Enabled() bool {
 
 // Load resolves configuration from the environment.
 func Load() Config {
+	dashboardUseRollups := envBool("DASHBOARD_USE_ROLLUPS", false)
+	// Preserve the old freshness behavior whenever a deployment explicitly
+	// enables rollup reads, while making the raw-read default safe for the
+	// hour-wide live-upsert lock. Operators can explicitly override either
+	// side of the matrix with LIVE_ROLLUPS_ENABLED.
+	liveRollupsEnabled := envBool("LIVE_ROLLUPS_ENABLED", dashboardUseRollups)
+
 	return Config{
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		Port:              envDefault("PORT", "8080"),
@@ -276,8 +286,8 @@ func Load() Config {
 		DashboardCacheTTLSeconds: envInt("DASHBOARD_CACHE_TTL_SECONDS", 60),
 		DashboardCacheEnabled:    envBool("DASHBOARD_CACHE_ENABLED", false),
 		ReadDatabaseURL:          os.Getenv("READ_DATABASE_URL"),
-		DashboardUseRollups:      envBool("DASHBOARD_USE_ROLLUPS", false),
-		LiveRollupsEnabled:       envBool("LIVE_ROLLUPS_ENABLED", false),
+		DashboardUseRollups:      dashboardUseRollups,
+		LiveRollupsEnabled:       liveRollupsEnabled,
 		RollupRefreshSeconds:     envInt("ROLLUP_REFRESH_SECONDS", 300),
 		KeyService: KeyService{
 			URL:                strings.TrimSuffix(os.Getenv("KEY_SERVICE_URL"), "/"),

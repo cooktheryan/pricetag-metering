@@ -10,11 +10,18 @@ import (
 // RollupHandler exposes Phase 3 state for the read-switch gate and the
 // parity check, super-admin gated at registration.
 type RollupHandler struct {
-	store *storage.Store
+	store           *storage.Store
+	refreshInterval time.Duration
 }
 
-func NewRollupHandler(store *storage.Store) *RollupHandler {
-	return &RollupHandler{store: store}
+func NewRollupHandler(store *storage.Store, refreshSeconds int) *RollupHandler {
+	if refreshSeconds < 60 {
+		refreshSeconds = 60
+	}
+	return &RollupHandler{
+		store:           store,
+		refreshInterval: time.Duration(refreshSeconds) * time.Second,
+	}
 }
 
 // HandleStatus returns backfill readiness; with ?parity=<window> it also
@@ -23,12 +30,34 @@ func NewRollupHandler(store *storage.Store) *RollupHandler {
 // the window is clamped to 90 days so it can't be weaponized into a
 // full-table re-pricing on every page refresh.
 func (h *RollupHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
+	lastRefresh := h.store.RollupLastRefreshedAt()
+	freshness := "raw"
+	if h.store.RollupFlag() {
+		if h.store.LiveRollupsEnabled() {
+			freshness = "transactional"
+		} else {
+			freshness = "eventual"
+		}
+	}
 	resp := map[string]any{
-		"ready":          h.store.RollupsReady(),
-		"use_rollups":    h.store.RollupFlag(),
-		"live_writes":    h.store.LiveRollupsEnabled(),
-		"parity_healthy": h.store.ParityHealthy(),
-		"serving":        "raw",
+		"ready":                    h.store.RollupsReady(),
+		"use_rollups":              h.store.RollupFlag(),
+		"live_writes":              h.store.LiveRollupsEnabled(),
+		"freshness":                freshness,
+		"refresh_interval_seconds": int(h.refreshInterval / time.Second),
+		"parity_healthy":           h.store.ParityHealthy(),
+		"serving":                  "raw",
+	}
+	if lastRefresh.IsZero() {
+		resp["last_refresh_at"] = nil
+		resp["refresh_lag_seconds"] = nil
+	} else {
+		lag := time.Since(lastRefresh)
+		if lag < 0 {
+			lag = 0
+		}
+		resp["last_refresh_at"] = lastRefresh.Format(time.RFC3339)
+		resp["refresh_lag_seconds"] = int(lag / time.Second)
 	}
 	if h.store.RollupServing() {
 		resp["serving"] = "rollup"

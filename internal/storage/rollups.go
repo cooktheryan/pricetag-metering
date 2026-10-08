@@ -14,9 +14,10 @@ import (
 // Hourly rollup maintenance and the one-time backfill (Phase 3 of
 // docs/dashboard-scaling-plan.md). Design notes that matter:
 //
-//   - The rollup is upserted inside each event's insert transaction, by
-//     BOTH insert sites (InsertEvent and RecordQuotaDenial). No async
-//     worker, no window where raw and rollup disagree while being read.
+//   - When live rollups are enabled, the rollup is upserted inside each
+//     event's insert transaction, by BOTH insert sites (InsertEvent and
+//     RecordQuotaDenial). When disabled, raw usage_events remains the source
+//     of truth and bounded maintenance rebuilds usage_hourly.
 //   - The backfill is resumable across restarts via rollup_meta
 //     watermarks, and idempotent: costs fill only NULL rows; the rollup
 //     rebuild rewrites whole hours with values recomputed from raw
@@ -335,7 +336,11 @@ func (s *Store) refreshRecentHours(ctx context.Context) error {
 	if _, err := tx.ExecContext(ctx, rebuildHourSQL, from, to); err != nil {
 		return fmt.Errorf("refresh recent hours: %w", err)
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.rollupLastRefreshUnixNano.Store(time.Now().UTC().UnixNano())
+	return nil
 }
 
 // ---- Read gating and standing parity (part B) ----

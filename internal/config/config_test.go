@@ -28,11 +28,13 @@ func TestEnvList_Separators(t *testing.T) {
 
 // The read switch follows the cache-flag rule (PR #19 review, part B
 // condition 1): deploying a build and enabling behavior are separate
-// decisions, so the defaults must be OFF / 300s regardless of how the
-// test environment is configured.
+// decisions, so the read default is OFF / 300s. Live writes follow the read
+// default unless the deployment explicitly overrides them, which avoids the
+// ingestion lock when the dashboard still serves raw events.
 func TestRollupReadSwitchDefaults(t *testing.T) {
-	os.Unsetenv("DASHBOARD_USE_ROLLUPS")
-	os.Unsetenv("ROLLUP_REFRESH_SECONDS")
+	t.Setenv("DASHBOARD_USE_ROLLUPS", "")
+	t.Setenv("LIVE_ROLLUPS_ENABLED", "")
+	t.Setenv("ROLLUP_REFRESH_SECONDS", "")
 	cfg := Load()
 	if cfg.DashboardUseRollups {
 		t.Error("DashboardUseRollups must default OFF — rollup reads are enabled per deployment, not by shipping the code")
@@ -43,9 +45,39 @@ func TestRollupReadSwitchDefaults(t *testing.T) {
 	if cfg.RollupRefreshSeconds != 300 {
 		t.Errorf("RollupRefreshSeconds default = %d, want 300 (bounds refresh and parity-check latency)", cfg.RollupRefreshSeconds)
 	}
-	t.Setenv("LIVE_ROLLUPS_ENABLED", "true")
-	if cfg := Load(); !cfg.LiveRollupsEnabled {
-		t.Error("LIVE_ROLLUPS_ENABLED=true must enable synchronous rollup writes")
+}
+
+func TestRollupConfigurationMatrix(t *testing.T) {
+	tests := []struct {
+		name       string
+		reads      string
+		live       string
+		wantReads  bool
+		wantWrites bool
+	}{
+		{name: "raw reads and live writes off", reads: "false", live: "false", wantReads: false, wantWrites: false},
+		{name: "raw reads and live writes on", reads: "false", live: "true", wantReads: false, wantWrites: true},
+		{name: "rollup reads and live writes off", reads: "true", live: "false", wantReads: true, wantWrites: false},
+		{name: "rollup reads and live writes on", reads: "true", live: "true", wantReads: true, wantWrites: true},
+		{name: "rollup reads default to live writes", reads: "true", live: "", wantReads: true, wantWrites: true},
+		{name: "raw reads default to live writes off", reads: "false", live: "", wantReads: false, wantWrites: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("DASHBOARD_USE_ROLLUPS", tt.reads)
+			if tt.live == "" {
+				t.Setenv("LIVE_ROLLUPS_ENABLED", "")
+			} else {
+				t.Setenv("LIVE_ROLLUPS_ENABLED", tt.live)
+			}
+			cfg := Load()
+			if cfg.DashboardUseRollups != tt.wantReads {
+				t.Errorf("DashboardUseRollups = %v, want %v", cfg.DashboardUseRollups, tt.wantReads)
+			}
+			if cfg.LiveRollupsEnabled != tt.wantWrites {
+				t.Errorf("LiveRollupsEnabled = %v, want %v", cfg.LiveRollupsEnabled, tt.wantWrites)
+			}
+		})
 	}
 }
 

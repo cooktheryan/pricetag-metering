@@ -17,19 +17,21 @@ Postgres: CNPG HA, backups, restore),
 ## At a glance
 
 A gateway filter reports every LLM call; the service turns it into an
-immutable ledger row with its cost frozen at write time, and maintains
-an hourly aggregate table transactionally alongside it. Dashboard reads
-answered from the aggregate run in ~1 ms and do not grow with the
-ledger; reads answered from raw are the automatic fallback, never the
-manual one. Every number the aggregate serves is continuously proved
-against the ledger by a standing consistency check — when they
-disagree, the dashboard silently goes back to raw until they don't.
+immutable ledger row with its cost frozen at write time. Depending on the
+live-write switch, it either maintains the hourly aggregate transactionally
+alongside the event or rebuilds it from the raw ledger on the maintenance
+cadence. Dashboard reads answered from the aggregate run in ~1 ms and do
+not grow with the ledger; reads answered from raw are the automatic
+fallback, never the manual one. Every number the aggregate serves is
+continuously proved against the ledger by a standing consistency check —
+when they disagree, the dashboard silently goes back to raw until they
+don't.
 
 | Layer | Mechanism | Switch | Failure behavior |
 |-------|-----------|--------|------------------|
 | L1 response cache | scope-keyed LRU, 60s TTL, behind auth | `DASHBOARD_CACHE_ENABLED` (on) | miss → compute |
 | L2 read replica | CNPG `-r` service, `metering_reader` SELECT allowlist | `READ_DATABASE_URL` (set) | falls back to primary |
-| L3 hourly rollups | `usage_hourly` upserted in every event transaction | always (writes) | self-healing rebuild |
+| L3 hourly rollups | live upsert or bounded rebuild from `usage_events` | `LIVE_ROLLUPS_ENABLED` | self-healing rebuild |
 | L4 read switch | panel queries served from `usage_hourly` | `DASHBOARD_USE_ROLLUPS` (on) | flag off, or auto-fallback on parity red |
 
 ## System context
@@ -194,8 +196,9 @@ raw. Transitions are logged once, not per request.
 
 `RunRollupMaintenance` runs every `ROLLUP_REFRESH_SECONDS` (default
 300) **regardless of the read flag** — keeping the table reconciled and
-the proof warm is what makes enabling the flag a risk-free flip and
-rollback instant:
+the proof warm is what makes enabling the read flag a risk-free flip and
+rollback instant. When live writes are disabled, the maintenance cadence
+also bounds current-hour dashboard staleness:
 
 ```mermaid
 stateDiagram-v2
@@ -260,13 +263,16 @@ scan ~700k rows/poll; the rollup still scans thousands.
 
 | Knob | Values | Effect |
 |---|---|---|
-| `DASHBOARD_USE_ROLLUPS` | `true` (live) / unset = off | L4 read switch; `oc set env deploy/metering-service DASHBOARD_USE_ROLLUPS-` is the one-knob rollback |
+| `DASHBOARD_USE_ROLLUPS` | `true` (rollup) / unset = off | L4 read switch; `oc set env deploy/metering-service DASHBOARD_USE_ROLLUPS-` is the one-knob rollback |
+| `LIVE_ROLLUPS_ENABLED` | unset = follows read flag; `true` / `false` | Synchronous hourly upserts on ingestion; explicit `false` avoids the ingestion lock but makes rollup reads eventual |
 | `ROLLUP_REFRESH_SECONDS` | default 300 | refresh + parity cadence; min 60 s |
 | `DASHBOARD_CACHE_ENABLED` / `_TTL_SECONDS` | on / 60 | L1; stats at `/api/v1/admin/cache-stats` |
 | `READ_DATABASE_URL` | CNPG `-r` DSN | L2; secret `metering-readonly-db-url`, grants in `deploy/readonly-replica/` |
 
 State endpoint (super-admin): `GET /api/v1/admin/rollups` → `ready`,
-`use_rollups`, `parity_healthy`, `serving: raw|rollup`;
+`use_rollups`, `live_writes`, `freshness`, `refresh_interval_seconds`,
+`last_refresh_at`, `refresh_lag_seconds`, `parity_healthy`,
+`serving: raw|rollup`;
 `?parity=24h|7d|30d|90d` runs the full report. Alerting = logs:
 `ROLLUP PARITY RED` at ERROR. **Oct-1 runbook**: month boundary has
 never been crossed by real data — run parity + eyeball MTD panels the

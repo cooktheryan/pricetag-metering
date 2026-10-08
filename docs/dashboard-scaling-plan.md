@@ -117,10 +117,14 @@ Makes dashboard cost **flat in total event volume**.
      `model_pricing` row mid-stream), and the SQL expression's numeric
      rounding. Required test: rows written before and after a price
      insert, costed both raw-computed and column-read — same cents.
-2. **`usage_hourly`** maintained in the same transaction as each insert
-   (both insert sites upsert it): PK `(hour, username, group_name,
-   model, provider)`; sums: requests,
+2. **`usage_hourly`** can be maintained in the same transaction as each
+   insert when `LIVE_ROLLUPS_ENABLED=true` (both insert sites upsert it): PK
+   `(hour, username, group_name, model, provider)`; sums: requests,
    prompt/completion/total/cached/cache-creation tokens, `cost_usd`.
+   When live writes are disabled, `usage_events` remains the source of truth
+   and bounded maintenance rebuilds recent hours from raw events. This avoids
+   taking the hour-wide ingestion lock in deployments that still serve raw
+   dashboard reads.
    Upsert via `ON CONFLICT DO UPDATE` — cheap insurance for
    concurrent/multiple writers even though today dogfood has a single
    writer (the shadow runs against its own DB). Denials count in
@@ -137,10 +141,11 @@ Makes dashboard cost **flat in total event volume**.
    `computeUsageStats`/`GetMonthlyUsage` currently run `costUSDExpr`
    over a full calendar month on the entitlement hot path; with
    `cost_usd` on the row that SUM collapses to an indexed range scan,
-   and once `usage_hourly` exists the quota SUM reads rollups (fresh by
-   construction — the upsert rides the insert transaction). Quota reads
-   stay on the primary (Phase 2 rule). `recent` and drill-downs stay on
-   raw — raw remains the source of truth.
+   and once `usage_hourly` exists the dashboard SUMs read rollups (fresh by
+   construction when live writes are enabled; maintenance-consistent when
+   they are not). Per Part B, quota reads stay on raw and on the primary
+   (Phase 2 rule). `recent` and drill-downs stay on raw — raw remains the
+   source of truth.
 4. **Pricing-change semantics decision (needs sign-off, and it now
    covers quotas):** with write-time cost, editing `model_pricing` no
    longer rewrites history on the dashboard (today it does) — and for
@@ -178,20 +183,36 @@ draft above:
   therefore structurally confined to the aggregate panels — the
   "did enforcement just block me" view stays as fresh as it is today.
 
-1. **Flag:** `DASHBOARD_USE_ROLLUPS` (default OFF; deploy and enable are
-   separate decisions, parity is the go signal). Reads honor it only
-   while `rollups_ready` AND standing parity are green; the maintenance
-   loop runs regardless of the flag, so the flip lands on a warm,
-   reconciled table and `oc set env DASHBOARD_USE_ROLLUPS=false` is the
-   one-knob rollback.
-2. **Hour locks:** both writers on an hour bucket serialize on
-   `pg_advisory_xact_lock(hashtext('usage_hourly:' || bucket))` —
-   `upsertRollup` takes its own hour inside the event tx; rebuild and
-   the periodic `refreshRecentHours` take their whole range in ascending
-   order (deadlock-free: single-lock upserters, ascending-chain
-   refreshers). UTC-explicit bucket rendering so a session TimeZone can
-   never fork the key space (test-guarded). This also unblocks >1
-   replica: every pod's ticker is safe against every other's.
+1. **Flags:** `DASHBOARD_USE_ROLLUPS` defaults OFF; deploy and enable are
+   separate decisions, and parity is the go signal. When
+   `LIVE_ROLLUPS_ENABLED` is unset, it follows the dashboard-read flag:
+   raw-read deployments default to live writes off, while rollup-read
+   deployments retain current-hour freshness. An explicit live-write value
+   overrides that default.
+
+   The supported matrix is:
+
+   | Dashboard reads | Live writes | Behavior |
+   |---|---|---|
+   | Raw | Off | Recommended lock-mitigation mode; raw is authoritative. |
+   | Raw | On | Correct but wasteful; ingestion still takes hourly rollup locks. |
+   | Rollup | On | Current-hour freshness, but retains live-upsert lock contention. |
+   | Rollup | Off | Eventually consistent by the maintenance interval; monitor refresh lag. |
+
+   Reads honor `DASHBOARD_USE_ROLLUPS` only while `rollups_ready` AND
+   standing parity are green. The maintenance loop runs regardless of the
+   read flag, so the flip lands on a warm, reconciled table and
+   `oc set env DASHBOARD_USE_ROLLUPS=false` remains the one-knob read
+   rollback.
+2. **Hour locks:** live upserts and maintenance rebuilds serialize on
+   `pg_advisory_xact_lock(hashtext('usage_hourly:' || bucket))` when live
+   writes are enabled. `upsertRollup` takes its own hour inside the event tx;
+   rebuild and the periodic `refreshRecentHours` take their whole range in
+   ascending order (deadlock-free: single-lock upserters, ascending-chain
+   refreshers). UTC-explicit bucket rendering means a session TimeZone can
+   never fork the key space (test-guarded). With live writes disabled, event
+   ingestion does not participate in this lock queue; maintenance still
+   locks its rebuild range to protect the rollup table.
 3. **Standing parity:** `RunRollupMaintenance` refreshes recent hours and
    re-runs the parity report every `ROLLUP_REFRESH_SECONDS` (quick 24h
    window; 7d hourly), inside ONE REPEATABLE READ snapshot on the reader
@@ -218,7 +239,12 @@ change no longer rewrites last month. Parity's count gate is unaffected
 (both sides frozen for counts); cost deltas become expected notes.
 
 **Admin state:** `GET /api/v1/admin/rollups` → `ready`, `use_rollups`,
+`live_writes`, `freshness: raw|transactional|eventual`,
+`refresh_interval_seconds`, `last_refresh_at`, `refresh_lag_seconds`,
 `parity_healthy`, `serving: raw|rollup`, `?parity=<window>` report.
+When rollup reads are enabled with live writes disabled, alert if
+`refresh_lag_seconds` exceeds the configured interval or if the value is
+missing after readiness.
 **Preflight:** `preflight_test.go` PREPAREs every write AND rollup-read
 statement against the live schema, executes nothing.
 

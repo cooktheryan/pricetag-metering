@@ -110,6 +110,24 @@ func TestRollupReadVariantsReadOnlyHourlyTable(t *testing.T) {
 	}
 }
 
+func TestLiveRollupSwitchGuardsBothInsertSites(t *testing.T) {
+	for _, tc := range []struct {
+		file string
+		fn   string
+	}{
+		{file: "postgres.go", fn: "func (s *Store) InsertEvent"},
+		{file: "quota.go", fn: "func (s *Store) RecordQuotaDenial"},
+	} {
+		body := funcBody(t, tc.file, tc.fn)
+		if !strings.Contains(body, "if s.liveRollups.Load()") {
+			t.Errorf("%s must guard the synchronous rollup upsert with LIVE_ROLLUPS_ENABLED", tc.fn)
+		}
+		if !strings.Contains(body, "upsertRollup(") {
+			t.Errorf("%s lost its usage_hourly upsert path", tc.fn)
+		}
+	}
+}
+
 // The switch must not have touched the raw text the parity gate
 // measures against: every switched reader still contains its raw
 // usage_events query AND its gate, and the savings CTE's raw rendering is

@@ -44,6 +44,13 @@ func main() {
 	defer store.Close()
 	store.SetQuotaEnforcement(cfg.QuotaEnforcementEnabled)
 	store.SetLiveRollups(cfg.LiveRollupsEnabled)
+	if cfg.DashboardUseRollups && !cfg.LiveRollupsEnabled {
+		slog.Warn("dashboard rollups are eventually consistent because live writes are disabled", "refresh_interval_seconds", cfg.RollupRefreshSeconds)
+	} else if cfg.DashboardUseRollups && cfg.LiveRollupsEnabled {
+		slog.Warn("dashboard rollups have transactional freshness but ingestion shares hourly rollup locks")
+	} else if !cfg.DashboardUseRollups && cfg.LiveRollupsEnabled {
+		slog.Warn("live rollup writes are enabled while dashboard reads are raw; ingestion still takes hourly rollup locks")
+	}
 	// Repair manager links imported before the manager's Partner identity was
 	// provisioned. This is a bounded, idempotent startup repair; normal writes
 	// reconcile only the manager affected by that write.
@@ -310,7 +317,7 @@ func main() {
 	// approach (polls − filter-combos-per-TTL) / polls once the fleet
 	// settles. Read-only, super-admin page material.
 	mux.HandleFunc("/api/v1/admin/cache-stats", auth(handler.RequirePartnerSuperAdmin(cfg, store, dashCache.ServeStats)))
-	rollupHandler := handler.NewRollupHandler(store)
+	rollupHandler := handler.NewRollupHandler(store, cfg.RollupRefreshSeconds)
 	mux.HandleFunc("/api/v1/admin/rollups", auth(handler.RequirePartnerSuperAdmin(cfg, store, rollupHandler.HandleStatus)))
 	mux.HandleFunc("/api/v1/admin/providers", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleProviders)))
 	mux.HandleFunc("/api/v1/admin/models", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleModels)))
