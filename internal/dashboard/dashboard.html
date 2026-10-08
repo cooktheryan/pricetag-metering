@@ -45,6 +45,9 @@ h2 .filter-tag{font-size:12px;color:var(--blue);background:rgba(88,166,255,.15);
 
 .three-col{grid-template-columns:1fr 1fr 1fr!important}
 .three-col .chart-box canvas{max-height:220px}
+.four-col{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.four-col .chart-box{min-width:0;padding:12px}
+.four-col .chart-box canvas{max-height:210px}
 
 .section{margin-bottom:24px}
 table{width:100%;border-collapse:collapse;background:var(--bg-card);border-radius:10px;overflow:hidden;border:1px solid var(--border)}
@@ -295,7 +298,7 @@ tr.clickable{cursor:pointer}
   <div class="kpi"><span class="kpi-label">Active Users</span><span id="kpi-users" class="kpi-value purple">--</span></div>
 </div>
 
-<div class="charts-row three-col">
+<div class="charts-row four-col">
   <div class="chart-box">
     <h2>Token Usage · Hosted vs Vendor</h2>
     <canvas id="savings-chart"></canvas>
@@ -319,6 +322,10 @@ tr.clickable{cursor:pointer}
       <button data-um="requests">Requests</button>
     </div>
     <canvas id="user-cost-chart"></canvas>
+  </div>
+  <div class="chart-box">
+    <h2>By Tool</h2>
+    <canvas id="tool-chart"></canvas>
   </div>
 </div>
 
@@ -457,10 +464,10 @@ let isAdmin=false;        // org-wide Usage view (all users)
 let isSuperAdmin=false;   // operator tools: Routing/Compression/Admin nav + "view as"
 let modelMetric='tokens', userPieMetric='cost';
 let savingsRef='claude-opus-4-8';
-let tokenChart=null, userCostChart=null, tlChart=null, savingsChart=null;
+let tokenChart=null, userCostChart=null, toolChart=null, tlChart=null, savingsChart=null;
 let usersPage=0, usersPageSize=50, usersHasMore=false, usersSearch='', usersSearchTimer=null;
 let currentSort='total_tokens', currentOrder='desc';
-let cachedGroups=[], cachedModels=[], cachedUsers=[], chartUsers=[], directoryUsers=[], renderedUsers=[];
+let cachedGroups=[], cachedModels=[], cachedUsers=[], cachedTools=[], chartUsers=[], directoryUsers=[], renderedUsers=[];
 // Overview payload of the current refresh; it carries the server-computed
 // "Saved · Hosted Models" KPI (the sum of the user table's saved_usd
 // column), which is what the card shows — no client-side re-derivation.
@@ -513,13 +520,19 @@ async function refresh(force){
   // the list of things you can still pick.
   try {
     const chartSort=userPieMetric==='cost'?'cost_usd':userPieMetric==='requests'?'requests':'total_tokens';
-    const [ov,gr,us,chartUs,mo,tl,rc,rosterCat,modelCat,directory]=await Promise.all([
+    const [ov,gr,us,chartUs,mo,tools,tl,rc,rosterCat,modelCat,directory]=await Promise.all([
       api('/api/v1/dashboard/overview?'+filters+'&ref='+encodeURIComponent(savingsRef),force),
       api('/api/v1/dashboard/groups?'+filters,force),
-       api('/api/v1/dashboard/users?'+filters+'&sort='+currentSort+'&order='+currentOrder+'&limit='+usersPageSize+'&offset='+(usersPage*usersPageSize)+'&paginate=true&ref='+encodeURIComponent(savingsRef)+(usersSearch?'&search='+encodeURIComponent(usersSearch):''),force),
+      api('/api/v1/dashboard/users?'+filters+'&sort='+currentSort+'&order='+currentOrder+'&limit='+usersPageSize+'&offset='+(usersPage*usersPageSize)+'&paginate=true&ref='+encodeURIComponent(savingsRef)+(usersSearch?'&search='+encodeURIComponent(usersSearch):''),force),
       api('/api/v1/dashboard/users?'+filters+'&sort='+chartSort+'&order=desc&limit=10&offset=0&ref='+encodeURIComponent(savingsRef),force),
       api('/api/v1/dashboard/models?'+filters,force),
+      api('/api/v1/dashboard/tools?'+filters,force),
       api('/api/v1/dashboard/timeline?'+filters+'&group_by='+tlGroupBy,force),
+      api('/api/v1/dashboard/recent?limit=20'+gf+uf+mf,force),
+      api('/api/v1/dashboard/users?'+rangeOnly+'&limit=200',force),
+      api('/api/v1/dashboard/models?'+rangeOnly,force),
+      api('/api/v1/dashboard/directory-users',force)
+    ]);
       api('/api/v1/dashboard/recent?limit=20'+gf+uf+mf,force),
       api('/api/v1/dashboard/users?'+rangeOnly+'&limit=200',force),
       api('/api/v1/dashboard/models?'+rangeOnly,force),
@@ -527,7 +540,8 @@ async function refresh(force){
     ]);
   cachedOverview=ov;
   cachedGroups=gr;
-  cachedModels=modelFilter?mo.filter(function(m){return m.model===modelFilter}):mo;
+   cachedModels=modelFilter?mo.filter(function(m){return m.model===modelFilter}):mo;
+   cachedTools=Array.isArray(tools)?tools:[];
   // Unfiltered (range-only) model stats: used as the basis for the observed
   // cache ratio in renderSavings, so a user/group filter that contains no
   // paid traffic doesn't silently drop the cache assumption.
@@ -543,6 +557,8 @@ async function refresh(force){
    renderUsersPager();
   renderRecent(rc);
    renderModelChart();
+renderModelChart();
+   renderToolChart();
    renderUserCostChart();
   renderSavings();
   renderTimeline(tl);
@@ -590,16 +606,18 @@ function timeAgo(ts){
 }
 
 function friendlyClient(ua){
-  if(!ua) return '';
-  if(ua.startsWith('claude-cli')||ua.startsWith('claude-code')) return 'Claude Code';
-  if(ua.startsWith('codex-tui')||ua.startsWith('codex/')) return 'OpenAI Codex';
-  if(ua==='undici') return 'OpenCLAW';
-  if(ua.startsWith('curl/')) return 'curl';
-  if(ua.startsWith('python-requests')) return 'Python SDK';
-  if(ua.startsWith('anthropic-python')) return 'Python SDK';
-  if(ua.startsWith('node-fetch')||ua.startsWith('axios')) return 'Node.js';
-  if(ua.startsWith('Go-http-client')) return 'Go';
-  return ua.split('/')[0];
+   if(!ua) return '';
+   const normalized=ua.toLowerCase();
+   if(normalized.startsWith('claude-cli')||normalized.startsWith('claude-code')) return 'Claude Code';
+   if(normalized.startsWith('codex-tui')||normalized.startsWith('codex/')) return 'Codex';
+   if(normalized==='opencode'||normalized.startsWith('opencode/')||normalized.startsWith('opencode-')||normalized.startsWith('opencode.')) return 'OpenCode';
+   if(normalized==='pi'||normalized.startsWith('pi/')||normalized.startsWith('pi-')||normalized.startsWith('pi.')) return 'Pi';
+   if(normalized.startsWith('curl/')) return 'curl';
+   return 'Other';
+}
+
+function toolColor(tool){
+  return {'Claude Code':'var(--orange)','Codex':'var(--green)','OpenCode':'var(--blue)','Pi':'var(--purple)','curl':'var(--text2)','Other':'var(--cyan)'}[tool]||'var(--cyan)';
 }
 
 // statusCell maps an HTTP status to a colored cell: green for 2xx, red for
@@ -616,7 +634,7 @@ function renderRecent(data){
   tbody.innerHTML=data.map(r=>{
     const provColor=r.provider==='anthropic'?'var(--orange)':r.provider==='openai'?'var(--green)':'var(--cyan)';
     const client=friendlyClient(r.user_agent);
-    const clientColor=client==='Claude Code'?'var(--orange)':client==='OpenCLAW'?'var(--cyan)':client==='curl'?'var(--text2)':'var(--green)';
+     const clientColor=toolColor(client);
     const st=statusCell(r.status_code);
     // Quota blocks are real usage_events rows (status 429, zero usage) that
     // we refused ourselves (provider 'gateway'), so they render here exactly
@@ -1080,6 +1098,20 @@ function renderUserCostChart(){
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
     options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#8b949e',font:{size:11},padding:8}},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return (data[ctx.dataIndex].display_name||data[ctx.dataIndex].username)+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
+    }}
+  });
+}
+
+function renderToolChart(){
+  const data=cachedTools||[];
+  const vals=data.map(d=>d.total_tokens||0);
+  const labels=data.map((d,i)=>`${d.tool} — ${fmtN(vals[i])}`);
+  const colors=data.map(d=>toolColor(d.tool));
+  if(toolChart)toolChart.destroy();
+  toolChart=new Chart(document.getElementById('tool-chart'),{
+    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
+    options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#8b949e',font:{size:11},padding:7}},
+      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const item=data[ctx.dataIndex];return item.tool+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
 }

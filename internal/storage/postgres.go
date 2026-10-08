@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -574,6 +575,13 @@ type ModelSummary struct {
 	CacheWritePrice float64 `json:"cache_write_price_per_mtok"`
 }
 
+type ToolSummary struct {
+	Tool        string  `json:"tool"`
+	Requests    int     `json:"requests"`
+	TotalTokens int64   `json:"total_tokens"`
+	CostUSD     float64 `json:"cost_usd"`
+}
+
 type TimelineBucket struct {
 	Bucket      time.Time `json:"bucket"`
 	Series      string    `json:"series"`
@@ -1021,6 +1029,76 @@ func (s *Store) GetDashboardModels(ctx context.Context, since, until time.Time, 
 		return nil, err
 	}
 	return result, nil
+}
+
+// GetDashboardTools aggregates raw events by normalized client tool. Tool
+// identity is carried by user_agent and is not present in the rollup tables,
+// so this intentionally reads usage_events even when dashboard rollups are live.
+func (s *Store) GetDashboardTools(ctx context.Context, since, until time.Time, group, user, model string) ([]ToolSummary, error) {
+	query := fmt.Sprintf(`
+		SELECT COALESCE(e.user_agent, ''),
+			COUNT(*),
+			COALESCE(SUM(e.total_tokens), 0),
+			COALESCE(ROUND(SUM(%s)::numeric, 2), 0)
+		FROM usage_events e
+		LEFT JOIN model_pricing p ON e.model = p.model
+		WHERE e.timestamp >= $1 AND e.timestamp < $2
+			AND ($3 = '' OR e.group_name = $3)
+			AND ($4 = '' OR e.username = ANY(string_to_array($4, ',')))
+			AND ($5 = '' OR e.model = $5)
+		GROUP BY COALESCE(e.user_agent, '')`, costUSDExpr)
+	rows, err := s.reader().QueryContext(ctx, query, since, until, group, user, model)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	byTool := make(map[string]*ToolSummary)
+	for rows.Next() {
+		var userAgent string
+		var requests int
+		var totalTokens int64
+		var costUSD float64
+		if err := rows.Scan(&userAgent, &requests, &totalTokens, &costUSD); err != nil {
+			return nil, err
+		}
+		tool := dashboardTool(userAgent)
+		item := byTool[tool]
+		if item == nil {
+			item = &ToolSummary{Tool: tool}
+			byTool[tool] = item
+		}
+		item.Requests += requests
+		item.TotalTokens += totalTokens
+		item.CostUSD += costUSD
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	result := make([]ToolSummary, 0, len(byTool))
+	for _, item := range byTool {
+		result = append(result, *item)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].TotalTokens > result[j].TotalTokens })
+	return result, nil
+}
+
+func dashboardTool(userAgent string) string {
+	ua := strings.ToLower(strings.TrimSpace(userAgent))
+	switch {
+	case strings.HasPrefix(ua, "claude-cli"), strings.HasPrefix(ua, "claude-code"):
+		return "Claude Code"
+	case strings.HasPrefix(ua, "codex-tui"), strings.HasPrefix(ua, "codex/"):
+		return "Codex"
+	case ua == "opencode" || strings.HasPrefix(ua, "opencode/") || strings.HasPrefix(ua, "opencode-") || strings.HasPrefix(ua, "opencode."):
+		return "OpenCode"
+	case ua == "pi" || strings.HasPrefix(ua, "pi/") || strings.HasPrefix(ua, "pi-") || strings.HasPrefix(ua, "pi."):
+		return "Pi"
+	case strings.HasPrefix(ua, "curl/"):
+		return "curl"
+	default:
+		return "Other"
+	}
 }
 
 func (s *Store) GetDashboardTimeline(ctx context.Context, since, until time.Time, group, user, model, groupBy string) ([]TimelineBucket, error) {

@@ -178,6 +178,25 @@ func (h *DashboardHandler) HandleModels(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, result)
 }
 
+func (h *DashboardHandler) HandleTools(w http.ResponseWriter, r *http.Request) {
+	since, until := parseTimeWindow(r)
+	group, user, model := parseFilters(r)
+	var ok bool
+	if user, ok = resolveScope(w, r, h.store, h.cfg, user); !ok {
+		return
+	}
+	result, err := h.store.GetDashboardTools(r.Context(), since, until, group, user, model)
+	if err != nil {
+		slog.Error("dashboard tools query failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if result == nil {
+		result = []storage.ToolSummary{}
+	}
+	writeJSON(w, result)
+}
+
 func (h *DashboardHandler) HandleTimeline(w http.ResponseWriter, r *http.Request) {
 	since, until := parseTimeWindow(r)
 	group, user, model := parseFilters(r)
