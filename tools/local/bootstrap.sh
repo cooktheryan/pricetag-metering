@@ -87,6 +87,19 @@ VALUES
   ('local-tool-curl', NOW() - interval '2 hours', 'fixture-curl@example.com', 'fixture-model', 'fixture', 'local-tool-fixture', 'curl/8.7.1', 50000, 20000, 70000, 200, 4.00),
   ('local-tool-other', NOW() - interval '1 hour', 'fixture-other@example.com', 'fixture-model', 'fixture', 'local-tool-fixture', 'python-requests/2.32', 90000, 40000, 130000, 200, 8.00)
 ON CONFLICT DO NOTHING;
+
+-- Give the larger pre-seeded fake-user population realistic client labels too,
+-- so Recent Activity exercises the same tool colors as the tool chart.
+UPDATE usage_events
+SET user_agent = CASE (substring(username FROM 'seeduser([0-9]+)')::int % 6)
+  WHEN 0 THEN 'claude-code/2.1.0'
+  WHEN 1 THEN 'codex-tui/0.1.0'
+  WHEN 2 THEN 'opencode-nightly/1.0'
+  WHEN 3 THEN 'pi-coding-agent/0.1'
+  WHEN 4 THEN 'curl/8.7.1'
+  ELSE 'python-requests/2.32'
+END
+WHERE username ~ '^seeduser[0-9]+@example\.com$';
 SQL
 
 echo "Local super-admin key: local-noy-key"
