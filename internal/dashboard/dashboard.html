@@ -617,7 +617,9 @@ function friendlyClient(ua){
 }
 
 function toolColor(tool){
-  return {'Claude Code':'var(--orange)','Codex':'var(--green)','OpenCode':'var(--blue)','Pi':'var(--purple)','curl':'var(--text2)','Other':'var(--cyan)'}[tool]||'var(--cyan)';
+  // Chart.js needs concrete colors; CSS var() values render as gray in its
+  // canvas even though they work for inline table styles.
+  return {'Claude Code':'#d29922','Codex':'#3fb950','OpenCode':'#58a6ff','Pi':'#bc8cff','curl':'#8b949e','Other':'#39d2c0'}[tool]||'#39d2c0';
 }
 
 // statusCell maps an HTTP status to a colored cell: green for 2xx, red for
