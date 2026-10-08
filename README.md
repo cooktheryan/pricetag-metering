@@ -52,6 +52,7 @@ kubectl apply -f deploy/
 | `PORT` | No | `8080` | HTTP listen port |
 | `MONTHLY_TOKEN_QUOTA` | No | `100000000` | Legacy per-user monthly token safety net for the entitlement endpoint. The gateway enforces the response; set a non-positive value only for explicitly unlimited deployments. |
 | `QUOTA_ENFORCEMENT_ENABLED` | No | `false` | Controls dollar/token quota blocking. Usage accounting remains active; set `true` only after quota policy is ready. |
+| `LIVE_ROLLUPS_ENABLED` | No | `false` | Controls synchronous `usage_hourly` writes on event ingestion. Keep it off while `DASHBOARD_USE_ROLLUPS=false`; maintenance rebuilds rollups from `usage_events` in bounded batches. |
 | `M2M_AUTH_REQUIRED` | No | `false` | Require a bearer token on gateway-to-metering endpoints. Enable only with matching gateway header injection. |
 | `M2M_SHARED_SECRET` | No | — | Runtime secret compared against the M2M bearer token; never commit it. Required when `M2M_AUTH_REQUIRED=true`. |
 | `ADMIN_USERS` | No | — | Break-glass admin identities used only when the Partner identity store cannot be read. This does not grant access to an unprovisioned or demoted user while the store is healthy. |

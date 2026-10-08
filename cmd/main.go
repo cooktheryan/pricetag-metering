@@ -43,6 +43,7 @@ func main() {
 	}
 	defer store.Close()
 	store.SetQuotaEnforcement(cfg.QuotaEnforcementEnabled)
+	store.SetLiveRollups(cfg.LiveRollupsEnabled)
 	// Repair manager links imported before the manager's Partner identity was
 	// provisioned. This is a bounded, idempotent startup repair; normal writes
 	// reconcile only the manager affected by that write.

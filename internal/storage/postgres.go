@@ -96,6 +96,7 @@ type Store struct {
 	// only to log transitions once. Enforcement and the Recent feed never
 	// consult these; they stay on raw for freshness and detail.
 	useRollups     atomic.Bool
+	liveRollups    atomic.Bool
 	parityHealthy  atomic.Bool
 	servingRollups atomic.Bool
 }
@@ -104,9 +105,10 @@ type Store struct {
 // replica). Values are applied as-is; zero values leave the database/sql
 // defaults in place.
 type PoolConfig struct {
-	MaxOpenConns    int
-	MaxIdleConns    int
-	ConnMaxLifetime time.Duration
+	MaxOpenConns       int
+	MaxIdleConns       int
+	ConnMaxLifetime    time.Duration
+	LiveRollupsEnabled bool
 }
 
 func New(databaseURL string, tokenQuota int64, pool PoolConfig) (*Store, error) {
@@ -133,6 +135,7 @@ func New(databaseURL string, tokenQuota int64, pool PoolConfig) (*Store, error) 
 
 	s := &Store{db: db, tokenQuota: tokenQuota}
 	s.quotaEnforcement.Store(true)
+	s.liveRollups.Store(pool.LiveRollupsEnabled)
 	if err := s.migrate(ctx); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -140,6 +143,12 @@ func New(databaseURL string, tokenQuota int64, pool PoolConfig) (*Store, error) 
 	return s, nil
 }
 func (s *Store) SetQuotaEnforcement(enabled bool) { s.quotaEnforcement.Store(enabled) }
+
+// SetLiveRollups controls synchronous usage_hourly writes. Raw usage_events
+// ingestion remains enabled regardless of this switch.
+func (s *Store) SetLiveRollups(enabled bool) { s.liveRollups.Store(enabled) }
+
+func (s *Store) LiveRollupsEnabled() bool { return s.liveRollups.Load() }
 
 func (s *Store) Close() error {
 	if s.readDB != nil {
@@ -236,9 +245,11 @@ func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
 	if err != nil {
 		return err
 	}
-	if err := upsertRollup(ctx, tx, e.Timestamp, e.Username, e.GroupName, e.Model, e.Provider,
-		1, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedInputTokens, e.CacheCreationTokens, costUSD); err != nil {
-		return err
+	if s.liveRollups.Load() {
+		if err := upsertRollup(ctx, tx, e.Timestamp, e.Username, e.GroupName, e.Model, e.Provider,
+			1, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedInputTokens, e.CacheCreationTokens, costUSD); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

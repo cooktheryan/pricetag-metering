@@ -472,9 +472,11 @@ func (s *Store) RecordQuotaDenial(ctx context.Context, username, model string) e
 	// Denials ride the rollup as requests+1 at zero usage/cost — the plan
 	// rev2 parity definition counts them; whether dashboards show them is
 	// a display filter, not a rollup question.
-	if err := upsertRollup(ctx, tx, ts, username, group.String, model, "gateway",
-		1, 0, 0, 0, 0, 0, "0"); err != nil {
-		return err
+	if s.liveRollups.Load() {
+		if err := upsertRollup(ctx, tx, ts, username, group.String, model, "gateway",
+			1, 0, 0, 0, 0, 0, "0"); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

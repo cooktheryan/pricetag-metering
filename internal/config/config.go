@@ -134,6 +134,11 @@ type Config struct {
 	// Enforcement, quota and the Recent feed never read rollups.
 	DashboardUseRollups bool
 
+	// LiveRollupsEnabled controls synchronous usage_hourly updates on the
+	// ingestion path. Keep this off while rollup reads are off: maintenance
+	// still rebuilds usage_hourly in bounded batches from usage_events.
+	LiveRollupsEnabled bool
+
 	// RollupRefreshSeconds is how often the maintenance loop refreshes
 	// recent hours from raw and runs the standing parity check. Bounds
 	// the self-heal window for the (locked) refresh-vs-insert race and
@@ -272,6 +277,7 @@ func Load() Config {
 		DashboardCacheEnabled:    envBool("DASHBOARD_CACHE_ENABLED", false),
 		ReadDatabaseURL:          os.Getenv("READ_DATABASE_URL"),
 		DashboardUseRollups:      envBool("DASHBOARD_USE_ROLLUPS", false),
+		LiveRollupsEnabled:       envBool("LIVE_ROLLUPS_ENABLED", false),
 		RollupRefreshSeconds:     envInt("ROLLUP_REFRESH_SECONDS", 300),
 		KeyService: KeyService{
 			URL:                strings.TrimSuffix(os.Getenv("KEY_SERVICE_URL"), "/"),

@@ -37,8 +37,15 @@ func TestRollupReadSwitchDefaults(t *testing.T) {
 	if cfg.DashboardUseRollups {
 		t.Error("DashboardUseRollups must default OFF — rollup reads are enabled per deployment, not by shipping the code")
 	}
+	if cfg.LiveRollupsEnabled {
+		t.Error("LiveRollupsEnabled must default OFF — synchronous rollup writes are enabled per deployment")
+	}
 	if cfg.RollupRefreshSeconds != 300 {
 		t.Errorf("RollupRefreshSeconds default = %d, want 300 (bounds refresh and parity-check latency)", cfg.RollupRefreshSeconds)
+	}
+	t.Setenv("LIVE_ROLLUPS_ENABLED", "true")
+	if cfg := Load(); !cfg.LiveRollupsEnabled {
+		t.Error("LIVE_ROLLUPS_ENABLED=true must enable synchronous rollup writes")
 	}
 }
 
