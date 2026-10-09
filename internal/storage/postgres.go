@@ -261,12 +261,11 @@ func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
 	if err != nil {
 		return err
 	}
-if s.liveRollups.Load() {
+	if s.liveRollups.Load() {
 		if err := upsertRollup(ctx, tx, e.Timestamp, e.Username, e.GroupName, e.Model, e.Provider,
 			dashboardTool(e.UserAgent), 1, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedInputTokens, e.CacheCreationTokens, costUSD); err != nil {
 			return err
 		}
-	}
 	}
 	return tx.Commit()
 }

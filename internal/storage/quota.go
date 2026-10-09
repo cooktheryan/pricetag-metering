@@ -469,12 +469,11 @@ func (s *Store) RecordQuotaDenial(ctx context.Context, username, model string) e
 	if err != nil {
 		return err
 	}
-// When live writes are enabled, denials ride the rollup as requests+1 at zero usage/cost.
+	// When live writes are enabled, denials ride the rollup as requests+1 at zero usage/cost.
 	if s.liveRollups.Load() {
 		if err := upsertRollup(ctx, tx, ts, username, group.String, model, "gateway", "Other", 1, 0, 0, 0, 0, 0, "0"); err != nil {
 			return err
 		}
-	}
 	}
 	return tx.Commit()
 }
