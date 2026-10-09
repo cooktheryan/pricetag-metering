@@ -66,6 +66,7 @@ tr.clickable{cursor:pointer}
 .users-pager button:disabled{opacity:.4;cursor:not-allowed}
 
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.charts-row.four-col{grid-template-columns:repeat(4,minmax(0,1fr))}
 .chart-box{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px}
 .chart-box canvas{max-height:280px}
 
