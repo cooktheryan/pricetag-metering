@@ -249,6 +249,14 @@ func main() {
 			http.Error(w, "not ready", http.StatusServiceUnavailable)
 			return
 		}
+		// The tool rollup rebuild uses a table lock. Do not advertise a new
+		// pod as Ready until that additive table is complete; otherwise the
+		// load balancer can send ingestion traffic into a pod that is still
+		// waiting on the tool-rollup lock.
+		if !store.ToolRollupsReady() {
+			http.Error(w, "tool rollups not ready", http.StatusServiceUnavailable)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	})
 
