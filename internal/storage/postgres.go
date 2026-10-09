@@ -261,11 +261,12 @@ func (s *Store) InsertEvent(ctx context.Context, e UsageEvent) error {
 	if err != nil {
 		return err
 	}
-	if s.liveRollups.Load() {
+if s.liveRollups.Load() {
 		if err := upsertRollup(ctx, tx, e.Timestamp, e.Username, e.GroupName, e.Model, e.Provider,
-			1, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedInputTokens, e.CacheCreationTokens, costUSD); err != nil {
+			dashboardTool(e.UserAgent), 1, e.PromptTokens, e.CompletionTokens, e.TotalTokens, e.CachedInputTokens, e.CacheCreationTokens, costUSD); err != nil {
 			return err
 		}
+	}
 	}
 	return tx.Commit()
 }
@@ -1031,10 +1032,35 @@ func (s *Store) GetDashboardModels(ctx context.Context, since, until time.Time, 
 	return result, nil
 }
 
-// GetDashboardTools aggregates raw events by normalized client tool. Tool
-// identity is carried by user_agent and is not present in the rollup tables,
-// so this intentionally reads usage_events even when dashboard rollups are live.
+// GetDashboardTools aggregates by normalized client tool. Rollup reads use
+// usage_hourly so this chart does not add a full usage_events scan to every
+// dashboard refresh; raw events are used only until rollups are live.
 func (s *Store) GetDashboardTools(ctx context.Context, since, until time.Time, group, user, model string) ([]ToolSummary, error) {
+	if s.rollupsLive() {
+		rows, err := s.reader().QueryContext(ctx, `
+			SELECT COALESCE(e.tool, 'Other'), SUM(e.requests), SUM(e.total_tokens),
+				COALESCE(ROUND(SUM(e.cost_usd)::numeric, 2), 0)
+			FROM usage_hourly e
+			WHERE e.hour >= date_trunc('hour', $1::timestamptz) AND e.hour < $2
+				AND ($3 = '' OR e.group_name = $3)
+				AND ($4 = '' OR e.username = ANY(string_to_array($4, ',')))
+				AND ($5 = '' OR e.model = $5)
+			GROUP BY COALESCE(e.tool, 'Other')
+			ORDER BY SUM(e.total_tokens) DESC`, since, until, group, user, model)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var result []ToolSummary
+		for rows.Next() {
+			var item ToolSummary
+			if err := rows.Scan(&item.Tool, &item.Requests, &item.TotalTokens, &item.CostUSD); err != nil {
+				return nil, err
+			}
+			result = append(result, item)
+		}
+		return result, rows.Err()
+	}
 	query := fmt.Sprintf(`
 		SELECT COALESCE(e.user_agent, ''),
 			COUNT(*),
@@ -1356,6 +1382,7 @@ var migrations = []string{
 		group_name TEXT NOT NULL DEFAULT '',
 		model TEXT NOT NULL,
 		provider TEXT NOT NULL DEFAULT '',
+		tool TEXT NOT NULL DEFAULT 'Other',
 		requests BIGINT NOT NULL DEFAULT 0,
 		prompt_tokens BIGINT NOT NULL DEFAULT 0,
 		completion_tokens BIGINT NOT NULL DEFAULT 0,
@@ -1364,7 +1391,12 @@ var migrations = []string{
 		cache_creation_tokens BIGINT NOT NULL DEFAULT 0,
 		cost_usd NUMERIC(20,8) NOT NULL DEFAULT 0
 	)`,
-	`CREATE UNIQUE INDEX IF NOT EXISTS usage_hourly_key ON usage_hourly (hour, username, group_name, model, provider)`,
+	// Tool is a rollup dimension for the dashboard's tool breakdown. Existing
+	// deployments get a default and are forced through a complete rebuild so
+	// historical rows are not permanently classified as Other.
+	`ALTER TABLE usage_hourly ADD COLUMN IF NOT EXISTS tool TEXT NOT NULL DEFAULT 'Other'`,
+	`DROP INDEX IF EXISTS usage_hourly_key`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS usage_hourly_key ON usage_hourly (hour, username, group_name, model, provider, tool)`,
 	`CREATE INDEX IF NOT EXISTS idx_usage_hourly_hour ON usage_hourly (hour)`,
 	`CREATE INDEX IF NOT EXISTS idx_usage_hourly_user_hour ON usage_hourly (username, hour)`,
 	// Backfill bookkeeping: cost_usd backfill progresses by id watermark;
@@ -1374,6 +1406,13 @@ var migrations = []string{
 		key TEXT PRIMARY KEY,
 		value TEXT NOT NULL
 	)`,
+	`DO $$ BEGIN
+		IF NOT EXISTS (SELECT 1 FROM rollup_meta WHERE key = 'tool_rollups_schema_v1') THEN
+			TRUNCATE TABLE usage_hourly;
+			DELETE FROM rollup_meta WHERE key IN ('rollups_ready', 'rollup_rebuilt_through_hour');
+			INSERT INTO rollup_meta (key, value) VALUES ('tool_rollups_schema_v1', 'true');
+		END IF;
+	END $$`,
 }
 
 // SeedPricing upserts model pricing from an external source (e.g., LiteLLM).

@@ -40,12 +40,12 @@ type execer interface {
 }
 
 const upsertRollupSQL = `
-	INSERT INTO usage_hourly (hour, username, group_name, model, provider,
+	INSERT INTO usage_hourly (hour, username, group_name, model, provider, tool,
 		requests, prompt_tokens, completion_tokens, total_tokens,
 		cached_input_tokens, cache_creation_tokens, cost_usd)
-	VALUES (date_trunc('hour', $1::timestamptz), $2, $3, $4, $5,
-		$6::bigint, $7::bigint, $8::bigint, $9::bigint, $10::bigint, $11::bigint, $12::numeric)
-	ON CONFLICT (hour, username, group_name, model, provider) DO UPDATE SET
+	VALUES (date_trunc('hour', $1::timestamptz), $2, $3, $4, $5, $6,
+		$7::bigint, $8::bigint, $9::bigint, $10::bigint, $11::bigint, $12::bigint, $13::numeric)
+	ON CONFLICT (hour, username, group_name, model, provider, tool) DO UPDATE SET
 		requests = usage_hourly.requests + EXCLUDED.requests,
 		prompt_tokens = usage_hourly.prompt_tokens + EXCLUDED.prompt_tokens,
 		completion_tokens = usage_hourly.completion_tokens + EXCLUDED.completion_tokens,
@@ -95,12 +95,12 @@ const rebuildHourLockSQL = `SELECT pg_advisory_xact_lock(hashtext('usage_hourly:
 // Must be called inside a transaction (both insert sites do): the hour
 // lock is transaction-scoped and would be a no-op on the autocommit pool.
 func upsertRollup(ctx context.Context, ex execer, ts time.Time, username, group, model, provider string,
-	requests, prompt, completion, total, cached, cacheCreation int, costUSD string) error {
+	tool string, requests, prompt, completion, total, cached, cacheCreation int, costUSD string) error {
 	if _, err := ex.ExecContext(ctx, upsertHourLockSQL, ts); err != nil {
 		return err
 	}
 	_, err := ex.ExecContext(ctx, upsertRollupSQL,
-		ts, username, group, model, provider,
+		ts, username, group, model, provider, tool,
 		requests, prompt, completion, total, cached, cacheCreation, costUSD)
 	return err
 }
@@ -121,24 +121,34 @@ var costBackfillSQL = fmt.Sprintf(`
 // rebuildHourSQL rewrites one hour's rollup rows from raw. Overwriting
 // with EXCLUDED (not adding) is what makes a crashed rebuild safe to
 // redo: recomputed-from-raw values replace whatever partial state exists.
-var rebuildHourSQL = `
-	INSERT INTO usage_hourly (hour, username, group_name, model, provider,
+const dashboardToolSQL = `CASE
+	WHEN lower(coalesce(e.user_agent, '')) LIKE 'claude-cli%' OR lower(coalesce(e.user_agent, '')) LIKE 'claude-code%' THEN 'Claude Code'
+	WHEN lower(coalesce(e.user_agent, '')) LIKE 'codex-tui%' OR lower(coalesce(e.user_agent, '')) LIKE 'codex/%' THEN 'Codex'
+	WHEN lower(coalesce(e.user_agent, '')) = 'opencode' OR lower(coalesce(e.user_agent, '')) LIKE 'opencode/%' OR lower(coalesce(e.user_agent, '')) LIKE 'opencode-%' OR lower(coalesce(e.user_agent, '')) LIKE 'opencode.%' THEN 'OpenCode'
+	WHEN lower(coalesce(e.user_agent, '')) = 'pi' OR lower(coalesce(e.user_agent, '')) LIKE 'pi/%' OR lower(coalesce(e.user_agent, '')) LIKE 'pi-%' OR lower(coalesce(e.user_agent, '')) LIKE 'pi.%' THEN 'Pi'
+	WHEN lower(coalesce(e.user_agent, '')) LIKE 'curl/%' THEN 'curl'
+	ELSE 'Other'
+END`
+
+var rebuildHourSQL = fmt.Sprintf(`
+	INSERT INTO usage_hourly (hour, username, group_name, model, provider, tool,
 		requests, prompt_tokens, completion_tokens, total_tokens,
 		cached_input_tokens, cache_creation_tokens, cost_usd)
 	SELECT date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name, ''), e.model, e.provider,
+		%s,
 		COUNT(*), SUM(e.prompt_tokens), SUM(e.completion_tokens), SUM(e.total_tokens),
 		SUM(e.cached_input_tokens), SUM(e.cache_creation_tokens), COALESCE(SUM(e.cost_usd), 0)
 	FROM usage_events e
 	WHERE e.timestamp >= $1 AND e.timestamp < $2
-	GROUP BY date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name, ''), e.model, e.provider
-	ON CONFLICT (hour, username, group_name, model, provider) DO UPDATE SET
+	GROUP BY date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name, ''), e.model, e.provider, %s
+	ON CONFLICT (hour, username, group_name, model, provider, tool) DO UPDATE SET
 		requests = EXCLUDED.requests,
 		prompt_tokens = EXCLUDED.prompt_tokens,
 		completion_tokens = EXCLUDED.completion_tokens,
 		total_tokens = EXCLUDED.total_tokens,
 		cached_input_tokens = EXCLUDED.cached_input_tokens,
 		cache_creation_tokens = EXCLUDED.cache_creation_tokens,
-		cost_usd = EXCLUDED.cost_usd`
+		cost_usd = EXCLUDED.cost_usd`, dashboardToolSQL, dashboardToolSQL)
 
 func (s *Store) metaGet(ctx context.Context, key string) (string, bool) {
 	var v string
