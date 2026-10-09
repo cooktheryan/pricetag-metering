@@ -47,7 +47,7 @@ h2 .filter-tag{font-size:12px;color:var(--blue);background:rgba(88,166,255,.15);
 .three-col .chart-box canvas{max-height:220px}
 .four-col{grid-template-columns:repeat(4,minmax(0,1fr))}
 .four-col .chart-box{min-width:0;padding:12px;display:flex;flex-direction:column}
-.four-col .chart-box canvas{box-sizing:border-box;width:220px!important;height:220px!important;max-height:none;flex:0 0 220px;display:block;align-self:center;margin-bottom:10px}
+.four-col .chart-box canvas{box-sizing:border-box;width:220px!important;height:220px!important;max-width:220px!important;max-height:220px!important;flex:0 0 220px;display:block;align-self:center;margin-bottom:10px}
 .four-col .chart-box h2{text-align:center;height:24px;line-height:24px;margin-bottom:8px;flex:0 0 24px}
 .four-col .chart-head{display:block;margin-bottom:0}
 .four-col .chart-head h2{margin-bottom:12px}
@@ -1160,7 +1160,12 @@ async function refreshUserChartOnly(){
 }
 
 function renderToolChart(){
-  const data=topFiveItems(cachedTools||[],function(d){return d.total_tokens||0;},function(d){return d.tool;},4);
+  const toolRows=cachedTools||[];
+  const existingOther=toolRows.filter(function(d){return d.tool==='Other';}).reduce(function(sum,d){return sum+(d.total_tokens||0);},0);
+  const data=topFiveItems(toolRows.filter(function(d){return d.tool!=='Other';}),function(d){return d.total_tokens||0;},function(d){return d.tool;},4);
+  var otherItem=data.length&&data[data.length-1].label==='Other'?data.pop():{item:null,label:'Other',value:0};
+  otherItem.value+=existingOther;
+  if(otherItem.value>0)data.push(otherItem);
   const vals=data.map(d=>d.value);
   const labels=data.map(d=>`${d.label} — ${fmtN(d.value)}`);
   const colors=data.map((d,i)=>d.item?toolColor(d.item.tool):COLORS[i%COLORS.length]);
