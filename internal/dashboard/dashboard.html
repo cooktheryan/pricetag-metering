@@ -53,6 +53,11 @@ h2 .filter-tag{font-size:12px;color:var(--blue);background:rgba(88,166,255,.15);
 .four-col .chart-head h2{margin-bottom:12px}
 .four-col .tl-toggle{justify-content:center;flex:0 0 32px;z-index:1}
 .four-col .chart-control-spacer{height:32px;margin-top:8px}
+.four-col .pie-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;min-height:48px;margin:0 8px 12px;color:var(--text);font-size:12px;line-height:18px}
+.four-col .pie-legend.single-col{grid-template-columns:1fr}
+.four-col .pie-legend-item{display:flex;align-items:flex-start;gap:7px;min-width:0}
+.four-col .pie-legend-swatch{width:16px;height:16px;flex:0 0 16px;margin-top:1px}
+.four-col .pie-legend-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .section{margin-bottom:24px}
 table{width:100%;border-collapse:collapse;background:var(--bg-card);border-radius:10px;overflow:hidden;border:1px solid var(--border)}
@@ -308,6 +313,7 @@ tr.clickable{cursor:pointer}
   <div class="chart-box">
     <h2>Token Usage · Hosted vs Vendor</h2>
     <canvas id="savings-chart"></canvas>
+    <div id="savings-legend" class="pie-legend single-col"></div>
     <div class="chart-control-spacer" aria-hidden="true"></div>
   </div>
   <div class="chart-box">
@@ -327,6 +333,7 @@ tr.clickable{cursor:pointer}
   <div class="chart-box">
     <h2>By User (Top 10)</h2>
     <canvas id="user-cost-chart"></canvas>
+    <div id="user-legend" class="pie-legend"></div>
     <div class="tl-toggle" id="user-metric-toggle">
       <button data-um="cost" class="active">Cost</button>
       <button data-um="tokens">Tokens</button>
@@ -836,6 +843,13 @@ function pieUnit(metric){
   if(metric==='user_count')return ' users';
   return '';
 }
+function renderPieLegend(id,labels,colors){
+  var el=document.getElementById(id);if(!el)return;
+  el.innerHTML=labels.map(function(label,i){
+    var text=String(label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return '<div class="pie-legend-item"><span class="pie-legend-swatch" style="background:'+colors[i]+'"></span><span class="pie-legend-label" title="'+text+'">'+text+'</span></div>';
+  }).join('');
+}
 
 var MODEL_PRICING_JS={
   'claude-opus-5':{i:5,o:25,cr:0.5,cw:6.25},'claude-fable-5':{i:10,o:50,cr:1,cw:12.5},
@@ -941,10 +955,11 @@ function renderSavings(){
       datasets:[{data:[hostedTokens,vendorTokens],backgroundColor:['#3fb950','#d29922'],borderWidth:0}]
     },
     options:{responsive:false,width:280,height:280,radius:100,layout:{padding:{bottom:64}},plugins:{
-      legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#d0d7de',boxWidth:16,font:{size:12},padding:6}},
+       legend:{display:false},
       tooltip:{callbacks:{label:function(ctx){var tot=hostedTokens+vendorTokens;var lbl=ctx.dataIndex===0?'Hosted':'Vendor';return lbl+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
+  renderPieLegend('savings-legend',['Hosted — '+fmtN(hostedTokens),'Vendor — '+fmtN(vendorTokens)],['#3fb950','#d29922']);
 }
 
 function populateFilterDropdowns(models, users){
@@ -1108,14 +1123,16 @@ function renderUserCostChart(){
     userCostChart.data.datasets[0].backgroundColor=colors;
     userCostChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return (data[ctx.dataIndex].display_name||data[ctx.dataIndex].username)+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
     userCostChart.update();
+    renderPieLegend('user-legend',labels,colors);
     return;
   }
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:false,width:280,height:280,radius:100,plugins:{legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#d0d7de',boxWidth:16,font:{size:12},padding:6}},
+    options:{responsive:false,width:280,height:280,radius:100,plugins:{legend:{display:false},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return (data[ctx.dataIndex].display_name||data[ctx.dataIndex].username)+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
+  renderPieLegend('user-legend',labels,colors);
 }
 
 async function refreshUserChartOnly(){
