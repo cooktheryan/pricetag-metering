@@ -1123,7 +1123,7 @@ function renderUserCostChart(){
     userCostChart.data.datasets[0].backgroundColor=colors;
     userCostChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return (data[ctx.dataIndex].display_name||data[ctx.dataIndex].username)+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
     userCostChart.update();
-    renderPieLegend('user-legend',labels,colors);
+    renderPieLegend('user-legend',labels.slice(0,4),colors.slice(0,4));
     return;
   }
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
@@ -1132,7 +1132,7 @@ function renderUserCostChart(){
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return (data[ctx.dataIndex].display_name||data[ctx.dataIndex].username)+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
-  renderPieLegend('user-legend',labels,colors);
+  renderPieLegend('user-legend',labels.slice(0,4),colors.slice(0,4));
 }
 
 async function refreshUserChartOnly(){
