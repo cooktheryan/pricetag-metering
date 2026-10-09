@@ -1163,7 +1163,7 @@ async function refreshUserChartOnly(){
 function renderToolChart(){
   const toolRows=cachedTools||[];
   const existingOther=toolRows.filter(function(d){return d.tool==='Other';}).reduce(function(sum,d){return sum+(d.total_tokens||0);},0);
-  const data=topFiveItems(toolRows.filter(function(d){return d.tool!=='Other';}),function(d){return d.total_tokens||0;},function(d){return d.tool;},4);
+  const data=topFiveItems(toolRows.filter(function(d){return d.tool!=='Other';}),function(d){return d.total_tokens||0;},function(d){return d.tool;},5);
   var otherItem=data.length&&data[data.length-1].label==='Other'?data.pop():{item:null,label:'Other',value:0};
   otherItem.value+=existingOther;
   if(otherItem.value>0)data.push(otherItem);
