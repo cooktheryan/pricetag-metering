@@ -47,13 +47,13 @@ h2 .filter-tag{font-size:12px;color:var(--blue);background:rgba(88,166,255,.15);
 .three-col .chart-box canvas{max-height:220px}
 .four-col{grid-template-columns:repeat(4,minmax(0,1fr))}
 .four-col .chart-box{min-width:0;padding:12px;display:flex;flex-direction:column}
-.four-col .chart-box canvas{box-sizing:border-box;width:280px!important;height:280px!important;max-height:none;flex:0 0 280px;display:block;align-self:center;margin-bottom:24px}
-.four-col .chart-box h2{text-align:center;height:24px;line-height:24px;margin-bottom:12px;flex:0 0 24px}
+.four-col .chart-box canvas{box-sizing:border-box;width:220px!important;height:220px!important;max-height:none;flex:0 0 220px;display:block;align-self:center;margin-bottom:10px}
+.four-col .chart-box h2{text-align:center;height:24px;line-height:24px;margin-bottom:8px;flex:0 0 24px}
 .four-col .chart-head{display:block;margin-bottom:0}
 .four-col .chart-head h2{margin-bottom:12px}
 .four-col .tl-toggle{justify-content:center;flex:0 0 32px;z-index:1}
 .four-col .chart-control-spacer{height:32px;margin-top:8px}
-.four-col .pie-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;min-height:48px;margin:0 8px 12px;padding-top:0;color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:12px;font-weight:400;line-height:18px;align-content:start}
+.four-col .pie-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(6,18px);gap:6px 10px;height:138px;margin:0 8px 12px;padding-top:0;color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:12px;font-weight:400;line-height:18px;align-content:start}
 .four-col .pie-legend.single-col{grid-template-columns:1fr}
 .four-col .pie-legend-item{display:flex;align-items:flex-start;gap:7px;min-width:0;height:18px}
 .four-col .pie-legend-swatch{width:16px;height:16px;flex:0 0 16px;margin-top:1px}
@@ -852,6 +852,13 @@ function renderPieLegend(id,labels,colors){
     return '<div class="pie-legend-item"><span class="pie-legend-swatch" style="background:'+colors[i]+'"></span><span class="pie-legend-label" title="'+text+'">'+text+'</span></div>';
   }).join('');
 }
+function topFiveItems(items,valueFn,labelFn){
+  var sorted=items.slice().sort(function(a,b){return valueFn(b)-valueFn(a);});
+  var top=sorted.slice(0,5),rest=sorted.slice(5),other=rest.reduce(function(sum,item){return sum+valueFn(item);},0);
+  var result=top.map(function(item){return {item:item,label:labelFn(item),value:valueFn(item)};});
+  if(rest.length)result.push({item:null,label:'Other',value:other});
+  return result;
+}
 
 var MODEL_PRICING_JS={
   'claude-opus-5':{i:5,o:25,cr:0.5,cw:6.25},'claude-fable-5':{i:10,o:50,cr:1,cw:12.5},
@@ -862,24 +869,24 @@ var MODEL_PRICING_JS={
   'gpt-5.3-codex':{i:1.5,o:6,cr:0,cw:0},'gpt-4o':{i:2.5,o:10,cr:0,cw:0}
 };
 function renderModelChart(){
-  const data=cachedModels;
+  const data=topFiveItems(cachedModels,function(d){return pieVal(d,modelMetric);},function(d){return d.model;});
   const m=modelMetric;
-  const vals=data.map(d=>pieVal(d,m));
-  const labels=data.map((d,i)=>`${d.model} — ${pieFmt(vals[i],m)}`);
+  const vals=data.map(d=>d.value);
+  const labels=data.map(d=>`${d.label} — ${pieFmt(d.value,m)}`);
   const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
   if(tokenChart){
     tokenChart.data.labels=labels;
     tokenChart.data.datasets[0].data=vals;
     tokenChart.data.datasets[0].backgroundColor=colors;
-    tokenChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].model+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';};
+    tokenChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].label+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';};
     tokenChart.update();
     renderPieLegend('model-legend',labels,colors);
     return;
   }
   tokenChart=new Chart(document.getElementById('token-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:false,width:280,height:280,radius:100,plugins:{legend:{display:false},
-      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].model+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';}}}
+    options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].label+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';}}}
     }}
   });
   renderPieLegend('model-legend',labels,colors);
@@ -958,7 +965,7 @@ function renderSavings(){
       labels:['Hosted — '+fmtN(hostedTokens),'Vendor — '+fmtN(vendorTokens)],
       datasets:[{data:[hostedTokens,vendorTokens],backgroundColor:['#3fb950','#d29922'],borderWidth:0}]
     },
-    options:{responsive:false,width:280,height:280,radius:100,plugins:{
+    options:{responsive:false,width:220,height:220,radius:100,plugins:{
        legend:{display:false},
       tooltip:{callbacks:{label:function(ctx){var tot=hostedTokens+vendorTokens;var lbl=ctx.dataIndex===0?'Hosted':'Vendor';return lbl+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
@@ -1116,24 +1123,24 @@ function clearAllFilters(){
 }
 
 function renderUserCostChart(){
-  const data=chartUsers.slice(0,10);
+  const data=topFiveItems(chartUsers,function(d){return pieVal(d,userPieMetric);},function(d){return d.display_name||d.username;});
   const m=userPieMetric;
-  const vals=data.map(d=>pieVal(d,m));
-  const labels=data.map((d,i)=>`${d.display_name||d.username} — ${m==='cost'&&vals[i]===0?'Free':pieFmt(vals[i],m)}`);
+  const vals=data.map(d=>d.value);
+  const labels=data.map(d=>`${d.label} — ${m==='cost'&&d.value===0?'Free':pieFmt(d.value,m)}`);
   const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
   if(userCostChart){
     userCostChart.data.labels=labels;
     userCostChart.data.datasets[0].data=vals;
     userCostChart.data.datasets[0].backgroundColor=colors;
-    userCostChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return (data[ctx.dataIndex].display_name||data[ctx.dataIndex].username)+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
+    userCostChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
     userCostChart.update();
     renderPieLegend('user-legend',labels.slice(0,4),colors.slice(0,4));
     return;
   }
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:false,width:280,height:280,radius:100,plugins:{legend:{display:false},
-      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return (data[ctx.dataIndex].display_name||data[ctx.dataIndex].username)+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
+    options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
   renderPieLegend('user-legend',labels.slice(0,4),colors.slice(0,4));
@@ -1152,15 +1159,15 @@ async function refreshUserChartOnly(){
 }
 
 function renderToolChart(){
-  const data=cachedTools||[];
-  const vals=data.map(d=>d.total_tokens||0);
-  const labels=data.map((d,i)=>`${d.tool} — ${fmtN(vals[i])}`);
-  const colors=data.map(d=>toolColor(d.tool));
+  const data=topFiveItems(cachedTools||[],function(d){return d.total_tokens||0;},function(d){return d.tool;});
+  const vals=data.map(d=>d.value);
+  const labels=data.map(d=>`${d.label} — ${fmtN(d.value)}`);
+  const colors=data.map((d,i)=>d.item?toolColor(d.item.tool):COLORS[i%COLORS.length]);
   if(toolChart)toolChart.destroy();
   toolChart=new Chart(document.getElementById('tool-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:false,width:280,height:280,radius:100,plugins:{legend:{display:false},
-      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const item=data[ctx.dataIndex];return item.tool+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
+    options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].label+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
   renderPieLegend('tool-legend',labels,colors);
