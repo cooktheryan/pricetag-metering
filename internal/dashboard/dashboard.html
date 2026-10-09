@@ -53,9 +53,9 @@ h2 .filter-tag{font-size:12px;color:var(--blue);background:rgba(88,166,255,.15);
 .four-col .chart-head h2{margin-bottom:12px}
 .four-col .tl-toggle{justify-content:center;flex:0 0 32px;z-index:1}
 .four-col .chart-control-spacer{height:32px;margin-top:8px}
-.four-col .pie-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;min-height:48px;margin:0 8px 12px;color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:12px;font-weight:400;line-height:18px}
+.four-col .pie-legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;min-height:48px;margin:0 8px 12px;padding-top:0;color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:12px;font-weight:400;line-height:18px;align-content:start}
 .four-col .pie-legend.single-col{grid-template-columns:1fr}
-.four-col .pie-legend-item{display:flex;align-items:flex-start;gap:7px;min-width:0}
+.four-col .pie-legend-item{display:flex;align-items:flex-start;gap:7px;min-width:0;height:18px}
 .four-col .pie-legend-swatch{width:16px;height:16px;flex:0 0 16px;margin-top:1px}
 .four-col .pie-legend-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
@@ -319,6 +319,7 @@ tr.clickable{cursor:pointer}
   <div class="chart-box">
     <h2>By Model</h2>
     <canvas id="token-chart"></canvas>
+    <div id="model-legend" class="pie-legend"></div>
     <div class="tl-toggle" id="model-metric-toggle">
       <button data-mm="cost">Cost</button>
       <button data-mm="tokens" class="active">Tokens</button>
@@ -328,6 +329,7 @@ tr.clickable{cursor:pointer}
   <div class="chart-box">
     <h2>By Tool</h2>
     <canvas id="tool-chart"></canvas>
+    <div id="tool-legend" class="pie-legend"></div>
     <div class="chart-control-spacer" aria-hidden="true"></div>
   </div>
   <div class="chart-box">
@@ -871,14 +873,16 @@ function renderModelChart(){
     tokenChart.data.datasets[0].backgroundColor=colors;
     tokenChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].model+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';};
     tokenChart.update();
+    renderPieLegend('model-legend',labels,colors);
     return;
   }
   tokenChart=new Chart(document.getElementById('token-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:false,width:280,height:280,radius:100,plugins:{legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#d0d7de',boxWidth:16,font:{family:'system-ui',size:12,weight:400},padding:6}},
+    options:{responsive:false,width:280,height:280,radius:100,plugins:{legend:{display:false},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].model+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';}}}
     }}
   });
+  renderPieLegend('model-legend',labels,colors);
 }
 
 
@@ -954,7 +958,7 @@ function renderSavings(){
       labels:['Hosted — '+fmtN(hostedTokens),'Vendor — '+fmtN(vendorTokens)],
       datasets:[{data:[hostedTokens,vendorTokens],backgroundColor:['#3fb950','#d29922'],borderWidth:0}]
     },
-    options:{responsive:false,width:280,height:280,radius:100,layout:{padding:{bottom:64}},plugins:{
+    options:{responsive:false,width:280,height:280,radius:100,plugins:{
        legend:{display:false},
       tooltip:{callbacks:{label:function(ctx){var tot=hostedTokens+vendorTokens;var lbl=ctx.dataIndex===0?'Hosted':'Vendor';return lbl+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
@@ -1155,10 +1159,11 @@ function renderToolChart(){
   if(toolChart)toolChart.destroy();
   toolChart=new Chart(document.getElementById('tool-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:false,width:280,height:280,radius:100,layout:{padding:{bottom:26}},plugins:{legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#d0d7de',boxWidth:16,font:{family:'system-ui',size:12,weight:400},padding:6}},
+    options:{responsive:false,width:280,height:280,radius:100,plugins:{legend:{display:false},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const item=data[ctx.dataIndex];return item.tool+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
+  renderPieLegend('tool-legend',labels,colors);
 }
 
 function renderTimeline(data){
