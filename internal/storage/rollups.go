@@ -223,8 +223,17 @@ func (s *Store) RollupsReady() bool {
 // every boot: in steady state it reads one meta row and exits.
 func (s *Store) EnsureRollupsBackfilled(ctx context.Context) {
 	if s.RollupsReady() {
-		if err := s.ensureToolRollups(ctx); err != nil {
-			slog.Error("tool rollup backfill failed", "error", err)
+		for {
+			if err := s.ensureToolRollups(ctx); err == nil {
+				break
+			} else {
+				slog.Error("tool rollup backfill failed, retrying in 60s", "error", err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(60 * time.Second):
+			}
 		}
 		return
 	}
