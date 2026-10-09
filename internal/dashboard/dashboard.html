@@ -852,7 +852,7 @@ function renderPieLegend(id,labels,colors){
   var el=document.getElementById(id);if(!el)return;
   el.innerHTML=labels.map(function(label,i){
     var text=String(label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return '<div class="pie-legend-item"><span class="pie-legend-swatch" style="background:'+colors[i]+'"></span><span class="pie-legend-label" title="'+text+'">'+text+'</span></div>';
+    return '<div class="pie-legend-item" title="'+text+'"><span class="pie-legend-swatch" style="background:'+colors[i]+'"></span><span class="pie-legend-label">'+text+'</span></div>';
   }).join('');
 }
 function topFiveItems(items,valueFn,labelFn,limit){
