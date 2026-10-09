@@ -47,7 +47,7 @@ h2 .filter-tag{font-size:12px;color:var(--blue);background:rgba(88,166,255,.15);
 .three-col .chart-box canvas{max-height:220px}
 .four-col{grid-template-columns:repeat(4,minmax(0,1fr))}
 .four-col .chart-box{min-width:0;padding:12px;display:flex;flex-direction:column}
-.four-col .chart-box canvas{width:280px!important;height:280px!important;max-height:none;flex:0 0 280px;display:block;align-self:center;margin-bottom:24px}
+.four-col .chart-box canvas{width:340px!important;height:340px!important;max-height:none;flex:0 0 340px;display:block;align-self:center;margin-bottom:24px}
 .four-col .chart-box h2{text-align:center;margin-bottom:12px}
 .four-col .chart-head{display:block;margin-bottom:0}
 .four-col .chart-head h2{margin-bottom:12px}
@@ -855,7 +855,7 @@ function renderModelChart(){
   if(tokenChart)tokenChart.destroy();
   tokenChart=new Chart(document.getElementById('token-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#b8c0cc',boxWidth:16,font:{size:11},padding:6}},
+    options:{responsive:true,maintainAspectRatio:false,radius:150,plugins:{legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#b8c0cc',boxWidth:16,font:{size:11},padding:6}},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].model+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';}}}
     }}
   });
@@ -934,7 +934,7 @@ function renderSavings(){
       labels:['Hosted — '+fmtN(hostedTokens),'Vendor — '+fmtN(vendorTokens)],
       datasets:[{data:[hostedTokens,vendorTokens],backgroundColor:['#3fb950','#d29922'],borderWidth:0}]
     },
-    options:{responsive:true,plugins:{
+    options:{responsive:true,maintainAspectRatio:false,radius:150,plugins:{
       legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#b8c0cc',boxWidth:16,font:{size:11},padding:6}},
       tooltip:{callbacks:{label:function(ctx){var tot=hostedTokens+vendorTokens;var lbl=ctx.dataIndex===0?'Hosted':'Vendor';return lbl+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
@@ -1099,7 +1099,7 @@ function renderUserCostChart(){
   if(userCostChart)userCostChart.destroy();
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#b8c0cc',boxWidth:16,font:{size:11},padding:6}},
+    options:{responsive:true,maintainAspectRatio:false,radius:150,plugins:{legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#b8c0cc',boxWidth:16,font:{size:11},padding:6}},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return (data[ctx.dataIndex].display_name||data[ctx.dataIndex].username)+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
@@ -1113,7 +1113,7 @@ function renderToolChart(){
   if(toolChart)toolChart.destroy();
   toolChart=new Chart(document.getElementById('tool-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#b8c0cc',boxWidth:16,font:{size:11},padding:6}},
+    options:{responsive:true,maintainAspectRatio:false,radius:150,plugins:{legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#b8c0cc',boxWidth:16,font:{size:11},padding:6}},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const item=data[ctx.dataIndex];return item.tool+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
