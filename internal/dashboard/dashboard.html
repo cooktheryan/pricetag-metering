@@ -313,13 +313,13 @@ tr.clickable{cursor:pointer}
 <div class="charts-row four-col">
   <div class="chart-box">
     <h2>Token Usage · Hosted vs Vendor</h2>
-    <canvas id="savings-chart"></canvas>
+    <canvas id="savings-chart" width="220" height="220"></canvas>
     <div id="savings-legend" class="pie-legend single-col"></div>
     <div class="chart-control-spacer" aria-hidden="true"></div>
   </div>
   <div class="chart-box">
     <h2>By Model</h2>
-    <canvas id="token-chart"></canvas>
+    <canvas id="token-chart" width="220" height="220"></canvas>
     <div id="model-legend" class="pie-legend"></div>
     <div class="tl-toggle" id="model-metric-toggle">
       <button data-mm="cost">Cost</button>
@@ -329,13 +329,13 @@ tr.clickable{cursor:pointer}
   </div>
   <div class="chart-box">
     <h2>By Tool</h2>
-    <canvas id="tool-chart"></canvas>
+    <canvas id="tool-chart" width="220" height="220"></canvas>
     <div id="tool-legend" class="pie-legend single-col"></div>
     <div class="chart-control-spacer" aria-hidden="true"></div>
   </div>
   <div class="chart-box">
     <h2>By User (Top 5)</h2>
-    <canvas id="user-cost-chart"></canvas>
+    <canvas id="user-cost-chart" width="220" height="220"></canvas>
     <div id="user-legend" class="pie-legend single-col"></div>
     <div class="tl-toggle" id="user-metric-toggle">
       <button data-um="cost" class="active">Cost</button>
@@ -886,7 +886,7 @@ function renderModelChart(){
     return;
   }
   tokenChart=new Chart(document.getElementById('token-chart'),{
-    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
+    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
     options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].label+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';}}}
     }}
@@ -965,7 +965,7 @@ function renderSavings(){
     type:'doughnut',
     data:{
       labels:['Hosted — '+fmtN(hostedTokens),'Vendor — '+fmtN(vendorTokens)],
-      datasets:[{data:[hostedTokens,vendorTokens],backgroundColor:['#3fb950','#d29922'],borderWidth:0}]
+      datasets:[{data:[hostedTokens,vendorTokens],backgroundColor:['#3fb950','#d29922'],borderWidth:0,radius:100}]
     },
     options:{responsive:false,width:220,height:220,radius:100,plugins:{
        legend:{display:false},
@@ -1140,7 +1140,7 @@ function renderUserCostChart(){
     return;
   }
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
-    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
+    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
     options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
@@ -1172,7 +1172,7 @@ function renderToolChart(){
   const colors=data.map((d,i)=>d.item?toolColor(d.item.tool):COLORS[i%COLORS.length]);
   if(toolChart)toolChart.destroy();
   toolChart=new Chart(document.getElementById('tool-chart'),{
-    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
+    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
     options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].label+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
