@@ -329,7 +329,7 @@ tr.clickable{cursor:pointer}
   <div class="chart-box">
     <h2>By Tool</h2>
     <canvas id="tool-chart"></canvas>
-    <div id="tool-legend" class="pie-legend"></div>
+    <div id="tool-legend" class="pie-legend single-col"></div>
     <div class="chart-control-spacer" aria-hidden="true"></div>
   </div>
   <div class="chart-box">
@@ -852,9 +852,10 @@ function renderPieLegend(id,labels,colors){
     return '<div class="pie-legend-item"><span class="pie-legend-swatch" style="background:'+colors[i]+'"></span><span class="pie-legend-label" title="'+text+'">'+text+'</span></div>';
   }).join('');
 }
-function topFiveItems(items,valueFn,labelFn){
+function topFiveItems(items,valueFn,labelFn,limit){
+  limit=limit||5;
   var sorted=items.slice().sort(function(a,b){return valueFn(b)-valueFn(a);});
-  var top=sorted.slice(0,5),rest=sorted.slice(5),other=rest.reduce(function(sum,item){return sum+valueFn(item);},0);
+  var top=sorted.slice(0,limit),rest=sorted.slice(limit),other=rest.reduce(function(sum,item){return sum+valueFn(item);},0);
   var result=top.map(function(item){return {item:item,label:labelFn(item),value:valueFn(item)};});
   if(rest.length)result.push({item:null,label:'Other',value:other});
   return result;
@@ -1159,7 +1160,7 @@ async function refreshUserChartOnly(){
 }
 
 function renderToolChart(){
-  const data=topFiveItems(cachedTools||[],function(d){return d.total_tokens||0;},function(d){return d.tool;});
+  const data=topFiveItems(cachedTools||[],function(d){return d.total_tokens||0;},function(d){return d.tool;},4);
   const vals=data.map(d=>d.value);
   const labels=data.map(d=>`${d.label} — ${fmtN(d.value)}`);
   const colors=data.map((d,i)=>d.item?toolColor(d.item.tool):COLORS[i%COLORS.length]);
