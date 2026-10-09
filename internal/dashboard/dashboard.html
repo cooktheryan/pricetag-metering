@@ -333,7 +333,7 @@ tr.clickable{cursor:pointer}
     <div class="chart-control-spacer" aria-hidden="true"></div>
   </div>
   <div class="chart-box">
-    <h2>By User (Top 10)</h2>
+    <h2>By User (Top 5)</h2>
     <canvas id="user-cost-chart"></canvas>
     <div id="user-legend" class="pie-legend single-col"></div>
     <div class="tl-toggle" id="user-metric-toggle">
@@ -1123,7 +1123,7 @@ function clearAllFilters(){
 }
 
 function renderUserCostChart(){
-  const data=topFiveItems(chartUsers,function(d){return pieVal(d,userPieMetric);},function(d){return d.display_name||d.username;});
+  const data=topFiveItems(chartUsers,function(d){return pieVal(d,userPieMetric);},function(d){return d.display_name||d.username;}).slice(0,5);
   const m=userPieMetric;
   const vals=data.map(d=>d.value);
   const labels=data.map(d=>`${d.label} — ${m==='cost'&&d.value===0?'Free':pieFmt(d.value,m)}`);
@@ -1134,7 +1134,7 @@ function renderUserCostChart(){
     userCostChart.data.datasets[0].backgroundColor=colors;
     userCostChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
     userCostChart.update();
-    renderPieLegend('user-legend',labels.slice(0,4),colors.slice(0,4));
+    renderPieLegend('user-legend',labels,colors);
     return;
   }
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
@@ -1143,7 +1143,7 @@ function renderUserCostChart(){
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
-  renderPieLegend('user-legend',labels.slice(0,4),colors.slice(0,4));
+  renderPieLegend('user-legend',labels,colors);
 }
 
 async function refreshUserChartOnly(){
