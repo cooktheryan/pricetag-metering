@@ -52,7 +52,7 @@ h2 .filter-tag{font-size:12px;color:var(--blue);background:rgba(88,166,255,.15);
 .four-col .chart-head{display:block;margin-bottom:0}
 .four-col .chart-head h2{margin-bottom:12px}
 .four-col .tl-toggle{justify-content:center}
-.four-col .chart-control-spacer{height:32px;margin-bottom:12px}
+.four-col .chart-control-spacer{height:32px;margin-top:8px}
 
 .section{margin-bottom:24px}
 table{width:100%;border-collapse:collapse;background:var(--bg-card);border-radius:10px;overflow:hidden;border:1px solid var(--border)}
@@ -307,33 +307,31 @@ tr.clickable{cursor:pointer}
 <div class="charts-row four-col">
   <div class="chart-box">
     <h2>Token Usage · Hosted vs Vendor</h2>
-    <div class="chart-control-spacer" aria-hidden="true"></div>
     <canvas id="savings-chart"></canvas>
+    <div class="chart-control-spacer" aria-hidden="true"></div>
   </div>
   <div class="chart-box">
-    <div class="chart-head">
-      <h2>By Model</h2>
-      <div class="tl-toggle" id="model-metric-toggle">
-        <button data-mm="cost">Cost</button>
-        <button data-mm="tokens" class="active">Tokens</button>
-        <button data-mm="requests">Requests</button>
-      </div>
-    </div>
+    <h2>By Model</h2>
     <canvas id="token-chart"></canvas>
+    <div class="tl-toggle" id="model-metric-toggle">
+      <button data-mm="cost">Cost</button>
+      <button data-mm="tokens" class="active">Tokens</button>
+      <button data-mm="requests">Requests</button>
+    </div>
   </div>
   <div class="chart-box">
     <h2>By Tool</h2>
-    <div class="chart-control-spacer" aria-hidden="true"></div>
     <canvas id="tool-chart"></canvas>
+    <div class="chart-control-spacer" aria-hidden="true"></div>
   </div>
   <div class="chart-box">
     <h2>By User (Top 10)</h2>
+    <canvas id="user-cost-chart"></canvas>
     <div class="tl-toggle" id="user-metric-toggle">
       <button data-um="cost" class="active">Cost</button>
       <button data-um="tokens">Tokens</button>
       <button data-um="requests">Requests</button>
     </div>
-    <canvas id="user-cost-chart"></canvas>
   </div>
 </div>
 
