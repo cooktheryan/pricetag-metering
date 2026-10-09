@@ -52,6 +52,7 @@ h2 .filter-tag{font-size:12px;color:var(--blue);background:rgba(88,166,255,.15);
 .four-col .chart-head{display:block;margin-bottom:0}
 .four-col .chart-head h2{margin-bottom:12px}
 .four-col .tl-toggle{justify-content:center}
+.four-col .chart-control-spacer{height:32px;margin-bottom:12px}
 
 .section{margin-bottom:24px}
 table{width:100%;border-collapse:collapse;background:var(--bg-card);border-radius:10px;overflow:hidden;border:1px solid var(--border)}
@@ -306,6 +307,7 @@ tr.clickable{cursor:pointer}
 <div class="charts-row four-col">
   <div class="chart-box">
     <h2>Token Usage · Hosted vs Vendor</h2>
+    <div class="chart-control-spacer" aria-hidden="true"></div>
     <canvas id="savings-chart"></canvas>
   </div>
   <div class="chart-box">
@@ -321,6 +323,7 @@ tr.clickable{cursor:pointer}
   </div>
   <div class="chart-box">
     <h2>By Tool</h2>
+    <div class="chart-control-spacer" aria-hidden="true"></div>
     <canvas id="tool-chart"></canvas>
   </div>
   <div class="chart-box">
