@@ -940,7 +940,7 @@ function renderSavings(){
       labels:['Hosted — '+fmtN(hostedTokens),'Vendor — '+fmtN(vendorTokens)],
       datasets:[{data:[hostedTokens,vendorTokens],backgroundColor:['#3fb950','#d29922'],borderWidth:0}]
     },
-    options:{responsive:false,width:280,height:280,radius:100,layout:{padding:{bottom:32}},plugins:{
+    options:{responsive:false,width:280,height:280,radius:100,layout:{padding:{bottom:64}},plugins:{
       legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#d0d7de',boxWidth:16,font:{size:12},padding:6}},
       tooltip:{callbacks:{label:function(ctx){var tot=hostedTokens+vendorTokens;var lbl=ctx.dataIndex===0?'Hosted':'Vendor';return lbl+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
@@ -1138,7 +1138,7 @@ function renderToolChart(){
   if(toolChart)toolChart.destroy();
   toolChart=new Chart(document.getElementById('tool-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:false,width:280,height:280,radius:100,plugins:{legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#d0d7de',boxWidth:16,font:{size:12},padding:6}},
+    options:{responsive:false,width:280,height:280,radius:100,layout:{padding:{bottom:26}},plugins:{legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#d0d7de',boxWidth:16,font:{size:12},padding:6}},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const item=data[ctx.dataIndex];return item.tool+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
