@@ -1389,6 +1389,7 @@ var migrations = []string{
 		cache_creation_tokens BIGINT NOT NULL DEFAULT 0,
 		cost_usd NUMERIC(20,8) NOT NULL DEFAULT 0
 	)`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS usage_hourly_key ON usage_hourly (hour, username, group_name, model, provider)`,
 	// Tool usage is additive: never change usage_hourly's existing key because
 	// old pods may still execute its five-column ON CONFLICT during rollout.
 	`CREATE TABLE IF NOT EXISTS usage_tool_hourly (
