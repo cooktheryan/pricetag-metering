@@ -48,6 +48,10 @@ h2 .filter-tag{font-size:12px;color:var(--blue);background:rgba(88,166,255,.15);
 .four-col{grid-template-columns:repeat(4,minmax(0,1fr))}
 .four-col .chart-box{min-width:0;padding:12px}
 .four-col .chart-box canvas{max-height:210px}
+.four-col .chart-box h2{text-align:center;margin-bottom:12px}
+.four-col .chart-head{display:block;margin-bottom:0}
+.four-col .chart-head h2{margin-bottom:12px}
+.four-col .tl-toggle{justify-content:center}
 
 .section{margin-bottom:24px}
 table{width:100%;border-collapse:collapse;background:var(--bg-card);border-radius:10px;overflow:hidden;border:1px solid var(--border)}
@@ -316,6 +320,10 @@ tr.clickable{cursor:pointer}
     <canvas id="token-chart"></canvas>
   </div>
   <div class="chart-box">
+    <h2>By Tool</h2>
+    <canvas id="tool-chart"></canvas>
+  </div>
+  <div class="chart-box">
     <h2>By User (Top 10)</h2>
     <div class="tl-toggle" id="user-metric-toggle">
       <button data-um="cost" class="active">Cost</button>
@@ -323,10 +331,6 @@ tr.clickable{cursor:pointer}
       <button data-um="requests">Requests</button>
     </div>
     <canvas id="user-cost-chart"></canvas>
-  </div>
-  <div class="chart-box">
-    <h2>By Tool</h2>
-    <canvas id="tool-chart"></canvas>
   </div>
 </div>
 
