@@ -100,6 +100,29 @@ SET user_agent = CASE (substring(username FROM 'seeduser([0-9]+)')::int % 6)
   ELSE 'python-requests/2.32'
 END
 WHERE username ~ '^seeduser[0-9]+@example\.com$';
+
+-- The fixture rows above are inserted directly for repeatability, so rebuild
+-- the derived hourly table here instead of waiting for the maintenance tick.
+TRUNCATE usage_hourly;
+INSERT INTO usage_hourly
+  (hour, username, group_name, model, provider, tool, requests,
+   prompt_tokens, completion_tokens, total_tokens, cached_input_tokens,
+   cache_creation_tokens, cost_usd)
+SELECT date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name, ''),
+  e.model, e.provider,
+  CASE
+    WHEN lower(coalesce(e.user_agent, '')) LIKE 'claude-cli%' OR lower(coalesce(e.user_agent, '')) LIKE 'claude-code%' THEN 'Claude Code'
+    WHEN lower(coalesce(e.user_agent, '')) LIKE 'codex-tui%' OR lower(coalesce(e.user_agent, '')) LIKE 'codex/%' THEN 'Codex'
+    WHEN lower(coalesce(e.user_agent, '')) = 'opencode' OR lower(coalesce(e.user_agent, '')) LIKE 'opencode/%' OR lower(coalesce(e.user_agent, '')) LIKE 'opencode-%' OR lower(coalesce(e.user_agent, '')) LIKE 'opencode.%' THEN 'OpenCode'
+    WHEN lower(coalesce(e.user_agent, '')) = 'pi' OR lower(coalesce(e.user_agent, '')) LIKE 'pi/%' OR lower(coalesce(e.user_agent, '')) LIKE 'pi-%' OR lower(coalesce(e.user_agent, '')) LIKE 'pi.%' THEN 'Pi'
+    WHEN lower(coalesce(e.user_agent, '')) LIKE 'curl/%' THEN 'curl'
+    ELSE 'Other'
+  END,
+  COUNT(*), SUM(e.prompt_tokens), SUM(e.completion_tokens), SUM(e.total_tokens),
+  SUM(e.cached_input_tokens), SUM(e.cache_creation_tokens), COALESCE(SUM(e.cost_usd), 0)
+FROM usage_events e
+GROUP BY date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name, ''),
+  e.model, e.provider, 6;
 SQL
 
 echo "Local super-admin key: local-noy-key"
