@@ -558,7 +558,6 @@ async function refresh(force){
    renderUsersPager();
   renderRecent(rc);
    renderModelChart();
-renderModelChart();
    renderToolChart();
    renderUserCostChart();
   renderSavings();
@@ -934,7 +933,7 @@ function renderSavings(){
       labels:['Hosted — '+fmtN(hostedTokens),'Vendor — '+fmtN(vendorTokens)],
       datasets:[{data:[hostedTokens,vendorTokens],backgroundColor:['#3fb950','#d29922'],borderWidth:0}]
     },
-    options:{responsive:true,maintainAspectRatio:false,radius:150,plugins:{
+    options:{responsive:false,width:280,height:280,radius:110,plugins:{
       legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#d0d7de',boxWidth:16,font:{size:12},padding:6}},
       tooltip:{callbacks:{label:function(ctx){var tot=hostedTokens+vendorTokens;var lbl=ctx.dataIndex===0?'Hosted':'Vendor';return lbl+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
@@ -1096,13 +1095,32 @@ function renderUserCostChart(){
   const vals=data.map(d=>pieVal(d,m));
   const labels=data.map((d,i)=>`${d.display_name||d.username} — ${m==='cost'&&vals[i]===0?'Free':pieFmt(vals[i],m)}`);
   const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
-  if(userCostChart)userCostChart.destroy();
+  if(userCostChart){
+    userCostChart.data.labels=labels;
+    userCostChart.data.datasets[0].data=vals;
+    userCostChart.data.datasets[0].backgroundColor=colors;
+    userCostChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return (data[ctx.dataIndex].display_name||data[ctx.dataIndex].username)+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
+    userCostChart.update();
+    return;
+  }
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
     options:{responsive:false,width:280,height:280,radius:110,plugins:{legend:{position:'bottom',align:'start',maxHeight:78,labels:{color:'#d0d7de',boxWidth:16,font:{size:12},padding:6}},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return (data[ctx.dataIndex].display_name||data[ctx.dataIndex].username)+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
+}
+
+async function refreshUserChartOnly(){
+  var r=range;
+  if(r==='custom'&&customFrom&&customTo)r='custom&from='+customFrom+'&to='+customTo;
+  var uf=userFilter.length?'&user='+encodeURIComponent(userFilter.join(',')):'';
+  var gf=groupFilter?'&group='+encodeURIComponent(groupFilter):'';
+  var mf=modelFilter?'&model='+encodeURIComponent(modelFilter):'';
+  var sort=userPieMetric==='cost'?'cost_usd':userPieMetric==='requests'?'requests':'total_tokens';
+  var rows=await api('/api/v1/dashboard/users?range='+r+gf+uf+mf+'&sort='+sort+'&order=desc&limit=10&offset=0&ref='+encodeURIComponent(savingsRef),false);
+  chartUsers=collapseUsageUsers(Array.isArray(rows)?rows:[]);
+  renderUserCostChart();
 }
 
 function renderToolChart(){
@@ -1162,7 +1180,7 @@ document.getElementById('range-btns').addEventListener('click',e=>{
   e.target.classList.add('active');
   range=e.target.dataset.range;usersPage=0;
   syncDateInputs();
-  refresh();
+   refresh();
 });
 
 
@@ -1179,7 +1197,7 @@ document.getElementById('user-metric-toggle').addEventListener('click',e=>{
   document.querySelector('#user-metric-toggle .active').classList.remove('active');
   e.target.classList.add('active');
   userPieMetric=e.target.dataset.um;
-  refresh();
+   refreshUserChartOnly().catch(function(){renderUserCostChart();});
 });
 
 document.getElementById('tl-toggle').addEventListener('click',e=>{
