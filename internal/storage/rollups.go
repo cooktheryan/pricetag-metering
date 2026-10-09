@@ -14,10 +14,9 @@ import (
 // Hourly rollup maintenance and the one-time backfill (Phase 3 of
 // docs/dashboard-scaling-plan.md). Design notes that matter:
 //
-//   - When live rollups are enabled, the rollup is upserted inside each
-//     event's insert transaction, by BOTH insert sites (InsertEvent and
-//     RecordQuotaDenial). When disabled, raw usage_events remains the source
-//     of truth and bounded maintenance rebuilds usage_hourly.
+//   - The rollup is upserted inside each event's insert transaction, by
+//     BOTH insert sites (InsertEvent and RecordQuotaDenial). No async
+//     worker, no window where raw and rollup disagree while being read.
 //   - The backfill is resumable across restarts via rollup_meta
 //     watermarks, and idempotent: costs fill only NULL rows; the rollup
 //     rebuild rewrites whole hours with values recomputed from raw
@@ -40,12 +39,12 @@ type execer interface {
 }
 
 const upsertRollupSQL = `
-	INSERT INTO usage_hourly (hour, username, group_name, model, provider, tool,
+	INSERT INTO usage_hourly (hour, username, group_name, model, provider,
 		requests, prompt_tokens, completion_tokens, total_tokens,
 		cached_input_tokens, cache_creation_tokens, cost_usd)
-	VALUES (date_trunc('hour', $1::timestamptz), $2, $3, $4, $5, $6,
-		$7::bigint, $8::bigint, $9::bigint, $10::bigint, $11::bigint, $12::bigint, $13::numeric)
-	ON CONFLICT (hour, username, group_name, model, provider, tool) DO UPDATE SET
+	VALUES (date_trunc('hour', $1::timestamptz), $2, $3, $4, $5,
+		$6::bigint, $7::bigint, $8::bigint, $9::bigint, $10::bigint, $11::bigint, $12::numeric)
+	ON CONFLICT (hour, username, group_name, model, provider) DO UPDATE SET
 		requests = usage_hourly.requests + EXCLUDED.requests,
 		prompt_tokens = usage_hourly.prompt_tokens + EXCLUDED.prompt_tokens,
 		completion_tokens = usage_hourly.completion_tokens + EXCLUDED.completion_tokens,
@@ -54,13 +53,29 @@ const upsertRollupSQL = `
 		cache_creation_tokens = usage_hourly.cache_creation_tokens + EXCLUDED.cache_creation_tokens,
 		cost_usd = usage_hourly.cost_usd + EXCLUDED.cost_usd`
 
+const upsertToolRollupSQL = `
+	INSERT INTO usage_tool_hourly (hour, username, group_name, model, provider, tool,
+		requests, prompt_tokens, completion_tokens, total_tokens,
+		cached_input_tokens, cache_creation_tokens, cost_usd)
+	VALUES (date_trunc('hour', $1::timestamptz), $2, $3, $4, $5, $6,
+		$7::bigint, $8::bigint, $9::bigint, $10::bigint, $11::bigint, $12::bigint, $13::numeric)
+	ON CONFLICT (hour, username, group_name, model, provider, tool) DO UPDATE SET
+		requests = usage_tool_hourly.requests + EXCLUDED.requests,
+		prompt_tokens = usage_tool_hourly.prompt_tokens + EXCLUDED.prompt_tokens,
+		completion_tokens = usage_tool_hourly.completion_tokens + EXCLUDED.completion_tokens,
+		total_tokens = usage_tool_hourly.total_tokens + EXCLUDED.total_tokens,
+		cached_input_tokens = usage_tool_hourly.cached_input_tokens + EXCLUDED.cached_input_tokens,
+		cache_creation_tokens = usage_tool_hourly.cache_creation_tokens + EXCLUDED.cache_creation_tokens,
+		cost_usd = usage_tool_hourly.cost_usd + EXCLUDED.cost_usd`
+
 const (
-	metaCostWatermark   = "cost_backfill_max_id"
-	metaRollupWatermark = "rollup_rebuilt_through_hour" // last fully rebuilt hour, inclusive
-	metaRollupsReady    = "rollups_ready"
-	metaParityHealthy   = "parity_healthy"
-	metaParityCheckedAt = "parity_checked_at"
-	costBackfillStep    = 50000
+	metaCostWatermark    = "cost_backfill_max_id"
+	metaRollupWatermark  = "rollup_rebuilt_through_hour" // last fully rebuilt hour, inclusive
+	metaRollupsReady     = "rollups_ready"
+	metaParityHealthy    = "parity_healthy"
+	metaParityCheckedAt  = "parity_checked_at"
+	metaToolRollupsReady = "tool_rollups_ready"
+	costBackfillStep     = 50000
 )
 
 // ---- Hour locks (part B) ----
@@ -86,8 +101,10 @@ const (
 // keep the identical render expression (a test guards the drift).
 
 const upsertHourLockSQL = `SELECT pg_advisory_xact_lock(hashtext('usage_hourly:' || to_char(date_trunc('hour', $1::timestamptz) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24')))`
+const upsertToolHourLockSQL = `SELECT pg_advisory_xact_lock(hashtext('usage_tool_hourly:' || to_char(date_trunc('hour', $1::timestamptz) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24')))`
 
 const rebuildHourLockSQL = `SELECT pg_advisory_xact_lock(hashtext('usage_hourly:' || to_char(h AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24'))) FROM generate_series($1::timestamptz, $2::timestamptz - interval '1 hour', interval '1 hour') h ORDER BY h`
+const rebuildToolHourLockSQL = `SELECT pg_advisory_xact_lock(hashtext('usage_tool_hourly:' || to_char(h AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24'))) FROM generate_series($1::timestamptz, $2::timestamptz - interval '1 hour', interval '1 hour') h ORDER BY h`
 
 // upsertRollup adds one event's contribution to its hour bucket. costUSD
 // is the NUMERIC text the insert statement returned (or "0" for denial
@@ -100,6 +117,15 @@ func upsertRollup(ctx context.Context, ex execer, ts time.Time, username, group,
 		return err
 	}
 	_, err := ex.ExecContext(ctx, upsertRollupSQL,
+		ts, username, group, model, provider,
+		requests, prompt, completion, total, cached, cacheCreation, costUSD)
+	if err != nil {
+		return err
+	}
+	if _, err := ex.ExecContext(ctx, upsertToolHourLockSQL, ts); err != nil {
+		return err
+	}
+	_, err = ex.ExecContext(ctx, upsertToolRollupSQL,
 		ts, username, group, model, provider, tool,
 		requests, prompt, completion, total, cached, cacheCreation, costUSD)
 	return err
@@ -122,33 +148,48 @@ var costBackfillSQL = fmt.Sprintf(`
 // with EXCLUDED (not adding) is what makes a crashed rebuild safe to
 // redo: recomputed-from-raw values replace whatever partial state exists.
 const dashboardToolSQL = `CASE
-	WHEN lower(coalesce(e.user_agent, '')) LIKE 'claude-cli%' OR lower(coalesce(e.user_agent, '')) LIKE 'claude-code%' THEN 'Claude Code'
-	WHEN lower(coalesce(e.user_agent, '')) LIKE 'codex-tui%' OR lower(coalesce(e.user_agent, '')) LIKE 'codex/%' THEN 'Codex'
-	WHEN lower(coalesce(e.user_agent, '')) = 'opencode' OR lower(coalesce(e.user_agent, '')) LIKE 'opencode/%' OR lower(coalesce(e.user_agent, '')) LIKE 'opencode-%' OR lower(coalesce(e.user_agent, '')) LIKE 'opencode.%' THEN 'OpenCode'
-	WHEN lower(coalesce(e.user_agent, '')) = 'pi' OR lower(coalesce(e.user_agent, '')) LIKE 'pi/%' OR lower(coalesce(e.user_agent, '')) LIKE 'pi-%' OR lower(coalesce(e.user_agent, '')) LIKE 'pi.%' THEN 'Pi'
-	WHEN lower(coalesce(e.user_agent, '')) LIKE 'curl/%' THEN 'curl'
+	WHEN btrim(lower(coalesce(e.user_agent, ''))) LIKE 'claude-cli%' OR btrim(lower(coalesce(e.user_agent, ''))) LIKE 'claude-code%' THEN 'Claude Code'
+	WHEN btrim(lower(coalesce(e.user_agent, ''))) LIKE 'codex-tui%' OR btrim(lower(coalesce(e.user_agent, ''))) LIKE 'codex/%' THEN 'Codex'
+	WHEN btrim(lower(coalesce(e.user_agent, ''))) = 'opencode' OR btrim(lower(coalesce(e.user_agent, ''))) LIKE 'opencode/%' OR btrim(lower(coalesce(e.user_agent, ''))) LIKE 'opencode-%' OR btrim(lower(coalesce(e.user_agent, ''))) LIKE 'opencode.%' THEN 'OpenCode'
+	WHEN btrim(lower(coalesce(e.user_agent, ''))) = 'pi' OR btrim(lower(coalesce(e.user_agent, ''))) LIKE 'pi/%' OR btrim(lower(coalesce(e.user_agent, ''))) LIKE 'pi-%' OR btrim(lower(coalesce(e.user_agent, ''))) LIKE 'pi.%' THEN 'Pi'
+	WHEN btrim(lower(coalesce(e.user_agent, ''))) LIKE 'curl/%' THEN 'curl'
 	ELSE 'Other'
 END`
 
 var rebuildHourSQL = fmt.Sprintf(`
-	INSERT INTO usage_hourly (hour, username, group_name, model, provider, tool,
+	INSERT INTO usage_hourly (hour, username, group_name, model, provider,
 		requests, prompt_tokens, completion_tokens, total_tokens,
 		cached_input_tokens, cache_creation_tokens, cost_usd)
 	SELECT date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name, ''), e.model, e.provider,
-		%s,
 		COUNT(*), SUM(e.prompt_tokens), SUM(e.completion_tokens), SUM(e.total_tokens),
 		SUM(e.cached_input_tokens), SUM(e.cache_creation_tokens), COALESCE(SUM(e.cost_usd), 0)
 	FROM usage_events e
 	WHERE e.timestamp >= $1 AND e.timestamp < $2
-	GROUP BY date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name, ''), e.model, e.provider, %s
-	ON CONFLICT (hour, username, group_name, model, provider, tool) DO UPDATE SET
+	GROUP BY date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name, ''), e.model, e.provider
+	ON CONFLICT (hour, username, group_name, model, provider) DO UPDATE SET
 		requests = EXCLUDED.requests,
 		prompt_tokens = EXCLUDED.prompt_tokens,
 		completion_tokens = EXCLUDED.completion_tokens,
 		total_tokens = EXCLUDED.total_tokens,
 		cached_input_tokens = EXCLUDED.cached_input_tokens,
 		cache_creation_tokens = EXCLUDED.cache_creation_tokens,
-		cost_usd = EXCLUDED.cost_usd`, dashboardToolSQL, dashboardToolSQL)
+		cost_usd = EXCLUDED.cost_usd`)
+
+var rebuildToolHourSQL = fmt.Sprintf(`
+	INSERT INTO usage_tool_hourly (hour, username, group_name, model, provider, tool,
+		requests, prompt_tokens, completion_tokens, total_tokens,
+		cached_input_tokens, cache_creation_tokens, cost_usd)
+	SELECT date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name, ''), e.model, e.provider,
+		%s, COUNT(*), SUM(e.prompt_tokens), SUM(e.completion_tokens), SUM(e.total_tokens),
+		SUM(e.cached_input_tokens), SUM(e.cache_creation_tokens), COALESCE(SUM(e.cost_usd), 0)
+	FROM usage_events e
+	WHERE e.timestamp >= $1 AND e.timestamp < $2
+	GROUP BY date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name, ''), e.model, e.provider, %s
+	ON CONFLICT (hour, username, group_name, model, provider, tool) DO UPDATE SET
+		requests = EXCLUDED.requests, prompt_tokens = EXCLUDED.prompt_tokens,
+		completion_tokens = EXCLUDED.completion_tokens, total_tokens = EXCLUDED.total_tokens,
+		cached_input_tokens = EXCLUDED.cached_input_tokens,
+		cache_creation_tokens = EXCLUDED.cache_creation_tokens, cost_usd = EXCLUDED.cost_usd`, dashboardToolSQL, dashboardToolSQL)
 
 func (s *Store) metaGet(ctx context.Context, key string) (string, bool) {
 	var v string
@@ -182,11 +223,18 @@ func (s *Store) RollupsReady() bool {
 // every boot: in steady state it reads one meta row and exits.
 func (s *Store) EnsureRollupsBackfilled(ctx context.Context) {
 	if s.RollupsReady() {
+		if err := s.ensureToolRollups(ctx); err != nil {
+			slog.Error("tool rollup backfill failed", "error", err)
+		}
 		return
 	}
 	for {
 		done, err := s.backfillPass(ctx)
 		if err == nil && done {
+			if err := s.ensureToolRollups(ctx); err != nil {
+				slog.Error("tool rollup backfill failed", "error", err)
+				continue
+			}
 			return
 		}
 		if err != nil {
@@ -198,6 +246,47 @@ func (s *Store) EnsureRollupsBackfilled(ctx context.Context) {
 		case <-time.After(60 * time.Second):
 		}
 	}
+}
+
+// ToolRollupsReady reports whether the additive tool dimension has been
+// rebuilt. It is separate from the legacy usage_hourly readiness flag so a
+// rolling deployment never serves an empty tool table as authoritative.
+func (s *Store) ToolRollupsReady() bool {
+	v, ok := s.metaGet(context.Background(), metaToolRollupsReady)
+	return ok && v == "true"
+}
+
+// ensureToolRollups rebuilds the additive tool table while holding an
+// exclusive lock on that table. New pods' tool upserts wait behind the lock;
+// old pods never touch this table. The existing usage_hourly table is not
+// truncated or re-keyed, preserving zero-downtime compatibility.
+func (s *Store) ensureToolRollups(ctx context.Context) error {
+	if s.ToolRollupsReady() {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `LOCK TABLE usage_tool_hourly IN ACCESS EXCLUSIVE MODE`); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `TRUNCATE usage_tool_hourly`); err != nil {
+		return err
+	}
+	// The initial table needs all history, so use the same normalized
+	// expression without a time bound for the one-time additive rebuild.
+	full := fmt.Sprintf(`INSERT INTO usage_tool_hourly (hour, username, group_name, model, provider, tool, requests, prompt_tokens, completion_tokens, total_tokens, cached_input_tokens, cache_creation_tokens, cost_usd)
+		SELECT date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name,''), e.model, e.provider, %s, COUNT(*), SUM(e.prompt_tokens), SUM(e.completion_tokens), SUM(e.total_tokens), SUM(e.cached_input_tokens), SUM(e.cache_creation_tokens), COALESCE(SUM(e.cost_usd),0)
+		FROM usage_events e GROUP BY date_trunc('hour',e.timestamp),e.username,COALESCE(e.group_name,''),e.model,e.provider,%s`, dashboardToolSQL, dashboardToolSQL)
+	if _, err := tx.ExecContext(ctx, full); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.metaSet(ctx, metaToolRollupsReady, "true")
 }
 
 // backfillPass drives the stages to completion in dependency order:
@@ -314,6 +403,14 @@ func (s *Store) rebuildStep(ctx context.Context) (bool, error) {
 		_ = tx.Rollback()
 		return false, fmt.Errorf("rebuild hour %s: %w", hour.Format(time.RFC3339), err)
 	}
+	if _, err := tx.ExecContext(ctx, rebuildToolHourLockSQL, hour, hour.Add(time.Hour)); err != nil {
+		_ = tx.Rollback()
+		return false, fmt.Errorf("rebuild tool hour lock %s: %w", hour.Format(time.RFC3339), err)
+	}
+	if _, err := tx.ExecContext(ctx, rebuildToolHourSQL, hour, hour.Add(time.Hour)); err != nil {
+		_ = tx.Rollback()
+		return false, fmt.Errorf("rebuild tool hour %s: %w", hour.Format(time.RFC3339), err)
+	}
 	if err := tx.Commit(); err != nil {
 		return false, err
 	}
@@ -346,11 +443,13 @@ func (s *Store) refreshRecentHours(ctx context.Context) error {
 	if _, err := tx.ExecContext(ctx, rebuildHourSQL, from, to); err != nil {
 		return fmt.Errorf("refresh recent hours: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
-		return err
+	if _, err := tx.ExecContext(ctx, rebuildToolHourLockSQL, from, to); err != nil {
+		return fmt.Errorf("refresh tool hours lock: %w", err)
 	}
-	s.rollupLastRefreshUnixNano.Store(time.Now().UTC().UnixNano())
-	return nil
+	if _, err := tx.ExecContext(ctx, rebuildToolHourSQL, from, to); err != nil {
+		return fmt.Errorf("refresh tool hours: %w", err)
+	}
+	return tx.Commit()
 }
 
 // ---- Read gating and standing parity (part B) ----
@@ -733,7 +832,7 @@ var rollupUsersSelect = `
 		FROM usage_hourly e
 		LEFT JOIN (SELECT l.username AS username, pu.tags->>'first_name' AS first_name, pu.tags->>'last_name' AS last_name FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username
 		LEFT JOIN sv ON sv.username = e.username
-		WHERE e.hour >= $1 AND e.hour < $2 AND ($3 = '' OR e.group_name = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5) AND ($9 = '' OR lower(e.username) LIKE '%%' || lower($9) || '%%' OR lower(TRIM(CONCAT_WS(' ', up.first_name, up.last_name))) LIKE '%%' || lower($9) || '%%')
+		WHERE e.hour >= $1 AND e.hour < $2 AND ($3 = '' OR e.group_name = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5)
 		GROUP BY e.username, %s, COALESCE(e.group_name, '')
 		ORDER BY %s %s, e.username ASC, COALESCE(e.group_name, '') ASC
 		LIMIT $6 OFFSET $7`
