@@ -854,7 +854,7 @@ function renderModelChart(){
   if(tokenChart)tokenChart.destroy();
   tokenChart=new Chart(document.getElementById('token-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#8b949e',font:{size:12},padding:12}},
+    options:{responsive:true,plugins:{legend:{position:'bottom',align:'start',labels:{color:'#8b949e',boxWidth:14,font:{size:10},padding:4}},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].model+': '+pieFmt(ctx.raw,m)+pieUnit(m)+' ('+((ctx.raw/tot)*100).toFixed(1)+'%)';}}}
     }}
   });
@@ -934,7 +934,7 @@ function renderSavings(){
       datasets:[{data:[hostedTokens,vendorTokens],backgroundColor:['#3fb950','#d29922'],borderWidth:0}]
     },
     options:{responsive:true,plugins:{
-      legend:{position:'right',labels:{color:'#8b949e',font:{size:12},padding:12}},
+      legend:{position:'bottom',align:'start',labels:{color:'#8b949e',boxWidth:14,font:{size:10},padding:4}},
       tooltip:{callbacks:{label:function(ctx){var tot=hostedTokens+vendorTokens;var lbl=ctx.dataIndex===0?'Hosted':'Vendor';return lbl+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
@@ -1098,7 +1098,7 @@ function renderUserCostChart(){
   if(userCostChart)userCostChart.destroy();
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#8b949e',font:{size:11},padding:8}},
+    options:{responsive:true,plugins:{legend:{position:'bottom',align:'start',labels:{color:'#8b949e',boxWidth:14,font:{size:10},padding:4}},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return (data[ctx.dataIndex].display_name||data[ctx.dataIndex].username)+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
@@ -1112,7 +1112,7 @@ function renderToolChart(){
   if(toolChart)toolChart.destroy();
   toolChart=new Chart(document.getElementById('tool-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0}]},
-    options:{responsive:true,plugins:{legend:{position:'right',labels:{color:'#8b949e',font:{size:11},padding:7}},
+    options:{responsive:true,plugins:{legend:{position:'bottom',align:'start',labels:{color:'#8b949e',boxWidth:14,font:{size:10},padding:4}},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const item=data[ctx.dataIndex];return item.tool+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
