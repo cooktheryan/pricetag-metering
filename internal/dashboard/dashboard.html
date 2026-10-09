@@ -538,11 +538,6 @@ async function refresh(force){
       api('/api/v1/dashboard/models?'+rangeOnly,force),
       api('/api/v1/dashboard/directory-users',force)
     ]);
-      api('/api/v1/dashboard/recent?limit=20'+gf+uf+mf,force),
-      api('/api/v1/dashboard/users?'+rangeOnly+'&limit=200',force),
-      api('/api/v1/dashboard/models?'+rangeOnly,force),
-      api('/api/v1/dashboard/directory-users',force)
-    ]);
   cachedOverview=ov;
   cachedGroups=gr;
    cachedModels=modelFilter?mo.filter(function(m){return m.model===modelFilter}):mo;
