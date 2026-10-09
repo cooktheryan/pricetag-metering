@@ -95,6 +95,15 @@ func TestToolRollupRechecksReadinessInsideExclusiveLock(t *testing.T) {
 	}
 }
 
+func TestToolRollupCoordinatesWithSchemaMigration(t *testing.T) {
+	body := funcBody(t, "rollups.go", "func (s *Store) ensureToolRollups")
+	migrationLock := strings.Index(body, "pg_advisory_xact_lock($1)")
+	tableLock := strings.Index(body, "LOCK TABLE usage_tool_hourly IN ACCESS EXCLUSIVE MODE")
+	if migrationLock < 0 || tableLock < 0 || migrationLock > tableLock {
+		t.Error("tool rebuild must take the migration coordination lock before the table lock")
+	}
+}
+
 func TestRollupReadVariantsReadOnlyHourlyTable(t *testing.T) {
 	variants := map[string]string{
 		"rollupOverviewSQL": rollupOverviewSQL,

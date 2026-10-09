@@ -116,6 +116,8 @@ type PoolConfig struct {
 	ConnMaxLifetime time.Duration
 }
 
+const migrationTimeout = 5 * time.Minute
+
 func New(databaseURL string, tokenQuota int64, pool PoolConfig) (*Store, error) {
 	db, err := sql.Open("postgres", databaseURL)
 	if err != nil {
@@ -132,15 +134,17 @@ func New(databaseURL string, tokenQuota int64, pool PoolConfig) (*Store, error) 
 		db.SetConnMaxLifetime(pool.ConnMaxLifetime)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := db.PingContext(ctx); err != nil {
+	pingCtx, cancelPing := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelPing()
+	if err := db.PingContext(pingCtx); err != nil {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
 	s := &Store{db: db, tokenQuota: tokenQuota}
 	s.quotaEnforcement.Store(true)
-	if err := s.migrate(ctx); err != nil {
+	migrationCtx, cancelMigration := context.WithTimeout(context.Background(), migrationTimeout)
+	defer cancelMigration()
+	if err := s.migrate(migrationCtx); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 

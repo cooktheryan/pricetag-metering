@@ -278,6 +278,13 @@ func (s *Store) ensureToolRollups(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	// Coordinate the additive tool-table rebuild with migrate(). Migrations
+	// acquire migrationLockKey at the session level before CREATE/INDEX DDL;
+	// using the same key transactionally prevents a new pod from waiting on
+	// tool-table DDL while another pod is rebuilding the table.
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, migrationLockKey); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `LOCK TABLE usage_tool_hourly IN ACCESS EXCLUSIVE MODE`); err != nil {
 		return err
 	}
