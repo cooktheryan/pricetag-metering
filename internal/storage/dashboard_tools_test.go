@@ -8,6 +8,7 @@ func TestDashboardTool(t *testing.T) {
 		want      string
 	}{
 		{"claude-code/2.1.0", "Claude Code"},
+		{"  claude-code/2.1.0  ", "Claude Code"},
 		{"claude-cli/1.0", "Claude Code"},
 		{"codex-tui/0.1", "Codex"},
 		{"codex/1.2", "Codex"},
