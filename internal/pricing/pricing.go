@@ -12,10 +12,20 @@ import (
 	"time"
 
 	_ "embed"
+
+	"github.com/redhat-et/pricetag-metering/internal/tracing"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 //go:embed model_prices.json
 var bundledPricing []byte
+
+var httpClient = func() *http.Client {
+	if tracing.Enabled() {
+		return &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	}
+	return http.DefaultClient
+}()
 
 const liteLLMRawURL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 
@@ -238,7 +248,7 @@ func FetchLatest(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)
 	}
