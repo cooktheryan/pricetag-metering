@@ -245,6 +245,12 @@ func (k Kubernetes) Enabled() bool {
 }
 
 // Load resolves configuration from the environment.
+//
+// Tracing configuration (all optional, read by the tracing package):
+//   - OTEL_EXPORTER_OTLP_ENDPOINT: enables tracing when set
+//   - OTEL_SERVICE_NAME: overrides the service name (default: pricetag-metering)
+//   - OTEL_EXPORTER_OTLP_PROTOCOL: protocol to use (default: http/protobuf)
+//   - OTEL_RESOURCE_ATTRIBUTES: additional resource attributes
 func Load() Config {
 	dashboardUseRollups := envBool("DASHBOARD_USE_ROLLUPS", false)
 	// Preserve the old freshness behavior whenever a deployment explicitly
