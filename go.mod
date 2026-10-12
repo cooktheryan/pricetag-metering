@@ -3,6 +3,7 @@ module github.com/redhat-et/pricetag-metering
 go 1.26.0
 
 require (
+	github.com/XSAM/otelsql v0.44.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/lib/pq v1.12.3
 	github.com/prometheus/client_golang v1.25.0

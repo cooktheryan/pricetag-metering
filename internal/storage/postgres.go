@@ -13,9 +13,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/XSAM/otelsql"
 	"github.com/lib/pq"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 
 	"github.com/redhat-et/pricetag-metering/internal/metrics"
+	"github.com/redhat-et/pricetag-metering/internal/tracing"
 )
 
 type UsageEvent struct {
@@ -122,8 +125,16 @@ type PoolConfig struct {
 
 const migrationTimeout = 5 * time.Minute
 
+func openDB(databaseURL string) (*sql.DB, error) {
+	if tracing.Enabled() {
+		return otelsql.Open("postgres", databaseURL,
+			otelsql.WithAttributes(semconv.DBSystemPostgreSQL))
+	}
+	return sql.Open("postgres", databaseURL)
+}
+
 func New(databaseURL string, tokenQuota int64, pool PoolConfig) (*Store, error) {
-	db, err := sql.Open("postgres", databaseURL)
+	db, err := openDB(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
@@ -206,7 +217,7 @@ func (s *Store) reader() *sql.DB {
 // that can't answer is a configuration error, not a reason to refuse to
 // boot, so callers log and continue on the primary.
 func (s *Store) UseReadReplica(databaseURL string, pool PoolConfig) error {
-	db, err := sql.Open("postgres", databaseURL)
+	db, err := openDB(databaseURL)
 	if err != nil {
 		return fmt.Errorf("open read replica: %w", err)
 	}
