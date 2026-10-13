@@ -50,3 +50,38 @@ updating the partner directory, including manager links.
    `OIDC_ENABLED=false`.
 
 No production cluster mutation is part of this change.
+
+## Local real-SSO testing
+
+The provider must have the exact local callback registered. The production
+callback cannot be reused for a laptop callback unless IAM explicitly adds it.
+Use a separate development/stage client and secret whenever possible.
+
+An HTTPS tunnel is the safest way to test the real provider while keeping the
+application local:
+
+1. Start PriceTag locally on port `8080` with a local database containing the
+   test partner user.
+2. Start an approved HTTPS tunnel, for example a temporary Cloudflare Tunnel
+   or ngrok endpoint, forwarding to `http://127.0.0.1:8080`.
+3. Ask IAM to register the tunnel callback exactly, for example:
+   `https://<temporary-host>/oauth/callback`.
+4. Configure local-only values:
+
+   ```text
+   OIDC_ENABLED=true
+   OIDC_ISSUER_URL=<exact IAM issuer>
+   OIDC_CLIENT_ID=<development client>
+   OIDC_CLIENT_SECRET=<local secret file value>
+   OIDC_REDIRECT_URL=https://<temporary-host>/oauth/callback
+   ```
+
+5. Open `https://<temporary-host>/login` in a browser. The provider returns
+   through the tunnel to the local callback.
+
+The HTTPS tunnel is important because the session and OIDC state cookies are
+`Secure`. Do not map the production dashboard hostname to `127.0.0.1` in
+`/etc/hosts`, and do not use the production client secret for an unapproved
+local callback. The local database must also contain the test user's active
+partner record with a matching `rhatUUID`; production data or databases must
+not be used for this test.
