@@ -79,6 +79,9 @@ application local:
 5. Open `https://<temporary-host>/login` in a browser. The provider returns
    through the tunnel to the local callback.
 
+For a local-only HTTP mock-provider test, `SESSION_COOKIE_SECURE=false` may be
+used. Never use that setting on a shared, staged, or production deployment.
+
 The HTTPS tunnel is important because the session and OIDC state cookies are
 `Secure`. Do not map the production dashboard hostname to `127.0.0.1` in
 `/etc/hosts`, and do not use the production client secret for an unapproved

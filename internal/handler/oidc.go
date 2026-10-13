@@ -93,7 +93,7 @@ func (h *AuthHandler) setOIDCState(w http.ResponseWriter, state oidcState) error
 		Path:     "/",
 		MaxAge:   10 * 60,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.cfg.SessionCookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
 	return nil
@@ -122,10 +122,10 @@ func (h *AuthHandler) readOIDCState(r *http.Request) (oidcState, error) {
 	return state, nil
 }
 
-func clearOIDCState(w http.ResponseWriter) {
+func (h *AuthHandler) clearOIDCState(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name: oidcStateCookie, Value: "", Path: "/", MaxAge: -1,
-		HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode,
+		HttpOnly: true, Secure: h.cfg.SessionCookieSecure, SameSite: http.SameSiteLaxMode,
 	})
 }
 
@@ -171,7 +171,7 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	state, err := h.readOIDCState(r)
-	clearOIDCState(w)
+	h.clearOIDCState(w)
 	if err != nil || r.URL.Query().Get("state") != state.State {
 		http.Error(w, "invalid SSO state", http.StatusBadRequest)
 		return

@@ -66,6 +66,7 @@ kubectl apply -f deploy/
 | `OIDC_REDIRECT_URL` | When OIDC is enabled | — | Must exactly match the registered callback, for example `/oauth/callback`. |
 | `OIDC_POST_LOGOUT_REDIRECT_URL` | No | — | Optional provider logout return URL; local logout always clears the PriceTag session. |
 | `OIDC_SCOPES` | No | `openid profile email groups` | Space- or comma-separated OIDC scopes. |
+| `SESSION_COOKIE_SECURE` | No | `true` | Keep enabled in shared/stage/production. Set `false` only for local HTTP testing. |
 
 ## CloudEvents Format
 
