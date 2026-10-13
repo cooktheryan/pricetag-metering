@@ -67,6 +67,8 @@ type Config struct {
 	// header is present. Convenient for local development, unsafe once
 	// the service is exposed.
 	AllowUnauthenticatedAdmin bool
+	// SessionCookieSecure defaults true. Disable only for local HTTP testing.
+	SessionCookieSecure bool
 
 	// DefaultGroup is attributed to callers whose group cannot be
 	// resolved from a header or from the Kubernetes adapter.
@@ -284,6 +286,7 @@ func Load() Config {
 		// ALLOW_UNAUTHENTICATED_ADMIN=true deliberately for local
 		// development only.
 		AllowUnauthenticatedAdmin: envBool("ALLOW_UNAUTHENTICATED_ADMIN", false),
+		SessionCookieSecure:       envBool("SESSION_COOKIE_SECURE", true),
 		DefaultGroup:              envDefault("DEFAULT_GROUP", "default"),
 		M2MAuthRequired:           envBool("M2M_AUTH_REQUIRED", false),
 		M2MSharedSecret:           os.Getenv("M2M_SHARED_SECRET"),

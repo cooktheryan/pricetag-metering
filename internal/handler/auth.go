@@ -100,7 +100,7 @@ func (h *AuthHandler) setCookie(w http.ResponseWriter, username string, groups [
 		Path:     "/",
 		MaxAge:   int(cookieMaxAge.Seconds()),
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.cfg.SessionCookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -269,7 +269,7 @@ func (h *AuthHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   h.cfg.SessionCookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
 	http.Redirect(w, r, "/login", http.StatusFound)

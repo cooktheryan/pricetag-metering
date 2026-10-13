@@ -1,0 +1,30 @@
+# Local-only support services for the PriceTag OIDC test.
+#
+# This file intentionally does not run metering-service. Run the current
+# checkout on the host so the local mock provider can use localhost URLs:
+#   go run ./cmd
+#
+# Remove everything with:
+#   docker compose -p pricetag-oidc-local -f docker-compose.oidc-local.yaml down -v
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: metering
+      POSTGRES_PASSWORD: metering-oidc-local
+      POSTGRES_DB: metering
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metering -d metering"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  maas-api:
+    image: python:3.13-alpine
+    command: ["python", "/app/maas_stub.py"]
+    volumes:
+      - ./tools/local/maas_stub.py:/app/maas_stub.py:ro
+    ports:
+      - "18081:8081"
