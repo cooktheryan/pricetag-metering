@@ -43,6 +43,7 @@ type AuthHandler struct {
 	cfg        config.Config
 	secret     []byte
 	httpClient *http.Client
+	oidc       *oidcProvider
 	// orgStore backs the post-login manager redirect: people whose directory
 	// record has reports land on /manager, the view they actually came for.
 	// Optional — a nil store (or a lookup failure) keeps the old behaviour
@@ -136,6 +137,11 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, "login page not found", http.StatusInternalServerError)
 			return
+		}
+		if h.oidc != nil {
+			data = bytes.Replace(data, []byte("<!-- OIDC_LOGIN -->"), []byte(`<a class="sso-button" href="/oauth/login">Sign in with Red Hat SSO</a>`), 1)
+		} else {
+			data = bytes.Replace(data, []byte("<!-- OIDC_LOGIN -->"), nil, 1)
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")

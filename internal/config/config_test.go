@@ -182,6 +182,29 @@ func TestPartnerAPIAdditionalSecretsLoadFromEnvironment(t *testing.T) {
 	}
 }
 
+func TestOIDCIsDisabledByDefaultAndLoadsConfiguration(t *testing.T) {
+	for _, key := range []string{"OIDC_ENABLED", "OIDC_ISSUER_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URL", "OIDC_SCOPES"} {
+		t.Setenv(key, "")
+	}
+	cfg := Load()
+	if cfg.OIDC.Enabled || cfg.OIDC.EnabledAndConfigured() {
+		t.Fatal("OIDC must be disabled and unconfigured by default")
+	}
+	t.Setenv("OIDC_ENABLED", "true")
+	t.Setenv("OIDC_ISSUER_URL", "https://issuer.example")
+	t.Setenv("OIDC_CLIENT_ID", "client")
+	t.Setenv("OIDC_CLIENT_SECRET", "secret")
+	t.Setenv("OIDC_REDIRECT_URL", "https://dashboard.example/oauth/callback")
+	t.Setenv("OIDC_SCOPES", "openid profile email groups")
+	cfg = Load()
+	if !cfg.OIDC.EnabledAndConfigured() {
+		t.Fatal("complete OIDC configuration was not recognized")
+	}
+	if !reflect.DeepEqual(cfg.OIDC.Scopes, []string{"openid", "profile", "email", "groups"}) {
+		t.Fatalf("OIDC scopes = %v", cfg.OIDC.Scopes)
+	}
+}
+
 // DB pool envs control database/sql pool sizing. Unset values must fall
 // back to the defaults that lift metering off the 5s gateway deadline
 // under distinct-user bursts; set values must win.

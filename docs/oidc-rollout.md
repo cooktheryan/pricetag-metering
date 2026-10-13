@@ -1,0 +1,52 @@
+# PriceTag dashboard OIDC rollout
+
+OIDC login is disabled by default. Do not enable it in the production
+deployment until the identity provider and the partner directory have been
+validated in a non-production environment.
+
+## Required settings
+
+Inject these as deployment configuration; never commit the client secret:
+
+```text
+OIDC_ENABLED=true
+OIDC_ISSUER_URL=<exact issuer URL from IAM>
+OIDC_CLIENT_ID=enmaas-pricetag-dashboard
+OIDC_CLIENT_SECRET=<Secret-backed value>
+OIDC_REDIRECT_URL=https://dashboard.enmaas.devshift.net/oauth/callback
+OIDC_SCOPES=openid profile email groups
+```
+
+The callback URL must exactly match the URL registered with IAM. The issuer
+must be the exact `iss` value from the provider discovery document; do not
+substitute the dashboard URL or a provider host guessed from the client ID.
+
+## Login behavior
+
+`GET /login` continues to provide API-key login. When OIDC is enabled it also
+shows a Red Hat SSO button. The button starts Authorization Code + PKCE at
+`/oauth/login`, and the provider returns to `/oauth/callback`.
+
+The callback validates state, nonce, PKCE, issuer, audience, signature, and
+token expiry. It requires `sub`, `rhatUUID`, and an email or
+`preferred_username`. OIDC groups are copied into the signed session for
+display/context only; they do not grant PriceTag roles.
+
+The user must already exist as an active partner user. The partner user's
+stable UUID must equal the OIDC `rhatUUID`; login does not auto-provision or
+elevate accounts. LDAP synchronization remains responsible for creating and
+updating the partner directory, including manager links.
+
+## Safe rollout sequence
+
+1. Obtain the exact IAM discovery/issuer URL and confirm the claims.
+2. Deploy the code with `OIDC_ENABLED=false`.
+3. Build and test against a non-production PriceTag environment.
+4. Create the `/oauth/login` and `/oauth/callback` routes.
+5. Add the client secret through the deployment secret manager.
+6. Enable OIDC only in the approved environment.
+7. Verify ordinary user, manager, inactive/unprovisioned user, and admin cases.
+8. Keep API-key login during the migration and define rollback as
+   `OIDC_ENABLED=false`.
+
+No production cluster mutation is part of this change.
