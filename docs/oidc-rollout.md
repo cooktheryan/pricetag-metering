@@ -88,3 +88,30 @@ The HTTPS tunnel is important because the session and OIDC state cookies are
 local callback. The local database must also contain the test user's active
 partner record with a matching `rhatUUID`; production data or databases must
 not be used for this test.
+
+## Claims and directory storage
+
+The approved IAM registration currently requests these OIDC claims:
+
+```text
+sub
+rhatUUID
+preferred_username / username
+email
+given_name
+family_name
+groups
+```
+
+PriceTag currently consumes `sub`, `rhatUUID`, email/username, and groups at
+the login boundary. `rhatUUID` must match the active partner user's stable UUID;
+groups are carried in the signed session but do not grant PriceTag roles.
+Given/family names are available in the token but are not copied into the
+browser cookie.
+
+Country, state, city, office location, cost center, and manager data are **not
+promised by the SSO registration**. They should continue to come from the
+approved LDAP sync. The existing partner record supports string tags such as
+`country`, `state`, `region`, and `rhat_cost_center`; group membership should
+become a normalized `groups`/`group_memberships` model rather than a
+comma-separated tag. `manager_user_id` is already a relational field.
