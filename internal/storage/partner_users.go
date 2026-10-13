@@ -698,7 +698,7 @@ func (s *Store) DeletePartnerUserModelAllowlist(ctx context.Context, actor, user
 func (s *Store) PartnerUserByMaaSUsername(ctx context.Context, username string) (PartnerUser, error) {
 	user, err := scanPartnerUser(s.db.QueryRowContext(ctx, partnerUserSelect+`
 		JOIN partner_user_logins l ON l.user_id = p.user_id
-		WHERE l.username = $1`, strings.TrimSpace(username)))
+		WHERE LOWER(l.username) = LOWER($1) AND l.is_current AND p.active`, strings.TrimSpace(username)))
 	if errors.Is(err, sql.ErrNoRows) {
 		return PartnerUser{}, ErrPartnerUserNotFound
 	}

@@ -151,6 +151,25 @@ type Config struct {
 	KeyService KeyService
 	Kubernetes Kubernetes
 	Welcome    Welcome
+	OIDC       OIDC
+}
+
+// OIDC contains the optional corporate SSO configuration. It is deliberately
+// disabled by default: shipping OIDC code must not change the production login
+// path until the provider, redirect URI, and rollout have been reviewed.
+type OIDC struct {
+	Enabled               bool
+	IssuerURL             string
+	ClientID              string
+	ClientSecret          string
+	RedirectURL           string
+	PostLogoutRedirectURL string
+	Scopes                []string
+}
+
+func (o OIDC) EnabledAndConfigured() bool {
+	return o.Enabled && o.IssuerURL != "" && o.ClientID != "" &&
+		o.ClientSecret != "" && o.RedirectURL != ""
 }
 
 // Welcome holds the public gateway endpoints surfaced on the
@@ -301,6 +320,15 @@ func Load() Config {
 			GatewayURL:   strings.TrimSuffix(os.Getenv("WELCOME_GATEWAY_URL"), "/"),
 			DashboardURL: strings.TrimSuffix(os.Getenv("WELCOME_DASHBOARD_URL"), "/"),
 		},
+		OIDC: OIDC{
+			Enabled:               envBool("OIDC_ENABLED", false),
+			IssuerURL:             strings.TrimSuffix(os.Getenv("OIDC_ISSUER_URL"), "/"),
+			ClientID:              os.Getenv("OIDC_CLIENT_ID"),
+			ClientSecret:          os.Getenv("OIDC_CLIENT_SECRET"),
+			RedirectURL:           os.Getenv("OIDC_REDIRECT_URL"),
+			PostLogoutRedirectURL: os.Getenv("OIDC_POST_LOGOUT_REDIRECT_URL"),
+			Scopes:                envListDefault("OIDC_SCOPES", []string{"openid", "profile", "email", "groups"}),
+		},
 		Kubernetes: Kubernetes{
 			Namespace:                  envDefault("K8S_NAMESPACE", "default"),
 			ModelGroup:                 os.Getenv("MODEL_CRD_GROUP"),
@@ -362,6 +390,14 @@ func envSecrets(keys ...string) []string {
 		}
 	}
 	return result
+}
+
+func envListDefault(key string, fallback []string) []string {
+	values := envList(key)
+	if len(values) == 0 {
+		return append([]string(nil), fallback...)
+	}
+	return values
 }
 
 func envInt(key string, fallback int) int {

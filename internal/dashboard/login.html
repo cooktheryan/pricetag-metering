@@ -22,6 +22,8 @@ button{width:100%;margin-top:16px;background:var(--blu);color:#fff;border:none;b
 button:hover{opacity:.9}
 .error{background:rgba(248,81,73,.1);border:1px solid var(--red);border-radius:6px;padding:10px 14px;margin-bottom:18px;font-size:13px;color:var(--red)}
 .hint{margin-top:14px;font-size:11px;color:var(--t2);text-align:center}
+.sso-button{display:block;margin-top:16px;background:transparent;border:1px solid var(--blu);border-radius:6px;padding:10px;text-align:center;color:var(--blu);font-size:14px;font-weight:600;text-decoration:none}
+.sso-button:hover{opacity:.9}
 </style>
 </head>
 <body>
@@ -34,6 +36,7 @@ button:hover{opacity:.9}
     <input type="password" id="api_key" name="api_key" placeholder="sk-oai-..." autocomplete="off" required autofocus>
     <button type="submit">Sign In</button>
   </form>
+  <!-- OIDC_LOGIN -->
   <div class="hint">Your key was provided by your team lead.</div>
 </div>
 <script>

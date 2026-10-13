@@ -205,6 +205,13 @@ func main() {
 	adminHandler := handler.NewAdminHandler(k8sClient, maasClient, cfg)
 	adminHandler.SetStore(store)
 	authHandler := handler.NewAuthHandler(cfg)
+	if cfg.OIDC.Enabled {
+		if err := authHandler.InitOIDC(ctx); err != nil {
+			slog.Error("OIDC is enabled but provider initialization failed", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("OIDC dashboard login enabled", "issuer", cfg.OIDC.IssuerURL, "client_id", cfg.OIDC.ClientID)
+	}
 	authHandler.SetOrgStore(store) // managers land on /manager after login
 	keysHandler := handler.NewKeysHandler(k8sClient, cfg, store)
 	usageReportHandler := handler.NewUsageReportHandler(store)
@@ -240,6 +247,8 @@ func main() {
 
 	// Auth endpoints — unauthenticated by definition
 	mux.HandleFunc("/login", authHandler.HandleLogin)
+	mux.HandleFunc("/oauth/login", authHandler.HandleOIDCLogin)
+	mux.HandleFunc("/oauth/callback", authHandler.HandleOIDCCallback)
 	mux.HandleFunc("/logout", authHandler.HandleLogout)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
