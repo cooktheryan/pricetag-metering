@@ -52,6 +52,7 @@ type oidcClaims struct {
 
 type oidcProvider struct {
 	config   *oauth2.Config
+	provider *oidc.Provider
 	verifier *oidc.IDTokenVerifier
 }
 
@@ -74,6 +75,7 @@ func (h *AuthHandler) InitOIDC(ctx context.Context) error {
 			RedirectURL:  h.cfg.OIDC.RedirectURL,
 			Scopes:       h.cfg.OIDC.Scopes,
 		},
+		provider: provider,
 		verifier: provider.Verifier(&oidc.Config{ClientID: h.cfg.OIDC.ClientID}),
 	}
 	return nil
@@ -223,6 +225,21 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "invalid SSO identity claims", http.StatusUnauthorized)
 		return
 	}
+	// Providers may put custom profile claims in UserInfo rather than the ID
+	// token. Merge those claims without allowing them to replace verified token
+	// identity fields such as sub, nonce, or rhatUUID.
+	if h.oidc.provider != nil && h.oidc.provider.UserInfoEndpoint() != "" {
+		if info, infoErr := h.oidc.provider.UserInfo(r.Context(), oauth2.StaticTokenSource(token)); infoErr != nil {
+			slog.Warn("OIDC UserInfo request failed", "error", infoErr)
+		} else {
+			var userInfoClaims oidcClaims
+			if infoErr := info.Claims(&userInfoClaims); infoErr != nil {
+				slog.Warn("OIDC UserInfo claims decode failed", "error", infoErr)
+			} else {
+				mergeOIDCClaims(&claims, &userInfoClaims)
+			}
+		}
+	}
 	if claims.RhatUUID == "" {
 		if h.cfg.OIDC.ClaimsDebug {
 			h.renderOIDCClaims(w, claims, "/login", "The provider did not return rhatUUID.")
@@ -275,6 +292,60 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	http.Redirect(w, r, h.loginDestination(r, username), http.StatusFound)
+}
+
+func mergeOIDCClaims(dst, src *oidcClaims) {
+	if dst.Subject == "" {
+		dst.Subject = src.Subject
+	}
+	if dst.RhatUUID == "" {
+		dst.RhatUUID = src.RhatUUID
+	}
+	if dst.Username == "" {
+		dst.Username = src.Username
+	}
+	if dst.Email == "" {
+		dst.Email = src.Email
+	}
+	if dst.GivenName == "" {
+		dst.GivenName = src.GivenName
+	}
+	if dst.FamilyName == "" {
+		dst.FamilyName = src.FamilyName
+	}
+	if len(dst.Groups) == 0 {
+		dst.Groups = src.Groups
+	}
+	if dst.Country == "" {
+		dst.Country = src.Country
+	}
+	if dst.State == "" {
+		dst.State = src.State
+	}
+	if dst.Region == "" {
+		dst.Region = src.Region
+	}
+	if dst.Manager == "" {
+		dst.Manager = src.Manager
+	}
+	if dst.CostCenter == "" {
+		dst.CostCenter = src.CostCenter
+	}
+	if dst.CostCenterDescription == "" {
+		dst.CostCenterDescription = src.CostCenterDescription
+	}
+	if dst.EmployeeType == "" {
+		dst.EmployeeType = src.EmployeeType
+	}
+	if dst.Organization == "" {
+		dst.Organization = src.Organization
+	}
+	if dst.Active == nil {
+		dst.Active = src.Active
+	}
+	if dst.TerminationDate == "" {
+		dst.TerminationDate = src.TerminationDate
+	}
 }
 
 func (h *AuthHandler) renderOIDCProviderError(w http.ResponseWriter, providerError, description string) {
