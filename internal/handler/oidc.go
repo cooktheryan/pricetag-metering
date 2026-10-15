@@ -230,6 +230,11 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	if err := verified.Claims(&idTokenClaims); err == nil {
 		rawClaims["id_token"] = idTokenClaims
 	}
+	if h.cfg.OIDC.ClaimsDebug {
+		if accessTokenClaims, decodeErr := decodeJWTClaims(token.AccessToken); decodeErr == nil {
+			rawClaims["access_token_unverified"] = accessTokenClaims
+		}
+	}
 	// Providers may put custom profile claims in UserInfo rather than the ID
 	// token. Merge those claims without allowing them to replace verified token
 	// identity fields such as sub, nonce, or rhatUUID.
@@ -355,6 +360,26 @@ func mergeOIDCClaims(dst, src *oidcClaims) {
 	if dst.TerminationDate == "" {
 		dst.TerminationDate = src.TerminationDate
 	}
+}
+
+// decodeJWTClaims is diagnostic-only. The access token is never used as an
+// identity source; this only tells a developer whether a provider placed
+// additional claims in a JWT access token. Opaque access tokens produce no
+// diagnostic section.
+func decodeJWTClaims(raw string) (map[string]json.RawMessage, error) {
+	parts := strings.Split(raw, ".")
+	if len(parts) != 3 {
+		return nil, errors.New("access token is opaque")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, err
+	}
+	var claims map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return nil, err
+	}
+	return claims, nil
 }
 
 func (h *AuthHandler) renderOIDCProviderError(w http.ResponseWriter, providerError, description string) {
