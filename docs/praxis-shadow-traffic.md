@@ -1,87 +1,88 @@
-# Praxis shadow traffic watcher
+# Praxis upgrade traffic watcher
 
-`tools/praxis-shadow-traffic.py` is a laptop-side, PriceTag-only watcher for
-the Praxis shadow routes. It uses the existing `llm-katan` echo backend only;
-it does not test real OpenAI, Anthropic, Vertex, or GLM providers.
+`tools/praxis-shadow-traffic.py` is a laptop-side, **PriceTag-only** traffic
+watcher for the Praxis upgrade sequence. It uses the normal PriceTag
+Benchmark route backed by `llm-katan` for the large synthetic load.
+
+It does not access EnMaaS, create shadow resources, change route weights, or
+call real OpenAI/Anthropic/Vertex/GLM providers. Real-provider checks are a
+separate small canary matrix.
 
 ## Safety model
 
-- `--oc-context`, `--oc-server`, and `--namespace` are mandatory.
-- EnMaaS markers are rejected in the context, server, namespace, and route URLs.
-- The default context, server, namespace, and key path are the single PriceTag
-  dogfood environment. Each can be overridden for maintenance or recovery.
-- The tool requires `~/.mykey` by default and explains how to fix a missing or
-  empty key file.
-- The tool performs only read-only `oc` checks in the PriceTag namespace before
-  sending requests.
-- The tool never mutates OpenShift resources and never falls back to an
-  implicit/current `oc` context; discovery always uses the explicit PriceTag
-  context, server, and namespace.
-- Every request is attempted once. There are no retries.
-- Evidence contains request outcomes, status codes, timings, lane/provider/model,
-  and synthetic logical-user labels. It does not contain keys, prompts, or
-  response bodies.
+- The PriceTag server, namespace, and context are explicit hardcoded defaults;
+  all can be overridden.
+- EnMaaS markers are rejected before any `oc` command.
+- `oc` is always invoked with the explicit PriceTag context/server and only
+  reads the configured PriceTag namespace.
+- Baseline does not require `praxis-shadow` or any shadow route.
+- Canary requires `deployment/praxis-shadow`, `service/praxis-shadow`, and the
+  shadow Benchmark route.
+- Both phases send to the **normal** Benchmark route. The tool never sends
+  directly to the shadow route.
+- No retries. Timeouts, resets, incomplete responses, and non-2xx responses
+  are visible drops.
+- No keys, prompts, or response bodies are written to JSONL evidence.
 
-## Echo lanes
+## Normal use
 
-The current local Praxis AI manifests configure `llm-katan` with:
-
-- backend: `echo`
-- model: `benchmark-echo`
-- providers: `openai,anthropic`
-
-The shadow config exposes three echo lanes, all backed by that deployment:
-
-- OpenAI Chat Completions → `benchmark-echo`
-- Anthropic Messages Benchmark → `benchmark-echo`
-- Anthropic Messages GLM echo → `rits/zai-org/glm-5-3`
-
-The first and third lanes use automatic read-only `oc port-forward` processes
-to `praxis-shadow` ports 8087 and 8086. The Benchmark lane uses the discovered
-`ai-gateway-benchmark-shadow` route. Optional endpoint flags override these
-defaults.
-
-Pass the two **PriceTag echo endpoints** explicitly. The OpenAI echo lane may
-use the explicitly approved local port-forward; the Anthropic-format echo lane
-uses the PriceTag benchmark shadow route. Do not substitute a provider
-endpoint or an EnMaaS URL.
-
-## Dry-run first
-
-The normal command is intentionally short:
+The default is a five-minute baseline run with 100 synthetic users:
 
 ```console
 python3 tools/praxis-shadow-traffic.py
 ```
 
-It checks the PriceTag namespace, discovers the deployed `llm-katan` providers
-and model, discovers the Benchmark shadow route, starts the two local
-port-forwards, and runs a five-minute 100-user test. Press `q` to stop the live
-dashboard early.
+The tool reads the PriceTag key from `~/.mykey`. It exits with a clear error if
+the file is missing or empty.
 
-To validate configuration without sending HTTP traffic, use:
+The dashboard shows sent/responses/drops/availability, p50/p95/p99 latency,
+the synthetic user, lane/provider/model, and the served backend (`praxis`,
+`shadow`, or `unknown`). Press `q` to stop early. Evidence defaults to `/tmp`.
+
+## Dry run
+
+Dry run performs only read-only PriceTag `oc` checks and resource discovery:
 
 ```console
 python3 tools/praxis-shadow-traffic.py --dry-run
 ```
 
-Dry-run still performs the read-only PriceTag `oc` discovery, but starts no
-port-forward and sends no HTTP traffic.
+It sends no HTTP requests and makes no cluster mutations.
 
-## Traffic mode (requires separate approval)
+## Phases
 
-Traffic mode requires `PRICETAG_API_KEY`, unless `--users-file` supplies a
-`users` array with per-user `key` values. Keys are read in memory and never
-printed or written to evidence.
+### Baseline
 
-The terminal view shows total requests, responses, drops, status codes,
-p50/p95/p99 latency, lane/provider/model, and the last result for every
-logical user. Non-interactive runs print the same safe summary periodically.
+```console
+python3 tools/praxis-shadow-traffic.py --phase baseline
+```
 
-Optional overrides include `--key-file`, `--oc-context`, `--oc-server`,
-`--namespace`, `--benchmark-url`, `--openai-echo-url`, and
-`--glm-echo-url`. The default key is read from `~/.mykey`; it is never printed
-or written to evidence.
+Requires only the normal Benchmark route. A missing `praxis-shadow` service or
+route is not an error.
 
-This document intentionally does not provide a command that discovers routes,
-changes route weights, applies manifests, or touches any EnMaaS resource.
+### Canary
+
+```console
+python3 tools/praxis-shadow-traffic.py --phase canary
+```
+
+Requires the shadow deployment, service, and Benchmark route. Route weights
+must be changed separately by the operator; this tool never changes them.
+Requests continue to target the normal route. Backend classification uses
+`x-praxis-lane` by default and also understands the existing
+`x-gateway-build` marker (`new` means `shadow`).
+
+## Overrides
+
+Useful overrides for the single-environment defaults are:
+
+```console
+python3 tools/praxis-shadow-traffic.py \
+  --phase baseline \
+  --oc-server https://price-tag-api.example:6443 \
+  --namespace ai-gateway-dogfood \
+  --gateway-url https://normal-benchmark-route.example
+```
+
+The gateway override is still required to be HTTPS and is rejected if it
+contains an EnMaaS marker.
