@@ -38,7 +38,8 @@ DEFAULT_SERVER = "https://c117-e.us-south.containers.cloud.ibm.com:30087"
 DEFAULT_NAMESPACE = "ai-gateway-dogfood"
 DEFAULT_ROUTE = "ai-gateway-benchmark"
 DEFAULT_SHADOW_ROUTE = "ai-gateway-benchmark-shadow"
-DEFAULT_GATEWAY_URL = "https://ai-gateway-benchmark-ai-gateway-dogfood.dogfood-us-south-1-bxf-4x-f196230f74f7ff44a5b4eeb1003c5bd5-0000.us-south.containers.appdomain.cloud"
+DEFAULT_GATEWAY_URL = "https://ai-gateway-ai-gateway-dogfood.dogfood-us-south-1-bxf-4x-f196230f74f7ff44a5b4eeb1003c5bd5-0000.us-south.containers.appdomain.cloud"
+DEFAULT_BENCHMARK_URL = "https://ai-gateway-benchmark-ai-gateway-dogfood.dogfood-us-south-1-bxf-4x-f196230f74f7ff44a5b4eeb1003c5bd5-0000.us-south.containers.appdomain.cloud"
 DEFAULT_MODEL = "benchmark-echo"
 FORBIDDEN_MARKER = "enmaas"
 
@@ -60,6 +61,16 @@ class Lane:
 class UserSpec:
     label: str
     key: str
+
+
+@dataclass(frozen=True)
+class MatrixProbe:
+    name: str
+    provider: str
+    model: str
+    path: str
+    method: str
+    body: dict[str, Any]
 
 
 def now_utc() -> str:
@@ -133,17 +144,34 @@ def ensure_key(args: argparse.Namespace) -> Path:
 def prepare(args: argparse.Namespace) -> dict[str, Any]:
     preflight_price_tag(args)
     try:
-        main_route = route_info(args, args.route_name)
-        gateway_url = safe_url("PriceTag gateway", f"https://{main_route['host']}")
+        benchmark_route = route_info(args, args.route_name)
+        benchmark_url = safe_url("PriceTag Benchmark route", f"https://{benchmark_route['host']}")
     except ConfigError:
-        if not args.gateway_url:
-            gateway_url = DEFAULT_GATEWAY_URL
-            main_route = {"host": urlsplit(gateway_url).hostname or "", "target": "praxis"}
-        else:
-            gateway_url = safe_url("PriceTag gateway", args.gateway_url)
-            main_route = {"host": urlsplit(gateway_url).hostname or "", "target": "override"}
-    if main_route["target"] not in {"praxis", "override"}:
-        raise ConfigError(f"normal PriceTag route does not target praxis: {main_route['target']!r}")
+        benchmark_url = safe_url("PriceTag Benchmark route", args.benchmark_url or DEFAULT_BENCHMARK_URL)
+        benchmark_route = {"host": urlsplit(benchmark_url).hostname or "", "target": "fallback"}
+    if benchmark_route["target"] not in {"praxis", "fallback"}:
+        raise ConfigError(f"normal PriceTag Benchmark route does not target praxis: {benchmark_route['target']!r}")
+
+    try:
+        gateway_route = route_info(args, args.gateway_route_name)
+        gateway_url = safe_url("PriceTag gateway", f"https://{gateway_route['host']}")
+    except ConfigError:
+        gateway_url = safe_url("PriceTag gateway", args.gateway_url or DEFAULT_GATEWAY_URL)
+        gateway_route = {"host": urlsplit(gateway_url).hostname or "", "target": "fallback"}
+    if gateway_route["target"] not in {"praxis", "fallback", "override"}:
+        raise ConfigError(f"normal PriceTag gateway route does not target praxis: {gateway_route['target']!r}")
+
+    matrix_routes: dict[str, dict[str, str]] = {}
+    if args.real_matrix:
+        for key, route_name in (
+            ("messages", "ai-gateway"),
+            ("chat", "ai-gateway-chat-completions"),
+            ("responses", "ai-gateway-responses"),
+            ("conversations", "ai-gateway-conversations"),
+        ):
+            matrix_routes[key] = route_info(args, route_name)
+            if matrix_routes[key]["target"] != "praxis":
+                raise ConfigError(f"matrix route {route_name!r} does not target praxis")
 
     shadow: dict[str, str] | None = None
     if args.phase == "canary":
@@ -158,9 +186,12 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
 
     return {
         "gateway_url": gateway_url,
-        "main_route": main_route,
+        "benchmark_url": benchmark_url,
+        "gateway_route": gateway_route,
+        "benchmark_route": benchmark_route,
+        "matrix_routes": matrix_routes,
         "shadow_route": shadow,
-        "route_source": "oc" if main_route["target"] == "praxis" and not args.gateway_url else "override/fallback",
+        "route_source": "oc" if gateway_route["target"] == "praxis" else "fallback/override",
     }
 
 
@@ -323,6 +354,61 @@ def request_once(user: UserSpec, lane: Lane, args: argparse.Namespace, sequence:
     return event
 
 
+def matrix_request(probe: MatrixProbe, gateway_url: str, key: str, args: argparse.Namespace) -> dict[str, Any]:
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "praxis-shadow-matrix/1",
+        "X-Request-ID": f"praxis-shadow-matrix-{probe.name}",
+    }
+    if probe.provider == "anthropic":
+        headers.update({"x-api-key": key, "anthropic-version": "2023-06-01"})
+    else:
+        headers["Authorization"] = f"Bearer {key}"
+    request = urllib.request.Request(
+        gateway_url + probe.path,
+        data=json.dumps(probe.body).encode("utf-8"),
+        method=probe.method,
+        headers=headers,
+    )
+    event: dict[str, Any] = {
+        "event": "matrix_result",
+        "at": now_utc(),
+        "user": f"matrix-{probe.name}",
+        "lane": probe.name,
+        "provider": probe.provider,
+        "model": probe.model,
+        "status": None,
+        "outcome": "drop",
+        "backend": "unknown",
+        "error_class": None,
+        "latency_ms": 0.0,
+    }
+    started = time.monotonic()
+    try:
+        with urllib.request.urlopen(request, timeout=args.timeout, context=ssl.create_default_context()) as response:
+            discard_body(response)
+            event["status"] = response.status
+            event["backend"] = backend_from_headers(response.headers, args)
+            if 200 <= response.status < 300:
+                event["outcome"] = "ok"
+            else:
+                event["error_class"] = str(response.status)
+    except urllib.error.HTTPError as exc:
+        discard_body(exc)
+        event["status"] = exc.code
+        event["backend"] = backend_from_headers(exc.headers, args)
+        event["error_class"] = str(exc.code)
+    except TimeoutError:
+        event["error_class"] = "timeout"
+    except urllib.error.URLError:
+        event["error_class"] = "transport_error"
+    except Exception:
+        event["error_class"] = "request_error"
+    event["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
+    return event
+
+
 def scheduler_drop(user: UserSpec, lane: Lane) -> dict[str, Any]:
     return {
         "event": "scheduler_drop",
@@ -339,7 +425,7 @@ def scheduler_drop(user: UserSpec, lane: Lane) -> dict[str, Any]:
     }
 
 
-def draw_dashboard(stdscr: Any, metrics: Metrics, started: float, page: int, page_size: int) -> int:
+def draw_dashboard(stdscr: Any, metrics: Metrics, started: float, page: int, page_size: int, matrix_line: str) -> int:
     stdscr.erase()
     stdscr.timeout(200)
     overall, users = metrics.snapshot()
@@ -351,6 +437,8 @@ def draw_dashboard(stdscr: Any, metrics: Metrics, started: float, page: int, pag
         "─" * max(1, width - 1),
         "USER             LANE       PROVIDER   MODEL              BACKEND  SENT RESP DROP LAST LATENCY",
     ]
+    if matrix_line:
+        header.insert(3, matrix_line)
     usable = max(1, height - len(header) - 2)
     visible = min(page_size if page_size > 0 else usable, usable)
     pages = max(1, math.ceil(len(users) / visible))
@@ -414,6 +502,38 @@ def write_event(stream: Any, event: dict[str, Any]) -> None:
     stream.flush()
 
 
+def matrix_probes(args: argparse.Namespace) -> list[MatrixProbe]:
+    return [
+        MatrixProbe(
+            "messages", "anthropic", args.messages_model, "/v1/messages", "POST",
+            {"model": args.messages_model, "max_tokens": 1, "messages": [{"role": "user", "content": "echo"}]},
+        ),
+        MatrixProbe(
+            "chat-completions", "openai", args.chat_model, "/v1/chat/completions", "POST",
+            {"model": args.chat_model, "max_tokens": 1, "messages": [{"role": "user", "content": "echo"}]},
+        ),
+        MatrixProbe(
+            "responses", "openai", args.responses_model, "/v1/responses", "POST",
+            {"model": args.responses_model, "input": "echo", "max_output_tokens": 1},
+        ),
+        MatrixProbe("conversations", "openai", "local", "/v1/conversations", "POST", {}),
+    ]
+
+
+def run_matrix(args: argparse.Namespace, plan: dict[str, Any], key: str, stream: Any) -> str:
+    results: list[dict[str, Any]] = []
+    for probe in matrix_probes(args):
+        result = matrix_request(probe, plan["gateway_url"], key, args)
+        results.append(result)
+        write_event(stream, result)
+    summary = "matrix " + " ".join(
+        f"{result['lane']}={result['status'] if result['status'] is not None else result['error_class']}@{result['backend']}"
+        for result in results
+    )
+    print(summary, flush=True)
+    return summary
+
+
 def run_loop(
     stdscr: Any,
     args: argparse.Namespace,
@@ -424,6 +544,7 @@ def run_loop(
     stream: Any,
     started: float,
     deadline: float,
+    matrix_line: str,
 ) -> None:
     if stdscr is not None:
         try:
@@ -466,7 +587,7 @@ def run_loop(
             metrics.record(event)
             write_event(stream, event)
         if stdscr is not None:
-            page = draw_dashboard(stdscr, metrics, started, page, args.page_size)
+            page = draw_dashboard(stdscr, metrics, started, page, args.page_size, matrix_line)
             stop = page < 0
         elif now >= next_stats:
             print_summary(metrics)
@@ -479,7 +600,7 @@ def run_loop(
 
 
 def run_traffic(args: argparse.Namespace, plan: dict[str, Any], key_path: Path) -> int:
-    lane = Lane("benchmark", "anthropic", args.model, plan["gateway_url"], "/v1/messages")
+    lane = Lane("benchmark", "anthropic", args.model, plan["benchmark_url"], "/v1/messages")
     users = [UserSpec(f"shadow-user-{index:03d}", key_path.read_text(encoding="utf-8").strip()) for index in range(1, args.user_count + 1)]
     metrics = Metrics(users, lane, args.window_seconds)
     evidence = Path(args.evidence).expanduser()
@@ -493,6 +614,7 @@ def run_traffic(args: argparse.Namespace, plan: dict[str, Any], key_path: Path) 
         "at": now_utc(),
         "phase": args.phase,
         "gateway_url_host": urlsplit(plan["gateway_url"]).hostname,
+        "benchmark_url_host": urlsplit(plan["benchmark_url"]).hostname,
         "route_name": args.route_name,
         "users": len(users),
         "lane": lane.name,
@@ -500,14 +622,16 @@ def run_traffic(args: argparse.Namespace, plan: dict[str, Any], key_path: Path) 
         "model": lane.model,
         "backend_marker_headers": args.marker_headers,
         "retries": 0,
+        "real_matrix": args.real_matrix,
     }
     try:
         with evidence.open("w", encoding="utf-8") as stream:
             write_event(stream, start_event)
+            matrix_line = run_matrix(args, plan, users[0].key, stream) if args.real_matrix else ""
             if use_ui:
-                curses.wrapper(lambda stdscr: run_loop(stdscr, args, users, lane, metrics, executor, stream, started, deadline))
+                curses.wrapper(lambda stdscr: run_loop(stdscr, args, users, lane, metrics, executor, stream, started, deadline, matrix_line))
             else:
-                run_loop(None, args, users, lane, metrics, executor, stream, started, deadline)
+                run_loop(None, args, users, lane, metrics, executor, stream, started, deadline, matrix_line)
             overall, _ = metrics.snapshot()
             write_event(stream, {"event": "run_end", "at": now_utc(), **overall})
     finally:
@@ -525,6 +649,7 @@ def dry_run_plan(args: argparse.Namespace, plan: dict[str, Any], key_path: Path)
         "oc_preflight": "read-only PriceTag checks completed",
         "namespace": args.namespace,
         "gateway_url_host": urlsplit(plan["gateway_url"]).hostname,
+        "benchmark_url_host": urlsplit(plan["benchmark_url"]).hostname,
         "route_name": args.route_name,
         "shadow_route_checked": args.phase == "canary",
         "users": args.user_count,
@@ -533,6 +658,7 @@ def dry_run_plan(args: argparse.Namespace, plan: dict[str, Any], key_path: Path)
         "provider": "anthropic",
         "model": args.model,
         "retries": 0,
+        "real_matrix": args.real_matrix,
     }
 
 
@@ -545,7 +671,12 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--route-name", default=DEFAULT_ROUTE)
     result.add_argument("--shadow-route-name", default=DEFAULT_SHADOW_ROUTE)
     result.add_argument("--gateway-url", help="override the normal PriceTag gateway URL")
+    result.add_argument("--gateway-route-name", default="ai-gateway")
     result.add_argument("--model", default=DEFAULT_MODEL)
+    result.add_argument("--real-matrix", action="store_true", help="run one small four-route real-provider/local matrix before the load")
+    result.add_argument("--messages-model", default="claude-sonnet-5")
+    result.add_argument("--chat-model", default="gpt-5.6-luna")
+    result.add_argument("--responses-model", default="gpt-5.3-codex")
     result.add_argument("--key-file", default="~/.mykey")
     result.add_argument("--user-count", type=int, default=100)
     result.add_argument("--interval", type=float, default=5.0)
@@ -569,6 +700,8 @@ def main() -> int:
             raise ConfigError(f"--user-count must be between 1 and {MAX_USERS}")
         if args.duration <= 0 or args.interval <= 0 or args.timeout <= 0 or args.concurrency <= 0:
             raise ConfigError("duration, interval, timeout, and concurrency must be positive")
+        if args.real_matrix and args.phase != "canary":
+            raise ConfigError("--real-matrix is only allowed in canary phase")
         args.oc_server = safe_url("PriceTag server", args.oc_server)
         reject_enmaas("PriceTag context", args.oc_context)
         reject_enmaas("PriceTag namespace", args.namespace)

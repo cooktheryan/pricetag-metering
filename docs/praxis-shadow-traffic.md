@@ -5,8 +5,8 @@ watcher for the Praxis upgrade sequence. It uses the normal PriceTag
 Benchmark route backed by `llm-katan` for the large synthetic load.
 
 It does not access EnMaaS, create shadow resources, change route weights, or
-call real OpenAI/Anthropic/Vertex/GLM providers. Real-provider checks are a
-separate small canary matrix.
+call real OpenAI/Anthropic/Vertex/GLM providers by default. Real-provider
+checks are a separate, opt-in small canary matrix.
 
 ## Safety model
 
@@ -38,6 +38,11 @@ the file is missing or empty.
 The dashboard shows sent/responses/drops/availability, p50/p95/p99 latency,
 the synthetic user, lane/provider/model, and the served backend (`praxis`,
 `shadow`, or `unknown`). Press `q` to stop early. Evidence defaults to `/tmp`.
+
+The default large load is intentionally Benchmark/llm-katan only. Add
+`--real-matrix` in canary mode to send one small probe through each normal
+gateway path: Messages, Chat Completions, Responses, and Conversations. The
+matrix also uses the normal gateway host and never targets a shadow URL.
 
 ## Dry run
 
@@ -86,3 +91,10 @@ python3 tools/praxis-shadow-traffic.py \
 
 The gateway override is still required to be HTTPS and is rejected if it
 contains an EnMaaS marker.
+
+After the shadow deployment and route weights are ready, the opt-in canary
+matrix is:
+
+```console
+python3 tools/praxis-shadow-traffic.py --phase canary --real-matrix
+```
