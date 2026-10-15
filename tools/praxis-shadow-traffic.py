@@ -389,7 +389,7 @@ class Metrics:
             row = self.users[event["user"]]
             lane = self.lane_events[event["lane"]]
             row["in_flight"] = False
-            row["last"] = event["outcome"] if event["outcome"] == "drop" else f"http_{event['status']}"
+            row["last"] = event["outcome"] if event["outcome"] == "drop" else str(event["status"])
             row["last_status"] = event["status"]
             row["last_latency_ms"] = event["latency_ms"]
             row["samples"].append((time.monotonic(), event["latency_ms"]))
@@ -550,21 +550,42 @@ def draw_dashboard(stdscr: Any, metrics: Metrics, started: float, page: int, pag
         lines.append(f"{lane['lane']:<18} {lane['provider']:<10} {lane['model']:<20} sent={lane['sent']:<6} responses={lane['responses']:<6} drops={lane['drops']:<6} p95={lane['p95_ms']:.0f}ms")
     lines.append("─" * max(1, width - 1))
     lines.append("USER             LANE              SENT RESP DROP LAST             LATENCY")
+    header_lines = lines[:]
     usable = max(1, height - len(lines) - 2)
     visible = min(page_size if page_size > 0 else usable, usable)
     pages = max(1, math.ceil(len(users) / visible))
     page = page % pages
-    for row in users[page * visible : (page + 1) * visible]:
-        lines.append(
-            f"{row['user']:<17.17} {row['lane']:<18.18} {row['sent']:>4} {row['responses']:>4} {row['drops']:>4} "
-            f"{str(row['last']):<17.17} {str(row['last_latency_ms'] or 0):>7}ms"
-        )
-    lines.append(f"page {page + 1}/{pages}  ←/→ page  q quit")
-    for index, line in enumerate(lines[:height]):
+    shown_rows = users[page * visible : (page + 1) * visible]
+    footer = f"page {page + 1}/{pages}  ←/→ page  q quit"
+    for index, line in enumerate(header_lines):
         try:
             stdscr.addnstr(index, 0, line, max(0, width - 1))
         except curses.error:
             pass
+    first_row_y = len(header_lines)
+    for offset, row in enumerate(shown_rows):
+        y = first_row_y + offset
+        prefix = (
+            f"{row['user']:<17.17} {row['lane']:<18.18} {row['sent']:>4} {row['responses']:>4} {row['drops']:>4} "
+        )
+        status = str(row["last"])
+        status_attr = 0
+        if status == "drop" or (row["last_status"] is not None and row["last_status"] >= 500):
+            status_attr = curses.color_pair(2) | curses.A_BOLD
+        elif row["last_status"] is not None and 200 <= row["last_status"] < 300:
+            status_attr = curses.color_pair(1) | curses.A_BOLD
+        elif row["last_status"] is not None:
+            status_attr = curses.color_pair(3)
+        suffix = f"{status:<17.17} {str(row['last_latency_ms'] or 0):>7}ms"
+        try:
+            stdscr.addnstr(y, 0, prefix, max(0, width - 1))
+            stdscr.addnstr(y, len(prefix), suffix, max(0, width - len(prefix) - 1), status_attr)
+        except curses.error:
+            pass
+    try:
+        stdscr.addnstr(first_row_y + len(shown_rows), 0, footer, max(0, width - 1))
+    except curses.error:
+        pass
     stdscr.refresh()
     key = stdscr.getch()
     if key in (ord("q"), ord("Q")):
@@ -607,6 +628,9 @@ def traffic_loop(
             curses.start_color()
             curses.use_default_colors()
             stdscr.bkgdset(" ", curses.color_pair(0))
+            curses.init_pair(1, curses.COLOR_GREEN, -1)
+            curses.init_pair(2, curses.COLOR_RED, -1)
+            curses.init_pair(3, curses.COLOR_YELLOW, -1)
         except curses.error:
             pass
         stdscr.clear()
