@@ -437,10 +437,13 @@ def draw_dashboard(stdscr: Any, metrics: Metrics, started: float, page: int, pag
     stdscr.timeout(200)
     overall, users = metrics.snapshot()
     height, width = stdscr.getmaxyx()
+    lane_counts = Counter(row["lane"] for row in users)
+    lane_summary = "lanes " + "  ".join(f"{lane}={count}" for lane, count in lane_counts.items())
     header = [
         "PRAXIS UPGRADE TRAFFIC — PriceTag normal routes",
         f"elapsed {time.monotonic() - started:7.1f}s  sent {overall['sent']:,}  responses {overall['responses']:,}  drops {overall['drops']:,}  availability {overall['availability_pct']:.2f}%",
         f"latency p50/p95/p99 {overall['p50_ms']:.0f}/{overall['p95_ms']:.0f}/{overall['p99_ms']:.0f} ms  status {overall['status_codes']}  in-flight {overall['in_flight']}",
+        lane_summary,
         "─" * max(1, width - 1),
         "USER             LANE       PROVIDER   MODEL              BACKEND  SENT RESP DROP LAST LATENCY",
     ]
@@ -451,7 +454,14 @@ def draw_dashboard(stdscr: Any, metrics: Metrics, started: float, page: int, pag
         if overall["availability_pct"] >= 95
         else curses.color_pair(2) | curses.A_BOLD
     )
-    header_attrs = [curses.color_pair(4) | curses.A_BOLD, availability_attr, curses.A_DIM, curses.color_pair(4), curses.color_pair(4) | curses.A_BOLD]
+    header_attrs = [
+        curses.color_pair(4) | curses.A_BOLD,
+        availability_attr,
+        curses.A_DIM,
+        curses.color_pair(6),
+        curses.color_pair(4),
+        curses.color_pair(4) | curses.A_BOLD,
+    ]
     if matrix_line:
         header.insert(3, matrix_line)
         header_attrs.insert(3, curses.color_pair(6))
@@ -635,7 +645,7 @@ def run_traffic(args: argparse.Namespace, plan: dict[str, Any], key_path: Path) 
         UserSpec(f"shadow-user-{index:03d}", key, benchmark_lane, args.interval)
         for index in range(1, args.user_count + 1)
     ]
-    users.append(UserSpec("real-glm", key, glm_lane, args.glm_interval))
+    users.insert(0, UserSpec("real-glm", key, glm_lane, args.glm_interval))
     metrics = Metrics(users, args.window_seconds)
     evidence = Path(args.evidence).expanduser()
     evidence.parent.mkdir(parents=True, exist_ok=True)
