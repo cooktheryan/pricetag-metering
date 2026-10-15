@@ -600,6 +600,17 @@ def traffic_loop(
     started: float,
     deadline: float,
 ) -> None:
+    if stdscr is not None:
+        try:
+            # Keep the terminal's own foreground/background exactly as-is.
+            # In particular, do not let curses select a gray fallback pair.
+            curses.start_color()
+            curses.use_default_colors()
+            stdscr.bkgdset(" ", curses.color_pair(0))
+        except curses.error:
+            pass
+        stdscr.clear()
+        stdscr.refresh()
     next_due = {
         user.label: started + (int.from_bytes(hashlib.sha256(user.label.encode()).digest()[:4], "big") / 2**32) * args.interval
         for user in users
