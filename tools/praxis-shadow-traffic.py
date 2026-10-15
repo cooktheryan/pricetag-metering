@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """PriceTag-only traffic watcher for the Praxis upgrade sequence.
 
-Default mode is a five-minute baseline run through the normal PriceTag
-Benchmark route, backed by llm-katan.  Canary mode still sends to that normal
-route; route weights decide whether Praxis or Praxis Shadow serves a request.
-This script never changes route weights or creates/deletes resources.
+No-argument mode runs one unified test:
+  * 96 synthetic users distributed across the normal OpenAI and Anthropic
+    llm-katan echo routes;
+  * one low-rate real GLM user through the normal PriceTag gateway.
+
+The process never targets a shadow URL and never changes route weights.
 """
 
 from __future__ import annotations
@@ -15,7 +17,6 @@ import curses
 import hashlib
 import json
 import math
-import os
 import random
 import shutil
 import ssl
@@ -37,11 +38,14 @@ MAX_USERS = 100
 DEFAULT_CONTEXT = "ai-gateway-dogfood/c117-e-us-south-containers-cloud-ibm-com:30087/IAM#yovadia@redhat.com"
 DEFAULT_SERVER = "https://c117-e.us-south.containers.cloud.ibm.com:30087"
 DEFAULT_NAMESPACE = "ai-gateway-dogfood"
-DEFAULT_ROUTE = "ai-gateway-benchmark"
-DEFAULT_SHADOW_ROUTE = "ai-gateway-benchmark-shadow"
+DEFAULT_OPENAI_ROUTE = "ai-gateway-openai-echo"
+DEFAULT_ANTHROPIC_ROUTE = "ai-gateway-glm-echo"
+DEFAULT_GATEWAY_ROUTE = "ai-gateway"
+DEFAULT_OPENAI_URL = "https://ai-gateway-openai-echo-ai-gateway-dogfood.dogfood-us-south-1-bxf-4x-f196230f74f7ff44a5b4eeb1003c5bd5-0000.us-south.containers.appdomain.cloud"
+DEFAULT_ANTHROPIC_URL = "https://ai-gateway-glm-echo-ai-gateway-dogfood.dogfood-us-south-1-bxf-4x-f196230f74f7ff44a5b4eeb1003c5bd5-0000.us-south.containers.appdomain.cloud"
 DEFAULT_GATEWAY_URL = "https://ai-gateway-ai-gateway-dogfood.dogfood-us-south-1-bxf-4x-f196230f74f7ff44a5b4eeb1003c5bd5-0000.us-south.containers.appdomain.cloud"
-DEFAULT_BENCHMARK_URL = "https://ai-gateway-benchmark-ai-gateway-dogfood.dogfood-us-south-1-bxf-4x-f196230f74f7ff44a5b4eeb1003c5bd5-0000.us-south.containers.appdomain.cloud"
-DEFAULT_MODEL = "benchmark-echo"
+DEFAULT_ECHO_MODEL = "benchmark-echo"
+DEFAULT_GLM_MODEL = "rits/zai-org/glm-5-3"
 FORBIDDEN_MARKER = "enmaas"
 
 
@@ -56,6 +60,9 @@ class Lane:
     model: str
     base_url: str
     path: str
+    protocol: str
+    synthetic: bool
+    interval: float
 
 
 @dataclass(frozen=True)
@@ -63,17 +70,6 @@ class UserSpec:
     label: str
     key: str
     lane: Lane
-    interval: float
-
-
-@dataclass(frozen=True)
-class MatrixProbe:
-    name: str
-    provider: str
-    model: str
-    path: str
-    method: str
-    body: dict[str, Any]
 
 
 def now_utc() -> str:
@@ -144,58 +140,28 @@ def ensure_key(args: argparse.Namespace) -> Path:
     return path
 
 
+def endpoint(args: argparse.Namespace, route_name: str, override: str | None, fallback: str) -> str:
+    try:
+        info = route_info(args, route_name)
+        if info["target"] != "praxis":
+            raise ConfigError(f"route {route_name!r} does not target praxis")
+        return safe_url(route_name, f"https://{info['host']}")
+    except ConfigError:
+        return safe_url(route_name, override or fallback)
+
+
 def prepare(args: argparse.Namespace) -> dict[str, Any]:
     preflight_price_tag(args)
-    try:
-        benchmark_route = route_info(args, args.route_name)
-        benchmark_url = safe_url("PriceTag Benchmark route", f"https://{benchmark_route['host']}")
-    except ConfigError:
-        benchmark_url = safe_url("PriceTag Benchmark route", args.benchmark_url or DEFAULT_BENCHMARK_URL)
-        benchmark_route = {"host": urlsplit(benchmark_url).hostname or "", "target": "fallback"}
-    if benchmark_route["target"] not in {"praxis", "fallback"}:
-        raise ConfigError(f"normal PriceTag Benchmark route does not target praxis: {benchmark_route['target']!r}")
-
-    try:
-        gateway_route = route_info(args, args.gateway_route_name)
-        gateway_url = safe_url("PriceTag gateway", f"https://{gateway_route['host']}")
-    except ConfigError:
-        gateway_url = safe_url("PriceTag gateway", args.gateway_url or DEFAULT_GATEWAY_URL)
-        gateway_route = {"host": urlsplit(gateway_url).hostname or "", "target": "fallback"}
-    if gateway_route["target"] not in {"praxis", "fallback", "override"}:
-        raise ConfigError(f"normal PriceTag gateway route does not target praxis: {gateway_route['target']!r}")
-
-    matrix_routes: dict[str, dict[str, str]] = {}
-    if args.real_matrix:
-        for key, route_name in (
-            ("messages", "ai-gateway"),
-            ("chat", "ai-gateway-chat-completions"),
-            ("responses", "ai-gateway-responses"),
-            ("conversations", "ai-gateway-conversations"),
-        ):
-            matrix_routes[key] = route_info(args, route_name)
-            if matrix_routes[key]["target"] != "praxis":
-                raise ConfigError(f"matrix route {route_name!r} does not target praxis")
-
-    shadow: dict[str, str] | None = None
+    openai_url = endpoint(args, args.openai_route, args.openai_url, DEFAULT_OPENAI_URL)
+    anthropic_url = endpoint(args, args.anthropic_route, args.anthropic_url, DEFAULT_ANTHROPIC_URL)
+    gateway_url = endpoint(args, args.gateway_route, args.gateway_url, DEFAULT_GATEWAY_URL)
     if args.phase == "canary":
         for resource in ("deployment/praxis-shadow", "service/praxis-shadow"):
             try:
                 oc_run(args, ["get", resource, "-o", "name"])
             except ConfigError as exc:
                 raise ConfigError(f"canary requires PriceTag resource {resource!r}") from exc
-        shadow = route_info(args, args.shadow_route_name)
-        if shadow["target"] != "praxis-shadow":
-            raise ConfigError(f"shadow route does not target praxis-shadow: {shadow['target']!r}")
-
-    return {
-        "gateway_url": gateway_url,
-        "benchmark_url": benchmark_url,
-        "gateway_route": gateway_route,
-        "benchmark_route": benchmark_route,
-        "matrix_routes": matrix_routes,
-        "shadow_route": shadow,
-        "route_source": "oc" if gateway_route["target"] == "praxis" else "fallback/override",
-    }
+    return {"openai_url": openai_url, "anthropic_url": anthropic_url, "gateway_url": gateway_url}
 
 
 def percentile(values: list[float], fraction: float) -> float:
@@ -271,7 +237,7 @@ class Metrics:
             responses = sum(row["responses"] for row in self.users.values())
             drops = sum(row["drops"] for row in self.users.values())
             successful = sum(row["ok"] for row in self.users.values())
-            overall = {
+            return {
                 "sent": sent,
                 "responses": responses,
                 "drops": drops,
@@ -281,8 +247,7 @@ class Metrics:
                 "p50_ms": percentile(samples, 0.50),
                 "p95_ms": percentile(samples, 0.95),
                 "p99_ms": percentile(samples, 0.99),
-            }
-            return overall, rows
+            }, rows
 
 
 def discard_body(stream: Any) -> None:
@@ -302,93 +267,28 @@ def backend_from_headers(headers: Any, args: argparse.Namespace) -> str:
 
 def request_once(user: UserSpec, args: argparse.Namespace, sequence: int) -> dict[str, Any]:
     lane = user.lane
-    max_tokens = random.randint(1, 5000) if lane.name == "benchmark" else 1
+    max_tokens = random.randint(1, 32) if lane.synthetic else 1
     body = {
         "model": lane.model,
         "messages": [{"role": "user", "content": "echo"}],
         "max_tokens": max_tokens,
     }
-    request = urllib.request.Request(
-        lane.base_url + lane.path,
-        data=json.dumps(body).encode("utf-8"),
-        method="POST",
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "User-Agent": "praxis-shadow-traffic/1",
-            "X-Request-ID": f"praxis-shadow-{user.label}-{sequence}",
-            "x-api-key": user.key,
-            "anthropic-version": "2023-06-01",
-        },
-    )
-    started = time.monotonic()
-    event: dict[str, Any] = {
-        "event": "request_result",
-        "at": now_utc(),
-        "user": user.label,
-        "lane": lane.name,
-        "provider": lane.provider,
-        "model": lane.model,
-        "status": None,
-        "outcome": "drop",
-        "backend": "unknown",
-        "error_class": None,
-        "latency_ms": 0.0,
-        "max_tokens": max_tokens,
-    }
-    try:
-        with urllib.request.urlopen(request, timeout=args.timeout, context=ssl.create_default_context()) as response:
-            discard_body(response)
-            event["status"] = response.status
-            event["backend"] = backend_from_headers(response.headers, args)
-            if 200 <= response.status < 300:
-                event["outcome"] = "ok"
-            else:
-                event["error_class"] = str(response.status)
-    except urllib.error.HTTPError as exc:
-        discard_body(exc)
-        event["status"] = exc.code
-        event["backend"] = backend_from_headers(exc.headers, args)
-        event["error_class"] = str(exc.code)
-    except TimeoutError:
-        event["error_class"] = "timeout"
-    except urllib.error.URLError:
-        event["error_class"] = "transport_error"
-    except Exception:
-        event["error_class"] = "request_error"
-    event["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
-    return event
-
-
-def matrix_request(probe: MatrixProbe, gateway_url: str, key: str, args: argparse.Namespace) -> dict[str, Any]:
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "User-Agent": "praxis-shadow-matrix/1",
-        "X-Request-ID": f"praxis-shadow-matrix-{probe.name}",
+        "User-Agent": "praxis-shadow-traffic/1",
+        "X-Request-ID": f"praxis-shadow-{user.label}-{sequence}",
     }
-    if probe.provider == "anthropic":
-        headers.update({"x-api-key": key, "anthropic-version": "2023-06-01"})
+    if lane.protocol == "openai":
+        headers["Authorization"] = f"Bearer {user.key}"
     else:
-        headers["Authorization"] = f"Bearer {key}"
-    request = urllib.request.Request(
-        gateway_url + probe.path,
-        data=json.dumps(probe.body).encode("utf-8"),
-        method=probe.method,
-        headers=headers,
-    )
+        headers.update({"x-api-key": user.key, "anthropic-version": "2023-06-01"})
+    request = urllib.request.Request(lane.base_url + lane.path, data=json.dumps(body).encode(), method="POST", headers=headers)
     event: dict[str, Any] = {
-        "event": "matrix_result",
-        "at": now_utc(),
-        "user": f"matrix-{probe.name}",
-        "lane": probe.name,
-        "provider": probe.provider,
-        "model": probe.model,
-        "status": None,
-        "outcome": "drop",
-        "backend": "unknown",
-        "error_class": None,
-        "latency_ms": 0.0,
+        "event": "request_result", "at": now_utc(), "user": user.label,
+        "lane": lane.name, "provider": lane.provider, "model": lane.model,
+        "max_tokens": max_tokens, "status": None, "outcome": "drop",
+        "backend": "unknown", "error_class": None, "latency_ms": 0.0,
     }
     started = time.monotonic()
     try:
@@ -416,99 +316,60 @@ def matrix_request(probe: MatrixProbe, gateway_url: str, key: str, args: argpars
 
 
 def scheduler_drop(user: UserSpec) -> dict[str, Any]:
-    lane = user.lane
     return {
-        "event": "scheduler_drop",
-        "at": now_utc(),
-        "user": user.label,
-        "lane": lane.name,
-        "provider": lane.provider,
-        "model": lane.model,
-        "status": None,
-        "outcome": "drop",
-        "backend": "unknown",
-        "error_class": "in_flight",
-        "latency_ms": 0.0,
+        "event": "scheduler_drop", "at": now_utc(), "user": user.label,
+        "lane": user.lane.name, "provider": user.lane.provider, "model": user.lane.model,
+        "status": None, "outcome": "drop", "backend": "unknown",
+        "error_class": "in_flight", "latency_ms": 0.0,
     }
 
 
-def draw_dashboard(stdscr: Any, metrics: Metrics, started: float, page: int, page_size: int, matrix_line: str) -> int:
+def draw_dashboard(stdscr: Any, metrics: Metrics, started: float, page: int, page_size: int) -> int:
     stdscr.erase()
     stdscr.timeout(200)
     overall, users = metrics.snapshot()
     height, width = stdscr.getmaxyx()
-    lane_counts = Counter(row["lane"] for row in users)
-    lane_summary = "lanes " + "  ".join(f"{lane}={count}" for lane, count in lane_counts.items())
+    counts = Counter(row["lane"] for row in users)
     header = [
-        "PRAXIS UPGRADE TRAFFIC — PriceTag normal routes",
+        "PRAXIS UPGRADE TRAFFIC — PriceTag llm-katan echo + real GLM",
         f"elapsed {time.monotonic() - started:7.1f}s  sent {overall['sent']:,}  responses {overall['responses']:,}  drops {overall['drops']:,}  availability {overall['availability_pct']:.2f}%",
         f"latency p50/p95/p99 {overall['p50_ms']:.0f}/{overall['p95_ms']:.0f}/{overall['p99_ms']:.0f} ms  status {overall['status_codes']}  in-flight {overall['in_flight']}",
-        lane_summary,
+        "lanes " + "  ".join(f"{lane}={count}" for lane, count in counts.items()),
         "─" * max(1, width - 1),
         "USER             LANE       PROVIDER   MODEL              BACKEND  SENT RESP DROP LAST LATENCY",
     ]
-    availability_attr = (
-        curses.color_pair(1) | curses.A_BOLD
-        if overall["availability_pct"] >= 99.5
-        else curses.color_pair(3) | curses.A_BOLD
-        if overall["availability_pct"] >= 95
-        else curses.color_pair(2) | curses.A_BOLD
-    )
-    header_attrs = [
-        curses.color_pair(4) | curses.A_BOLD,
-        availability_attr,
-        curses.A_DIM,
-        curses.color_pair(6),
-        curses.color_pair(4),
-        curses.color_pair(4) | curses.A_BOLD,
-    ]
-    if matrix_line:
-        header.insert(3, matrix_line)
-        header_attrs.insert(3, curses.color_pair(6))
+    availability_attr = curses.color_pair(1) | curses.A_BOLD if overall["availability_pct"] >= 99.5 else curses.color_pair(3) | curses.A_BOLD if overall["availability_pct"] >= 95 else curses.color_pair(2) | curses.A_BOLD
+    attrs = [curses.color_pair(4) | curses.A_BOLD, availability_attr, curses.A_DIM, curses.color_pair(6), curses.color_pair(4), curses.color_pair(4) | curses.A_BOLD]
     usable = max(1, height - len(header) - 2)
     visible = min(page_size if page_size > 0 else usable, usable)
     pages = max(1, math.ceil(len(users) / visible))
-    page = page % pages
+    page %= pages
     shown = users[page * visible : (page + 1) * visible]
     for y, line in enumerate(header):
         try:
-            stdscr.addnstr(y, 0, line, max(0, width - 1), header_attrs[y])
+            stdscr.addnstr(y, 0, line, max(0, width - 1), attrs[y])
         except curses.error:
             pass
     for offset, row in enumerate(shown):
         y = len(header) + offset
         prefix = f"{row['user']:<17.17} {row['lane']:<10.10} {row['provider']:<10.10} {row['model']:<18.18}"
         backend = f" {row['last_backend']:<8.8}"
-        counts = f" {row['sent']:>4} {row['responses']:>4} {row['drops']:>4} "
+        counts_text = f" {row['sent']:>4} {row['responses']:>4} {row['drops']:>4} "
         status = str(row["last"])
-        if status == "drop" or (row["last_status"] is not None and row["last_status"] >= 500):
-            attr = curses.color_pair(2) | curses.A_BOLD
-        elif row["last_status"] is not None and 200 <= row["last_status"] < 300:
-            attr = curses.color_pair(1) | curses.A_BOLD
-        elif row["last_status"] is not None:
-            attr = curses.color_pair(3)
-        else:
-            attr = 0
+        status_attr = curses.color_pair(2) | curses.A_BOLD if status == "drop" or (row["last_status"] is not None and row["last_status"] >= 500) else curses.color_pair(1) | curses.A_BOLD if row["last_status"] is not None and 200 <= row["last_status"] < 300 else curses.color_pair(3) if row["last_status"] is not None else 0
+        backend_attr = curses.color_pair(5) | curses.A_BOLD if row["last_backend"] == "shadow" else curses.color_pair(4) if row["last_backend"] == "praxis" else curses.color_pair(3)
         suffix = f"{status:<4.4} {str(row['last_latency_ms'] or 0):>7}ms"
-        backend_attr = (
-            curses.color_pair(5) | curses.A_BOLD
-            if row["last_backend"] == "shadow"
-            else curses.color_pair(4)
-            if row["last_backend"] == "praxis"
-            else curses.color_pair(3)
-        )
         try:
             stdscr.addnstr(y, 0, prefix, max(0, width - 1))
             stdscr.addnstr(y, len(prefix), backend, max(0, width - len(prefix) - 1), backend_attr)
-            counts_start = len(prefix) + len(backend)
-            stdscr.addnstr(y, counts_start, counts, max(0, width - counts_start - 1))
-            status_start = counts_start + len(counts)
-            stdscr.addnstr(y, status_start, suffix, max(0, width - status_start - 1), attr)
+            start = len(prefix) + len(backend)
+            stdscr.addnstr(y, start, counts_text, max(0, width - start - 1))
+            start += len(counts_text)
+            stdscr.addnstr(y, start, suffix, max(0, width - start - 1), status_attr)
         except curses.error:
             pass
-    footer = f"page {page + 1}/{pages}  ←/→ page  q quit"
     try:
-        stdscr.addnstr(len(header) + len(shown), 0, footer, max(0, width - 1))
+        stdscr.addnstr(len(header) + len(shown), 0, f"page {page + 1}/{pages}  ←/→ page  q quit", max(0, width - 1))
     except curses.error:
         pass
     stdscr.refresh()
@@ -522,165 +383,81 @@ def draw_dashboard(stdscr: Any, metrics: Metrics, started: float, page: int, pag
     return page
 
 
-def print_summary(metrics: Metrics) -> None:
-    overall, _ = metrics.snapshot()
-    print(
-        f"sent={overall['sent']} responses={overall['responses']} drops={overall['drops']} "
-        f"availability={overall['availability_pct']:.2f}% "
-        f"p50/p95/p99={overall['p50_ms']:.0f}/{overall['p95_ms']:.0f}/{overall['p99_ms']:.0f}ms "
-        f"status={overall['status_codes']}",
-        flush=True,
-    )
-
-
 def write_event(stream: Any, event: dict[str, Any]) -> None:
     stream.write(json.dumps(event, sort_keys=True) + "\n")
     stream.flush()
 
 
-def matrix_probes(args: argparse.Namespace) -> list[MatrixProbe]:
-    return [
-        MatrixProbe(
-            "messages", "anthropic", args.messages_model, "/v1/messages", "POST",
-            {"model": args.messages_model, "max_tokens": 1, "messages": [{"role": "user", "content": "echo"}]},
-        ),
-        MatrixProbe(
-            "chat-completions", "openai", args.chat_model, "/v1/chat/completions", "POST",
-            {"model": args.chat_model, "max_tokens": 1, "messages": [{"role": "user", "content": "echo"}]},
-        ),
-        MatrixProbe(
-            "responses", "openai", args.responses_model, "/v1/responses", "POST",
-            {"model": args.responses_model, "input": "echo", "max_output_tokens": 1},
-        ),
-        MatrixProbe("conversations", "openai", "local", "/v1/conversations", "POST", {}),
-    ]
-
-
-def run_matrix(args: argparse.Namespace, plan: dict[str, Any], key: str, stream: Any) -> str:
-    results: list[dict[str, Any]] = []
-    for probe in matrix_probes(args):
-        result = matrix_request(probe, plan["gateway_url"], key, args)
-        results.append(result)
-        write_event(stream, result)
-    summary = "matrix " + " ".join(
-        f"{result['lane']}={result['status'] if result['status'] is not None else result['error_class']}@{result['backend']}"
-        for result in results
-    )
-    print(summary, flush=True)
-    return summary
-
-
-def run_loop(
-    stdscr: Any,
-    args: argparse.Namespace,
-    users: list[UserSpec],
-    metrics: Metrics,
-    executor: concurrent.futures.ThreadPoolExecutor,
-    stream: Any,
-    started: float,
-    deadline: float,
-    matrix_line: str,
-) -> None:
+def run_loop(stdscr: Any, args: argparse.Namespace, users: list[UserSpec], metrics: Metrics, executor: concurrent.futures.ThreadPoolExecutor, stream: Any, started: float, deadline: float) -> None:
     if stdscr is not None:
         try:
-            curses.start_color()
-            curses.use_default_colors()
-            stdscr.bkgdset(" ", curses.color_pair(0))
-            curses.init_pair(1, curses.COLOR_GREEN, -1)
-            curses.init_pair(2, curses.COLOR_RED, -1)
-            curses.init_pair(3, curses.COLOR_YELLOW, -1)
-            curses.init_pair(4, curses.COLOR_CYAN, -1)
-            curses.init_pair(5, curses.COLOR_MAGENTA, -1)
-            curses.init_pair(6, curses.COLOR_WHITE, -1)
+            curses.start_color(); curses.use_default_colors(); stdscr.bkgdset(" ", curses.color_pair(0))
+            curses.init_pair(1, curses.COLOR_GREEN, -1); curses.init_pair(2, curses.COLOR_RED, -1)
+            curses.init_pair(3, curses.COLOR_YELLOW, -1); curses.init_pair(4, curses.COLOR_CYAN, -1)
+            curses.init_pair(5, curses.COLOR_MAGENTA, -1); curses.init_pair(6, curses.COLOR_WHITE, -1)
         except curses.error:
             pass
-        stdscr.clear()
-        stdscr.refresh()
-    due = {
-        user.label: started + (int.from_bytes(hashlib.sha256(user.label.encode()).digest()[:4], "big") / 2**32) * user.interval
-        for user in users
-    }
+        stdscr.clear(); stdscr.refresh()
+    due = {user.label: started + (int.from_bytes(hashlib.sha256(user.label.encode()).digest()[:4], "big") / 2**32) * user.lane.interval for user in users}
     pending: dict[concurrent.futures.Future[dict[str, Any]], UserSpec] = {}
-    sequence = 0
-    page = 0
-    next_stats = started
-    stop = False
+    sequence = 0; page = 0; next_stats = started; stop = False
     while (time.monotonic() < deadline and not stop) or pending:
         now = time.monotonic()
         if now < deadline and not stop:
             for user in users:
                 if now < due[user.label]:
                     continue
-                due[user.label] = now + user.interval
+                due[user.label] = now + user.lane.interval
                 if metrics.mark_sent(user.label):
                     sequence += 1
                     pending[executor.submit(request_once, user, args, sequence)] = user
                 else:
-                    event = scheduler_drop(user)
-                    metrics.record(event)
-                    write_event(stream, event)
+                    event = scheduler_drop(user); metrics.record(event); write_event(stream, event)
         for future in [item for item in pending if item.done()]:
-            user = pending.pop(future)
-            event = future.result()
-            metrics.record(event)
-            write_event(stream, event)
+            user = pending.pop(future); event = future.result(); metrics.record(event); write_event(stream, event)
         if stdscr is not None:
-            page = draw_dashboard(stdscr, metrics, started, page, args.page_size, matrix_line)
-            stop = page < 0
+            page = draw_dashboard(stdscr, metrics, started, page, args.page_size); stop = page < 0
         elif now >= next_stats:
-            print_summary(metrics)
+            overall, _ = metrics.snapshot()
+            print(f"sent={overall['sent']} responses={overall['responses']} drops={overall['drops']} availability={overall['availability_pct']:.2f}% p50/p95/p99={overall['p50_ms']:.0f}/{overall['p95_ms']:.0f}/{overall['p99_ms']:.0f}ms status={overall['status_codes']}", flush=True)
             next_stats = now + args.stats_interval
         time.sleep(0.02)
-    for future, user in list(pending.items()):
-        event = future.result()
-        metrics.record(event)
-        write_event(stream, event)
+    for future in list(pending):
+        event = future.result(); metrics.record(event); write_event(stream, event)
 
 
 def run_traffic(args: argparse.Namespace, plan: dict[str, Any], key_path: Path) -> int:
     key = key_path.read_text(encoding="utf-8").strip()
-    benchmark_lane = Lane("benchmark", "anthropic", args.model, plan["benchmark_url"], "/v1/messages")
-    glm_lane = Lane("real-glm", "anthropic", args.glm_model, plan["gateway_url"], "/v1/messages")
+    openai_lane = Lane("openai-echo", "openai", args.openai_model, plan["openai_url"], "/v1/chat/completions", "openai", True, args.interval)
+    anthropic_lane = Lane("glm-echo", "anthropic", args.echo_model, plan["anthropic_url"], "/v1/messages", "anthropic", True, args.interval)
+    glm_lane = Lane("real-glm", "anthropic", args.glm_model, plan["gateway_url"], "/v1/messages", "anthropic", False, args.glm_interval)
+    lanes = (openai_lane, anthropic_lane)
     users = [
-        UserSpec(f"shadow-user-{index:03d}", key, benchmark_lane, args.interval)
+        UserSpec(f"shadow-user-{index:03d}", key, lanes[(index - 1) % len(lanes)])
         for index in range(1, args.user_count + 1)
     ]
-    users.insert(0, UserSpec("real-glm", key, glm_lane, args.glm_interval))
+    users.insert(0, UserSpec("real-glm", key, glm_lane))
     metrics = Metrics(users, args.window_seconds)
-    evidence = Path(args.evidence).expanduser()
-    evidence.parent.mkdir(parents=True, exist_ok=True)
+    evidence = Path(args.evidence).expanduser(); evidence.parent.mkdir(parents=True, exist_ok=True)
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=min(args.concurrency, len(users)))
-    started = time.monotonic()
-    deadline = started + args.duration
+    started = time.monotonic(); deadline = started + args.duration
     use_ui = args.ui == "always" or (args.ui == "auto" and sys.stdout.isatty() and sys.stdin.isatty())
     start_event = {
-        "event": "run_start",
-        "at": now_utc(),
-        "phase": args.phase,
+        "event": "run_start", "at": now_utc(), "phase": args.phase,
         "gateway_url_host": urlsplit(plan["gateway_url"]).hostname,
-        "benchmark_url_host": urlsplit(plan["benchmark_url"]).hostname,
-        "route_name": args.route_name,
-        "users": args.user_count,
-        "real_glm_users": 1,
-        "real_glm_users": 1,
-        "lanes": [
-            {"lane": benchmark_lane.name, "provider": benchmark_lane.provider, "model": benchmark_lane.model, "base_url_host": urlsplit(benchmark_lane.base_url).hostname},
-            {"lane": glm_lane.name, "provider": glm_lane.provider, "model": glm_lane.model, "base_url_host": urlsplit(glm_lane.base_url).hostname},
-        ],
-        "backend_marker_headers": args.marker_headers,
-        "retries": 0,
-        "real_matrix": args.real_matrix,
+        "openai_echo_url_host": urlsplit(plan["openai_url"]).hostname,
+        "glm_echo_url_host": urlsplit(plan["anthropic_url"]).hostname,
+        "users": args.user_count, "real_glm_users": 1, "retries": 0,
+        "lanes": [{"lane": lane.name, "provider": lane.provider, "model": lane.model} for lane in (openai_lane, anthropic_lane, glm_lane)],
     }
     try:
         with evidence.open("w", encoding="utf-8") as stream:
             write_event(stream, start_event)
-            matrix_line = run_matrix(args, plan, users[0].key, stream) if args.real_matrix else ""
             if use_ui:
-                curses.wrapper(lambda stdscr: run_loop(stdscr, args, users, metrics, executor, stream, started, deadline, matrix_line))
+                curses.wrapper(lambda stdscr: run_loop(stdscr, args, users, metrics, executor, stream, started, deadline))
             else:
-                run_loop(None, args, users, metrics, executor, stream, started, deadline, matrix_line)
-            overall, _ = metrics.snapshot()
-            write_event(stream, {"event": "run_end", "at": now_utc(), **overall})
+                run_loop(None, args, users, metrics, executor, stream, started, deadline)
+            overall, _ = metrics.snapshot(); write_event(stream, {"event": "run_end", "at": now_utc(), **overall})
     finally:
         executor.shutdown(wait=True)
     print(f"evidence={evidence}")
@@ -689,56 +466,35 @@ def run_traffic(args: argparse.Namespace, plan: dict[str, Any], key_path: Path) 
 
 def dry_run_plan(args: argparse.Namespace, plan: dict[str, Any], key_path: Path) -> dict[str, Any]:
     return {
-        "status": "dry-run-ready",
-        "network": "disabled",
-        "cluster_mutation": "disabled",
-        "phase": args.phase,
-        "oc_preflight": "read-only PriceTag checks completed",
-        "namespace": args.namespace,
-        "gateway_url_host": urlsplit(plan["gateway_url"]).hostname,
-        "benchmark_url_host": urlsplit(plan["benchmark_url"]).hostname,
-        "route_name": args.route_name,
-        "shadow_route_checked": args.phase == "canary",
-        "users": args.user_count,
-        "key_file": str(key_path),
+        "status": "dry-run-ready", "network": "disabled", "cluster_mutation": "disabled",
+        "phase": args.phase, "oc_preflight": "read-only PriceTag checks completed",
+        "namespace": args.namespace, "key_file": str(key_path), "users": args.user_count,
+        "real_glm_users": 1, "retries": 0,
         "lanes": [
-            {"lane": "benchmark", "provider": "anthropic", "model": args.model, "interval": args.interval},
+            {"lane": "openai-echo", "provider": "openai", "model": args.openai_model, "interval": args.interval},
+            {"lane": "glm-echo", "provider": "anthropic", "model": args.echo_model, "interval": args.interval},
             {"lane": "real-glm", "provider": "anthropic", "model": args.glm_model, "interval": args.glm_interval},
         ],
-        "retries": 0,
-        "real_matrix": args.real_matrix,
     }
 
 
 def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(description="PriceTag-only Praxis upgrade traffic watcher")
+    result = argparse.ArgumentParser(description="PriceTag-only Praxis llm-katan traffic watcher")
     result.add_argument("--phase", choices=("baseline", "canary"), default="baseline")
-    result.add_argument("--oc-context", default=DEFAULT_CONTEXT)
-    result.add_argument("--oc-server", default=DEFAULT_SERVER)
+    result.add_argument("--oc-context", default=DEFAULT_CONTEXT); result.add_argument("--oc-server", default=DEFAULT_SERVER)
     result.add_argument("--namespace", default=DEFAULT_NAMESPACE)
-    result.add_argument("--route-name", default=DEFAULT_ROUTE)
-    result.add_argument("--shadow-route-name", default=DEFAULT_SHADOW_ROUTE)
-    result.add_argument("--gateway-url", help="override the normal PriceTag gateway URL")
-    result.add_argument("--gateway-route-name", default="ai-gateway")
-    result.add_argument("--model", default=DEFAULT_MODEL)
-    result.add_argument("--glm-model", default="rits/zai-org/glm-5-3")
-    result.add_argument("--glm-interval", type=float, default=30.0, help="seconds between real GLM calls")
-    result.add_argument("--real-matrix", action="store_true", help="run one small four-route real-provider/local matrix before the load")
-    result.add_argument("--messages-model", default="claude-sonnet-5")
-    result.add_argument("--chat-model", default="gpt-5.6-luna")
-    result.add_argument("--responses-model", default="gpt-5.3-codex")
-    result.add_argument("--key-file", default="~/.mykey")
-    result.add_argument("--user-count", type=int, default=96)
-    result.add_argument("--interval", type=float, default=5.0)
-    result.add_argument("--timeout", type=float, default=20.0)
-    result.add_argument("--duration", type=float, default=300.0)
-    result.add_argument("--concurrency", type=int, default=32)
-    result.add_argument("--stats-interval", type=float, default=5.0)
-    result.add_argument("--window-seconds", type=float, default=60.0)
+    result.add_argument("--openai-route", default=DEFAULT_OPENAI_ROUTE); result.add_argument("--anthropic-route", default=DEFAULT_ANTHROPIC_ROUTE)
+    result.add_argument("--gateway-route", default=DEFAULT_GATEWAY_ROUTE)
+    result.add_argument("--openai-url"); result.add_argument("--anthropic-url"); result.add_argument("--gateway-url")
+    result.add_argument("--openai-model", default=DEFAULT_ECHO_MODEL); result.add_argument("--echo-model", default=DEFAULT_GLM_MODEL)
+    result.add_argument("--glm-model", default=DEFAULT_GLM_MODEL); result.add_argument("--key-file", default="~/.mykey")
+    result.add_argument("--user-count", type=int, default=96); result.add_argument("--interval", type=float, default=5.0)
+    result.add_argument("--glm-interval", type=float, default=30.0); result.add_argument("--timeout", type=float, default=20.0)
+    result.add_argument("--duration", type=float, default=300.0); result.add_argument("--concurrency", type=int, default=32)
+    result.add_argument("--window-seconds", type=float, default=60.0); result.add_argument("--stats-interval", type=float, default=5.0)
     result.add_argument("--marker-headers", type=lambda value: [item.strip() for item in value.split(",") if item.strip()], default=["x-praxis-lane", "x-gateway-build"])
     result.add_argument("--evidence", default=f"/tmp/praxis-shadow-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.jsonl")
-    result.add_argument("--ui", choices=("auto", "always", "never"), default="auto")
-    result.add_argument("--page-size", type=int, default=0)
+    result.add_argument("--ui", choices=("auto", "always", "never"), default="auto"); result.add_argument("--page-size", type=int, default=0)
     result.add_argument("--dry-run", action="store_true")
     return result
 
@@ -748,22 +504,16 @@ def main() -> int:
     try:
         if not 1 <= args.user_count <= MAX_USERS:
             raise ConfigError(f"--user-count must be between 1 and {MAX_USERS}")
-        if args.duration <= 0 or args.interval <= 0 or args.glm_interval <= 0 or args.timeout <= 0 or args.concurrency <= 0:
-            raise ConfigError("duration, interval, timeout, and concurrency must be positive")
-        if args.real_matrix and args.phase != "canary":
-            raise ConfigError("--real-matrix is only allowed in canary phase")
+        if min(args.duration, args.interval, args.glm_interval, args.timeout, args.concurrency) <= 0:
+            raise ConfigError("duration, intervals, timeout, and concurrency must be positive")
         args.oc_server = safe_url("PriceTag server", args.oc_server)
-        reject_enmaas("PriceTag context", args.oc_context)
-        reject_enmaas("PriceTag namespace", args.namespace)
-        key_path = ensure_key(args)
-        plan = prepare(args)
+        reject_enmaas("PriceTag context", args.oc_context); reject_enmaas("PriceTag namespace", args.namespace)
+        key_path = ensure_key(args); plan = prepare(args)
         if args.dry_run:
-            print(json.dumps(dry_run_plan(args, plan, key_path), indent=2, sort_keys=True))
-            return 0
+            print(json.dumps(dry_run_plan(args, plan, key_path), indent=2, sort_keys=True)); return 0
         return run_traffic(args, plan, key_path)
     except ConfigError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
+        print(f"ERROR: {exc}", file=sys.stderr); return 2
 
 
 if __name__ == "__main__":

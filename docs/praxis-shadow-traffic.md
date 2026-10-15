@@ -1,106 +1,53 @@
-# Praxis upgrade traffic watcher
+# Praxis llm-katan traffic watcher
 
-`tools/praxis-shadow-traffic.py` is a laptop-side, **PriceTag-only** traffic
-watcher for the Praxis upgrade sequence. It runs one unified evidence stream:
-
-- 96 synthetic users through the normal Benchmark route backed by `llm-katan`,
-  with bounded random `max_tokens` from 1 through 5000;
-- one low-rate real GLM user through the normal `/v1/messages` gateway route;
-- an optional small four-route matrix for Messages, Chat Completions,
-  Responses, and Conversations.
-
-It does not access EnMaaS, create shadow resources, change route weights, or
-call real OpenAI/Anthropic/Vertex/GLM providers by default. Real-provider
-checks are a separate, opt-in small canary matrix.
-
-## Safety model
-
-- The PriceTag server, namespace, and context are explicit hardcoded defaults;
-  all can be overridden.
-- EnMaaS markers are rejected before any `oc` command.
-- `oc` is always invoked with the explicit PriceTag context/server and only
-  reads the configured PriceTag namespace.
-- Baseline does not require `praxis-shadow` or any shadow route.
-- Canary requires `deployment/praxis-shadow`, `service/praxis-shadow`, and the
-  shadow Benchmark route.
-- Both phases send to the **normal** Benchmark route. The tool never sends
-  directly to the shadow route.
-- No retries. Timeouts, resets, incomplete responses, and non-2xx responses
-  are visible drops.
-- No keys, prompts, or response bodies are written to JSONL evidence.
-
-## Normal use
-
-The default is a five-minute baseline run with 96 Benchmark users plus one
-low-rate GLM lane:
+Run from a laptop with no arguments:
 
 ```console
 python3 tools/praxis-shadow-traffic.py
 ```
 
-The tool reads the PriceTag key from `~/.mykey`. It exits with a clear error if
-the file is missing or empty.
+The run uses only normal PriceTag routes and has three lanes:
 
-The dashboard shows sent/responses/drops/availability, p50/p95/p99 latency,
-the synthetic user, lane/provider/model, and the served backend (`praxis`,
-`shadow`, or `unknown`). Press `q` to stop early. Evidence defaults to `/tmp`.
+- 96 synthetic users distributed across `ai-gateway-openai-echo` and
+  `ai-gateway-glm-echo`, both backed by llm-katan;
+- one low-rate real GLM user through the normal PriceTag gateway;
+- no direct shadow URL and no route-weight mutation.
 
-The default large load is Benchmark/llm-katan. The GLM lane is intentionally
-low-rate. Add `--real-matrix` in canary mode to send one small probe through
-each normal gateway path. The matrix also uses the normal gateway host and
-never targets a shadow URL.
+Synthetic requests use random `max_tokens` from 1 through 32. The real GLM
+lane is one request every 30 seconds by default. All requests use the same
+single dashboard and JSONL evidence file.
 
-## Dry run
+## Safety
 
-Dry run performs only read-only PriceTag `oc` checks and resource discovery:
+- The PriceTag context, server, and namespace are explicit defaults and can be
+  overridden.
+- EnMaaS markers are rejected before any `oc` command.
+- `oc` is used read-only and only against the configured PriceTag namespace.
+- Baseline does not require shadow resources. Canary requires the shadow
+  deployment and Service, but still sends to the same normal URLs.
+- No retries; timeouts, resets, incomplete responses, and non-2xx responses are
+  visible drops.
+- Keys, prompts, and response bodies are never written to evidence.
+
+## Dry-run
 
 ```console
 python3 tools/praxis-shadow-traffic.py --dry-run
 ```
 
-It sends no HTTP requests and makes no cluster mutations.
+Dry-run performs read-only PriceTag discovery only. It sends no HTTP traffic
+and makes no cluster mutations.
 
-## Phases
-
-### Baseline
-
-```console
-python3 tools/praxis-shadow-traffic.py --phase baseline
-```
-
-Requires only the normal Benchmark route. A missing `praxis-shadow` service or
-route is not an error.
-
-### Canary
+## Canary
 
 ```console
 python3 tools/praxis-shadow-traffic.py --phase canary
 ```
 
-Requires the shadow deployment, service, and Benchmark route. Route weights
-must be changed separately by the operator; this tool never changes them.
-Requests continue to target the normal route. Backend classification uses
-`x-praxis-lane` by default and also understands the existing
-`x-gateway-build` marker (`new` means `shadow`).
+Route weights are changed separately by the operator. The watcher never sends
+directly to shadow; response markers identify whether the normal URL was served
+by `praxis` or `shadow`.
 
-## Overrides
-
-Useful overrides for the single-environment defaults are:
-
-```console
-python3 tools/praxis-shadow-traffic.py \
-  --phase baseline \
-  --oc-server https://price-tag-api.example:6443 \
-  --namespace ai-gateway-dogfood \
-  --gateway-url https://normal-benchmark-route.example
-```
-
-The gateway override is still required to be HTTPS and is rejected if it
-contains an EnMaaS marker.
-
-After the shadow deployment and route weights are ready, the opt-in canary
-matrix is:
-
-```console
-python3 tools/praxis-shadow-traffic.py --phase canary --real-matrix
-```
+Real-provider calls are intentionally limited to the single GLM lane. Adding
+other provider lanes requires a separate PriceTag/Praxis configuration change;
+the watcher does not invent or apply those lanes.
