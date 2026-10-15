@@ -225,6 +225,11 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "invalid SSO identity claims", http.StatusUnauthorized)
 		return
 	}
+	rawClaims := map[string]map[string]json.RawMessage{}
+	var idTokenClaims map[string]json.RawMessage
+	if err := verified.Claims(&idTokenClaims); err == nil {
+		rawClaims["id_token"] = idTokenClaims
+	}
 	// Providers may put custom profile claims in UserInfo rather than the ID
 	// token. Merge those claims without allowing them to replace verified token
 	// identity fields such as sub, nonce, or rhatUUID.
@@ -236,13 +241,17 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 			if infoErr := info.Claims(&userInfoClaims); infoErr != nil {
 				slog.Warn("OIDC UserInfo claims decode failed", "error", infoErr)
 			} else {
+				var rawUserInfo map[string]json.RawMessage
+				if rawErr := info.Claims(&rawUserInfo); rawErr == nil {
+					rawClaims["userinfo"] = rawUserInfo
+				}
 				mergeOIDCClaims(&claims, &userInfoClaims)
 			}
 		}
 	}
 	if claims.RhatUUID == "" {
 		if h.cfg.OIDC.ClaimsDebug {
-			h.renderOIDCClaims(w, claims, "/login", "The provider did not return rhatUUID.")
+			h.renderOIDCClaims(w, claims, "/login", "The provider did not return rhatUUID.", rawClaims)
 			return
 		}
 		http.Error(w, "SSO identity is missing rhatUUID", http.StatusUnauthorized)
@@ -254,7 +263,7 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	}
 	if username == "" {
 		if h.cfg.OIDC.ClaimsDebug {
-			h.renderOIDCClaims(w, claims, "/login", "The provider did not return an email or preferred_username.")
+			h.renderOIDCClaims(w, claims, "/login", "The provider did not return an email or preferred_username.", rawClaims)
 			return
 		}
 		http.Error(w, "SSO identity is missing email/username", http.StatusUnauthorized)
@@ -268,7 +277,7 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	if lookupErr != nil || !user.Active {
 		// Do not provision, elevate, or authorize a user from claims alone.
 		if h.cfg.OIDC.ClaimsDebug {
-			h.renderOIDCClaims(w, claims, "/login", "No active provisioned partner user matched the returned email/username.")
+			h.renderOIDCClaims(w, claims, "/login", "No active provisioned partner user matched the returned email/username.", rawClaims)
 			return
 		}
 		http.Error(w, "SSO identity is not provisioned in EnMaaS", http.StatusForbidden)
@@ -276,7 +285,7 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	}
 	if !strings.EqualFold(user.UserID, claims.RhatUUID) {
 		if h.cfg.OIDC.ClaimsDebug {
-			h.renderOIDCClaims(w, claims, "/login", "The returned rhatUUID does not match the provisioned partner user UUID.")
+			h.renderOIDCClaims(w, claims, "/login", "The returned rhatUUID does not match the provisioned partner user UUID.", rawClaims)
 			return
 		}
 		http.Error(w, "SSO identity does not match the provisioned user", http.StatusForbidden)
@@ -288,7 +297,7 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	h.setCookie(w, username, claims.Groups, "")
 	slog.Info("user logged in with OIDC", "username", username)
 	if h.cfg.OIDC.ClaimsDebug {
-		h.renderOIDCClaims(w, claims, h.loginDestination(r, username), "")
+		h.renderOIDCClaims(w, claims, h.loginDestination(r, username), "", rawClaims)
 		return
 	}
 	http.Redirect(w, r, h.loginDestination(r, username), http.StatusFound)
@@ -360,7 +369,7 @@ func (h *AuthHandler) renderOIDCProviderError(w http.ResponseWriter, providerErr
 // renderOIDCClaims is intentionally opt-in and intended only for a
 // development/stage integration test. It renders decoded claims, never the
 // raw ID token or client secret. Keep OIDC_CLAIMS_DEBUG=false in production.
-func (h *AuthHandler) renderOIDCClaims(w http.ResponseWriter, claims oidcClaims, destination, diagnosticMessage string) {
+func (h *AuthHandler) renderOIDCClaims(w http.ResponseWriter, claims oidcClaims, destination, diagnosticMessage string, rawClaims map[string]map[string]json.RawMessage) {
 	value := func(v string) string {
 		if v == "" {
 			return "<em>not returned</em>"
@@ -384,11 +393,14 @@ func (h *AuthHandler) renderOIDCClaims(w http.ResponseWriter, claims oidcClaims,
 	if diagnosticMessage != "" {
 		note = `<p style="color:#f5a97f"><strong>Mapping result:</strong> ` + html.EscapeString(diagnosticMessage) + `</p>`
 	}
+	rawJSON, _ := json.MarshalIndent(rawClaims, "", "  ")
+	rawBlock := "<pre>" + html.EscapeString(string(rawJSON)) + "</pre>"
 	fmt.Fprintf(w, `<!doctype html><html><head><meta charset="utf-8"><title>OIDC claim diagnostic</title>
-<style>body{font:16px system-ui;max-width:900px;margin:40px auto;padding:0 20px;background:#0b0e11;color:#e0e3e8}table{border-collapse:collapse;width:100%%}td{border-bottom:1px solid #333;padding:8px}td:first-child{font-family:monospace;color:#8ab4f8;width:260px}a{color:#58a6ff}</style></head><body>
+<style>body{font:16px system-ui;max-width:1000px;margin:40px auto;padding:0 20px;background:#0b0e11;color:#e0e3e8}table{border-collapse:collapse;width:100%%}td{border-bottom:1px solid #333;padding:8px}td:first-child{font-family:monospace;color:#8ab4f8;width:260px}pre{white-space:pre-wrap;background:#161b22;padding:16px;overflow:auto}a{color:#58a6ff}</style></head><body>
 <h1>OIDC claim diagnostic</h1><p>Development/stage only. The raw token was not displayed.</p>%s<table>
 <tr><td>sub</td><td>%s</td></tr><tr><td>rhatUUID</td><td>%s</td></tr><tr><td>preferred_username</td><td>%s</td></tr><tr><td>email</td><td>%s</td></tr><tr><td>given_name</td><td>%s</td></tr><tr><td>family_name</td><td>%s</td></tr><tr><td>groups</td><td>%s</td></tr><tr><td>country</td><td>%s</td></tr><tr><td>state</td><td>%s</td></tr><tr><td>region</td><td>%s</td></tr><tr><td>manager_rhatUUID</td><td>%s</td></tr><tr><td>cost_center</td><td>%s</td></tr><tr><td>cost_center_description</td><td>%s</td></tr><tr><td>employee_type</td><td>%s</td></tr><tr><td>organization</td><td>%s</td></tr><tr><td>active</td><td>%s</td></tr><tr><td>termination_date</td><td>%s</td></tr>
-</table><p><a href="%s">Continue to PriceTag</a></p></body></html>`,
+
+</table><h2>Decoded claim structure</h2>%s<p><a href="%s">Continue to PriceTag</a></p></body></html>`,
 		note, value(claims.Subject), value(claims.RhatUUID), value(claims.Username), value(claims.Email), value(claims.GivenName), value(claims.FamilyName), groups,
-		value(claims.Country), value(claims.State), value(claims.Region), value(claims.Manager), value(claims.CostCenter), value(claims.CostCenterDescription), value(claims.EmployeeType), value(claims.Organization), active, value(claims.TerminationDate), html.EscapeString(destination))
+		value(claims.Country), value(claims.State), value(claims.Region), value(claims.Manager), value(claims.CostCenter), value(claims.CostCenterDescription), value(claims.EmployeeType), value(claims.Organization), active, value(claims.TerminationDate), rawBlock, html.EscapeString(destination))
 }
