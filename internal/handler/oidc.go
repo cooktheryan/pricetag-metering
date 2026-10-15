@@ -188,6 +188,12 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if providerErr := r.URL.Query().Get("error"); providerErr != "" {
+		description := r.URL.Query().Get("error_description")
+		slog.Warn("OIDC provider denied authorization", "error", providerErr, "description", description)
+		if h.cfg.OIDC.ClaimsDebug {
+			h.renderOIDCProviderError(w, providerErr, description)
+			return
+		}
 		http.Error(w, "SSO authorization was denied", http.StatusUnauthorized)
 		return
 	}
@@ -253,6 +259,15 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	http.Redirect(w, r, h.loginDestination(r, username), http.StatusFound)
+}
+
+func (h *AuthHandler) renderOIDCProviderError(w http.ResponseWriter, providerError, description string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!doctype html><html><head><meta charset="utf-8"><title>OIDC diagnostic</title>
+<style>body{font:16px system-ui;max-width:800px;margin:40px auto;padding:0 20px;background:#0b0e11;color:#e0e3e8}code{color:#f5a97f}</style></head><body>
+<h1>OIDC provider denied authorization</h1><p>This is a development-only diagnostic. No token or secret was displayed.</p>
+<p><strong>error:</strong> <code>%s</code></p><p><strong>error_description:</strong> <code>%s</code></p>
+</body></html>`, html.EscapeString(providerError), html.EscapeString(description))
 }
 
 // renderOIDCClaims is intentionally opt-in and intended only for a
