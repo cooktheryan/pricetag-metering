@@ -67,6 +67,7 @@ kubectl apply -f deploy/
 | `OIDC_POST_LOGOUT_REDIRECT_URL` | No | — | Optional provider logout return URL; local logout always clears the PriceTag session. |
 | `OIDC_SCOPES` | No | `openid profile email groups` | Space- or comma-separated OIDC scopes. |
 | `SESSION_COOKIE_SECURE` | No | `true` | Keep enabled in shared/stage/production. Set `false` only for local HTTP testing. |
+| `OIDC_CLAIMS_DEBUG` | No | `false` | Development/stage-only diagnostic page after OIDC callback. Never enable in production. |
 
 ## CloudEvents Format
 

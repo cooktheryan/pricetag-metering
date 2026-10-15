@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -29,14 +30,24 @@ type oidcState struct {
 }
 
 type oidcClaims struct {
-	Subject    string   `json:"sub"`
-	RhatUUID   string   `json:"rhatUUID"`
-	Username   string   `json:"preferred_username"`
-	Email      string   `json:"email"`
-	GivenName  string   `json:"given_name"`
-	FamilyName string   `json:"family_name"`
-	Groups     []string `json:"groups"`
-	Nonce      string   `json:"nonce"`
+	Subject               string   `json:"sub"`
+	RhatUUID              string   `json:"rhatUUID"`
+	Username              string   `json:"preferred_username"`
+	Email                 string   `json:"email"`
+	GivenName             string   `json:"given_name"`
+	FamilyName            string   `json:"family_name"`
+	Groups                []string `json:"groups"`
+	Nonce                 string   `json:"nonce"`
+	Country               string   `json:"country"`
+	State                 string   `json:"state"`
+	Region                string   `json:"region"`
+	Manager               string   `json:"manager_rhatUUID"`
+	CostCenter            string   `json:"cost_center"`
+	CostCenterDescription string   `json:"cost_center_description"`
+	EmployeeType          string   `json:"employee_type"`
+	Organization          string   `json:"organization"`
+	Active                any      `json:"active"`
+	TerminationDate       string   `json:"termination_date"`
 }
 
 type oidcProvider struct {
@@ -237,5 +248,41 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	}
 	h.setCookie(w, username, claims.Groups, "")
 	slog.Info("user logged in with OIDC", "username", username)
+	if h.cfg.OIDC.ClaimsDebug {
+		h.renderOIDCClaims(w, claims, h.loginDestination(r, username))
+		return
+	}
 	http.Redirect(w, r, h.loginDestination(r, username), http.StatusFound)
+}
+
+// renderOIDCClaims is intentionally opt-in and intended only for a
+// development/stage integration test. It renders decoded claims, never the
+// raw ID token or client secret. Keep OIDC_CLAIMS_DEBUG=false in production.
+func (h *AuthHandler) renderOIDCClaims(w http.ResponseWriter, claims oidcClaims, destination string) {
+	value := func(v string) string {
+		if v == "" {
+			return "<em>not returned</em>"
+		}
+		return html.EscapeString(v)
+	}
+	active := "<em>not returned</em>"
+	if claims.Active != nil {
+		active = html.EscapeString(fmt.Sprint(claims.Active))
+	}
+	groups := "<em>not returned</em>"
+	if len(claims.Groups) > 0 {
+		items := make([]string, 0, len(claims.Groups))
+		for _, group := range claims.Groups {
+			items = append(items, "<li>"+html.EscapeString(group)+"</li>")
+		}
+		groups = "<ul>" + strings.Join(items, "") + "</ul>"
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!doctype html><html><head><meta charset="utf-8"><title>OIDC claim diagnostic</title>
+<style>body{font:16px system-ui;max-width:900px;margin:40px auto;padding:0 20px;background:#0b0e11;color:#e0e3e8}table{border-collapse:collapse;width:100%%}td{border-bottom:1px solid #333;padding:8px}td:first-child{font-family:monospace;color:#8ab4f8;width:260px}a{color:#58a6ff}</style></head><body>
+<h1>OIDC claim diagnostic</h1><p>Development/stage only. The raw token was not displayed.</p><table>
+<tr><td>sub</td><td>%s</td></tr><tr><td>rhatUUID</td><td>%s</td></tr><tr><td>preferred_username</td><td>%s</td></tr><tr><td>email</td><td>%s</td></tr><tr><td>given_name</td><td>%s</td></tr><tr><td>family_name</td><td>%s</td></tr><tr><td>groups</td><td>%s</td></tr><tr><td>country</td><td>%s</td></tr><tr><td>state</td><td>%s</td></tr><tr><td>region</td><td>%s</td></tr><tr><td>manager_rhatUUID</td><td>%s</td></tr><tr><td>cost_center</td><td>%s</td></tr><tr><td>cost_center_description</td><td>%s</td></tr><tr><td>employee_type</td><td>%s</td></tr><tr><td>organization</td><td>%s</td></tr><tr><td>active</td><td>%s</td></tr><tr><td>termination_date</td><td>%s</td></tr>
+</table><p><a href="%s">Continue to PriceTag</a></p></body></html>`,
+		value(claims.Subject), value(claims.RhatUUID), value(claims.Username), value(claims.Email), value(claims.GivenName), value(claims.FamilyName), groups,
+		value(claims.Country), value(claims.State), value(claims.Region), value(claims.Manager), value(claims.CostCenter), value(claims.CostCenterDescription), value(claims.EmployeeType), value(claims.Organization), active, value(claims.TerminationDate), html.EscapeString(destination))
 }

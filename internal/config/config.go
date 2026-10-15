@@ -173,6 +173,7 @@ type Config struct {
 // path until the provider, redirect URI, and rollout have been reviewed.
 type OIDC struct {
 	Enabled               bool
+	ClaimsDebug           bool
 	IssuerURL             string
 	ClientID              string
 	ClientSecret          string
@@ -356,6 +357,7 @@ func Load() Config {
 		},
 		OIDC: OIDC{
 			Enabled:               envBool("OIDC_ENABLED", false),
+			ClaimsDebug:           envBool("OIDC_CLAIMS_DEBUG", false),
 			IssuerURL:             strings.TrimSuffix(os.Getenv("OIDC_ISSUER_URL"), "/"),
 			ClientID:              os.Getenv("OIDC_CLIENT_ID"),
 			ClientSecret:          os.Getenv("OIDC_CLIENT_SECRET"),

@@ -109,6 +109,10 @@ groups are carried in the signed session but do not grant PriceTag roles.
 Given/family names are available in the token but are not copied into the
 browser cookie.
 
+For a controlled Stage/dogfood test, `OIDC_CLAIMS_DEBUG=true` renders a
+diagnostic page at the callback containing the decoded claim values and no raw
+token. Keep this disabled in Production.
+
 Country, state, city, office location, cost center, and manager data are **not
 promised by the SSO registration**. They should continue to come from the
 approved LDAP sync. The existing partner record supports string tags such as
