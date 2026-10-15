@@ -1,8 +1,13 @@
 # Praxis upgrade traffic watcher
 
 `tools/praxis-shadow-traffic.py` is a laptop-side, **PriceTag-only** traffic
-watcher for the Praxis upgrade sequence. It uses the normal PriceTag
-Benchmark route backed by `llm-katan` for the large synthetic load.
+watcher for the Praxis upgrade sequence. It runs one unified evidence stream:
+
+- 96 synthetic users through the normal Benchmark route backed by `llm-katan`,
+  with bounded random `max_tokens` from 1 through 5000;
+- one low-rate real GLM user through the normal `/v1/messages` gateway route;
+- an optional small four-route matrix for Messages, Chat Completions,
+  Responses, and Conversations.
 
 It does not access EnMaaS, create shadow resources, change route weights, or
 call real OpenAI/Anthropic/Vertex/GLM providers by default. Real-provider
@@ -26,7 +31,8 @@ checks are a separate, opt-in small canary matrix.
 
 ## Normal use
 
-The default is a five-minute baseline run with 100 synthetic users:
+The default is a five-minute baseline run with 96 Benchmark users plus one
+low-rate GLM lane:
 
 ```console
 python3 tools/praxis-shadow-traffic.py
@@ -39,10 +45,10 @@ The dashboard shows sent/responses/drops/availability, p50/p95/p99 latency,
 the synthetic user, lane/provider/model, and the served backend (`praxis`,
 `shadow`, or `unknown`). Press `q` to stop early. Evidence defaults to `/tmp`.
 
-The default large load is intentionally Benchmark/llm-katan only. Add
-`--real-matrix` in canary mode to send one small probe through each normal
-gateway path: Messages, Chat Completions, Responses, and Conversations. The
-matrix also uses the normal gateway host and never targets a shadow URL.
+The default large load is Benchmark/llm-katan. The GLM lane is intentionally
+low-rate. Add `--real-matrix` in canary mode to send one small probe through
+each normal gateway path. The matrix also uses the normal gateway host and
+never targets a shadow URL.
 
 ## Dry run
 

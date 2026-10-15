@@ -16,6 +16,7 @@ import hashlib
 import json
 import math
 import os
+import random
 import shutil
 import ssl
 import subprocess
@@ -61,6 +62,8 @@ class Lane:
 class UserSpec:
     label: str
     key: str
+    lane: Lane
+    interval: float
 
 
 @dataclass(frozen=True)
@@ -203,15 +206,15 @@ def percentile(values: list[float], fraction: float) -> float:
 
 
 class Metrics:
-    def __init__(self, users: list[UserSpec], lane: Lane, window_seconds: float) -> None:
+    def __init__(self, users: list[UserSpec], window_seconds: float) -> None:
         self.lock = threading.Lock()
         self.window_seconds = window_seconds
         self.users = {
             user.label: {
                 "user": user.label,
-                "lane": lane.name,
-                "provider": lane.provider,
-                "model": lane.model,
+                "lane": user.lane.name,
+                "provider": user.lane.provider,
+                "model": user.lane.model,
                 "sent": 0,
                 "responses": 0,
                 "ok": 0,
@@ -297,11 +300,13 @@ def backend_from_headers(headers: Any, args: argparse.Namespace) -> str:
     return "praxis" if args.phase == "baseline" else "unknown"
 
 
-def request_once(user: UserSpec, lane: Lane, args: argparse.Namespace, sequence: int) -> dict[str, Any]:
+def request_once(user: UserSpec, args: argparse.Namespace, sequence: int) -> dict[str, Any]:
+    lane = user.lane
+    max_tokens = random.randint(1, 5000) if lane.name == "benchmark" else 1
     body = {
         "model": lane.model,
         "messages": [{"role": "user", "content": "echo"}],
-        "max_tokens": 1,
+        "max_tokens": max_tokens,
     }
     request = urllib.request.Request(
         lane.base_url + lane.path,
@@ -329,6 +334,7 @@ def request_once(user: UserSpec, lane: Lane, args: argparse.Namespace, sequence:
         "backend": "unknown",
         "error_class": None,
         "latency_ms": 0.0,
+        "max_tokens": max_tokens,
     }
     try:
         with urllib.request.urlopen(request, timeout=args.timeout, context=ssl.create_default_context()) as response:
@@ -409,7 +415,8 @@ def matrix_request(probe: MatrixProbe, gateway_url: str, key: str, args: argpars
     return event
 
 
-def scheduler_drop(user: UserSpec, lane: Lane) -> dict[str, Any]:
+def scheduler_drop(user: UserSpec) -> dict[str, Any]:
+    lane = user.lane
     return {
         "event": "scheduler_drop",
         "at": now_utc(),
@@ -431,7 +438,7 @@ def draw_dashboard(stdscr: Any, metrics: Metrics, started: float, page: int, pag
     overall, users = metrics.snapshot()
     height, width = stdscr.getmaxyx()
     header = [
-        "PRAXIS UPGRADE TRAFFIC — PriceTag Benchmark / llm-katan",
+        "PRAXIS UPGRADE TRAFFIC — PriceTag normal routes",
         f"elapsed {time.monotonic() - started:7.1f}s  sent {overall['sent']:,}  responses {overall['responses']:,}  drops {overall['drops']:,}  availability {overall['availability_pct']:.2f}%",
         f"latency p50/p95/p99 {overall['p50_ms']:.0f}/{overall['p95_ms']:.0f}/{overall['p99_ms']:.0f} ms  status {overall['status_codes']}  in-flight {overall['in_flight']}",
         "─" * max(1, width - 1),
@@ -557,7 +564,6 @@ def run_loop(
     stdscr: Any,
     args: argparse.Namespace,
     users: list[UserSpec],
-    lane: Lane,
     metrics: Metrics,
     executor: concurrent.futures.ThreadPoolExecutor,
     stream: Any,
@@ -581,7 +587,7 @@ def run_loop(
         stdscr.clear()
         stdscr.refresh()
     due = {
-        user.label: started + (int.from_bytes(hashlib.sha256(user.label.encode()).digest()[:4], "big") / 2**32) * args.interval
+        user.label: started + (int.from_bytes(hashlib.sha256(user.label.encode()).digest()[:4], "big") / 2**32) * user.interval
         for user in users
     }
     pending: dict[concurrent.futures.Future[dict[str, Any]], UserSpec] = {}
@@ -595,12 +601,12 @@ def run_loop(
             for user in users:
                 if now < due[user.label]:
                     continue
-                due[user.label] = now + args.interval
+                due[user.label] = now + user.interval
                 if metrics.mark_sent(user.label):
                     sequence += 1
-                    pending[executor.submit(request_once, user, lane, args, sequence)] = user
+                    pending[executor.submit(request_once, user, args, sequence)] = user
                 else:
-                    event = scheduler_drop(user, lane)
+                    event = scheduler_drop(user)
                     metrics.record(event)
                     write_event(stream, event)
         for future in [item for item in pending if item.done()]:
@@ -622,9 +628,15 @@ def run_loop(
 
 
 def run_traffic(args: argparse.Namespace, plan: dict[str, Any], key_path: Path) -> int:
-    lane = Lane("benchmark", "anthropic", args.model, plan["benchmark_url"], "/v1/messages")
-    users = [UserSpec(f"shadow-user-{index:03d}", key_path.read_text(encoding="utf-8").strip()) for index in range(1, args.user_count + 1)]
-    metrics = Metrics(users, lane, args.window_seconds)
+    key = key_path.read_text(encoding="utf-8").strip()
+    benchmark_lane = Lane("benchmark", "anthropic", args.model, plan["benchmark_url"], "/v1/messages")
+    glm_lane = Lane("real-glm", "anthropic", args.glm_model, plan["gateway_url"], "/v1/messages")
+    users = [
+        UserSpec(f"shadow-user-{index:03d}", key, benchmark_lane, args.interval)
+        for index in range(1, args.user_count + 1)
+    ]
+    users.append(UserSpec("real-glm", key, glm_lane, args.glm_interval))
+    metrics = Metrics(users, args.window_seconds)
     evidence = Path(args.evidence).expanduser()
     evidence.parent.mkdir(parents=True, exist_ok=True)
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=min(args.concurrency, len(users)))
@@ -638,10 +650,13 @@ def run_traffic(args: argparse.Namespace, plan: dict[str, Any], key_path: Path) 
         "gateway_url_host": urlsplit(plan["gateway_url"]).hostname,
         "benchmark_url_host": urlsplit(plan["benchmark_url"]).hostname,
         "route_name": args.route_name,
-        "users": len(users),
-        "lane": lane.name,
-        "provider": lane.provider,
-        "model": lane.model,
+        "users": args.user_count,
+        "real_glm_users": 1,
+        "real_glm_users": 1,
+        "lanes": [
+            {"lane": benchmark_lane.name, "provider": benchmark_lane.provider, "model": benchmark_lane.model, "base_url_host": urlsplit(benchmark_lane.base_url).hostname},
+            {"lane": glm_lane.name, "provider": glm_lane.provider, "model": glm_lane.model, "base_url_host": urlsplit(glm_lane.base_url).hostname},
+        ],
         "backend_marker_headers": args.marker_headers,
         "retries": 0,
         "real_matrix": args.real_matrix,
@@ -651,9 +666,9 @@ def run_traffic(args: argparse.Namespace, plan: dict[str, Any], key_path: Path) 
             write_event(stream, start_event)
             matrix_line = run_matrix(args, plan, users[0].key, stream) if args.real_matrix else ""
             if use_ui:
-                curses.wrapper(lambda stdscr: run_loop(stdscr, args, users, lane, metrics, executor, stream, started, deadline, matrix_line))
+                curses.wrapper(lambda stdscr: run_loop(stdscr, args, users, metrics, executor, stream, started, deadline, matrix_line))
             else:
-                run_loop(None, args, users, lane, metrics, executor, stream, started, deadline, matrix_line)
+                run_loop(None, args, users, metrics, executor, stream, started, deadline, matrix_line)
             overall, _ = metrics.snapshot()
             write_event(stream, {"event": "run_end", "at": now_utc(), **overall})
     finally:
@@ -676,9 +691,10 @@ def dry_run_plan(args: argparse.Namespace, plan: dict[str, Any], key_path: Path)
         "shadow_route_checked": args.phase == "canary",
         "users": args.user_count,
         "key_file": str(key_path),
-        "lane": "benchmark",
-        "provider": "anthropic",
-        "model": args.model,
+        "lanes": [
+            {"lane": "benchmark", "provider": "anthropic", "model": args.model, "interval": args.interval},
+            {"lane": "real-glm", "provider": "anthropic", "model": args.glm_model, "interval": args.glm_interval},
+        ],
         "retries": 0,
         "real_matrix": args.real_matrix,
     }
@@ -695,12 +711,14 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--gateway-url", help="override the normal PriceTag gateway URL")
     result.add_argument("--gateway-route-name", default="ai-gateway")
     result.add_argument("--model", default=DEFAULT_MODEL)
+    result.add_argument("--glm-model", default="rits/zai-org/glm-5-3")
+    result.add_argument("--glm-interval", type=float, default=30.0, help="seconds between real GLM calls")
     result.add_argument("--real-matrix", action="store_true", help="run one small four-route real-provider/local matrix before the load")
     result.add_argument("--messages-model", default="claude-sonnet-5")
     result.add_argument("--chat-model", default="gpt-5.6-luna")
     result.add_argument("--responses-model", default="gpt-5.3-codex")
     result.add_argument("--key-file", default="~/.mykey")
-    result.add_argument("--user-count", type=int, default=100)
+    result.add_argument("--user-count", type=int, default=96)
     result.add_argument("--interval", type=float, default=5.0)
     result.add_argument("--timeout", type=float, default=20.0)
     result.add_argument("--duration", type=float, default=300.0)
@@ -720,7 +738,7 @@ def main() -> int:
     try:
         if not 1 <= args.user_count <= MAX_USERS:
             raise ConfigError(f"--user-count must be between 1 and {MAX_USERS}")
-        if args.duration <= 0 or args.interval <= 0 or args.timeout <= 0 or args.concurrency <= 0:
+        if args.duration <= 0 or args.interval <= 0 or args.glm_interval <= 0 or args.timeout <= 0 or args.concurrency <= 0:
             raise ConfigError("duration, interval, timeout, and concurrency must be positive")
         if args.real_matrix and args.phase != "canary":
             raise ConfigError("--real-matrix is only allowed in canary phase")
