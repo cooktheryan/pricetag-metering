@@ -437,8 +437,17 @@ def draw_dashboard(stdscr: Any, metrics: Metrics, started: float, page: int, pag
         "─" * max(1, width - 1),
         "USER             LANE       PROVIDER   MODEL              BACKEND  SENT RESP DROP LAST LATENCY",
     ]
+    availability_attr = (
+        curses.color_pair(1) | curses.A_BOLD
+        if overall["availability_pct"] >= 99.5
+        else curses.color_pair(3) | curses.A_BOLD
+        if overall["availability_pct"] >= 95
+        else curses.color_pair(2) | curses.A_BOLD
+    )
+    header_attrs = [curses.color_pair(4) | curses.A_BOLD, availability_attr, curses.A_DIM, curses.color_pair(4), curses.color_pair(4) | curses.A_BOLD]
     if matrix_line:
         header.insert(3, matrix_line)
+        header_attrs.insert(3, curses.color_pair(6))
     usable = max(1, height - len(header) - 2)
     visible = min(page_size if page_size > 0 else usable, usable)
     pages = max(1, math.ceil(len(users) / visible))
@@ -446,15 +455,14 @@ def draw_dashboard(stdscr: Any, metrics: Metrics, started: float, page: int, pag
     shown = users[page * visible : (page + 1) * visible]
     for y, line in enumerate(header):
         try:
-            stdscr.addnstr(y, 0, line, max(0, width - 1))
+            stdscr.addnstr(y, 0, line, max(0, width - 1), header_attrs[y])
         except curses.error:
             pass
     for offset, row in enumerate(shown):
         y = len(header) + offset
-        prefix = (
-            f"{row['user']:<17.17} {row['lane']:<10.10} {row['provider']:<10.10} "
-            f"{row['model']:<18.18} {row['last_backend']:<8.8} {row['sent']:>4} {row['responses']:>4} {row['drops']:>4} "
-        )
+        prefix = f"{row['user']:<17.17} {row['lane']:<10.10} {row['provider']:<10.10} {row['model']:<18.18}"
+        backend = f" {row['last_backend']:<8.8}"
+        counts = f" {row['sent']:>4} {row['responses']:>4} {row['drops']:>4} "
         status = str(row["last"])
         if status == "drop" or (row["last_status"] is not None and row["last_status"] >= 500):
             attr = curses.color_pair(2) | curses.A_BOLD
@@ -465,9 +473,20 @@ def draw_dashboard(stdscr: Any, metrics: Metrics, started: float, page: int, pag
         else:
             attr = 0
         suffix = f"{status:<4.4} {str(row['last_latency_ms'] or 0):>7}ms"
+        backend_attr = (
+            curses.color_pair(5) | curses.A_BOLD
+            if row["last_backend"] == "shadow"
+            else curses.color_pair(4)
+            if row["last_backend"] == "praxis"
+            else curses.color_pair(3)
+        )
         try:
             stdscr.addnstr(y, 0, prefix, max(0, width - 1))
-            stdscr.addnstr(y, len(prefix), suffix, max(0, width - len(prefix) - 1), attr)
+            stdscr.addnstr(y, len(prefix), backend, max(0, width - len(prefix) - 1), backend_attr)
+            counts_start = len(prefix) + len(backend)
+            stdscr.addnstr(y, counts_start, counts, max(0, width - counts_start - 1))
+            status_start = counts_start + len(counts)
+            stdscr.addnstr(y, status_start, suffix, max(0, width - status_start - 1), attr)
         except curses.error:
             pass
     footer = f"page {page + 1}/{pages}  ←/→ page  q quit"
@@ -554,6 +573,9 @@ def run_loop(
             curses.init_pair(1, curses.COLOR_GREEN, -1)
             curses.init_pair(2, curses.COLOR_RED, -1)
             curses.init_pair(3, curses.COLOR_YELLOW, -1)
+            curses.init_pair(4, curses.COLOR_CYAN, -1)
+            curses.init_pair(5, curses.COLOR_MAGENTA, -1)
+            curses.init_pair(6, curses.COLOR_WHITE, -1)
         except curses.error:
             pass
         stdscr.clear()
