@@ -41,9 +41,6 @@ DEFAULT_NAMESPACE = "ai-gateway-dogfood"
 DEFAULT_OPENAI_ROUTE = "ai-gateway-openai-echo"
 DEFAULT_ANTHROPIC_ROUTE = "ai-gateway-glm-echo"
 DEFAULT_GATEWAY_ROUTE = "ai-gateway"
-DEFAULT_OPENAI_URL = "https://ai-gateway-openai-echo-ai-gateway-dogfood.dogfood-us-south-1-bxf-4x-f196230f74f7ff44a5b4eeb1003c5bd5-0000.us-south.containers.appdomain.cloud"
-DEFAULT_ANTHROPIC_URL = "https://ai-gateway-glm-echo-ai-gateway-dogfood.dogfood-us-south-1-bxf-4x-f196230f74f7ff44a5b4eeb1003c5bd5-0000.us-south.containers.appdomain.cloud"
-DEFAULT_GATEWAY_URL = "https://ai-gateway-ai-gateway-dogfood.dogfood-us-south-1-bxf-4x-f196230f74f7ff44a5b4eeb1003c5bd5-0000.us-south.containers.appdomain.cloud"
 DEFAULT_ECHO_MODEL = "benchmark-echo"
 DEFAULT_GLM_MODEL = "rits/zai-org/glm-5-3"
 FORBIDDEN_MARKER = "enmaas"
@@ -121,9 +118,9 @@ def preflight_price_tag(args: argparse.Namespace) -> None:
 
 def route_info(args: argparse.Namespace, name: str) -> dict[str, str]:
     try:
-        raw = json.loads(oc_run(args, ["get", "route", name, "-o", "json"]))
+        raw = json.loads(oc_run(args, ["-n", args.namespace, "get", "route", name, "-o", "json"]))
     except (ConfigError, json.JSONDecodeError) as exc:
-        raise ConfigError(f"PriceTag route {name!r} was not found") from exc
+        raise ConfigError(f"PriceTag route {name!r} was not found in namespace {args.namespace!r}") from exc
     host = raw.get("spec", {}).get("host", "")
     target = raw.get("spec", {}).get("to", {}).get("name", "")
     if not host or not target:
@@ -140,21 +137,20 @@ def ensure_key(args: argparse.Namespace) -> Path:
     return path
 
 
-def endpoint(args: argparse.Namespace, route_name: str, override: str | None, fallback: str) -> str:
-    try:
-        info = route_info(args, route_name)
-        if info["target"] != "praxis":
-            raise ConfigError(f"route {route_name!r} does not target praxis")
-        return safe_url(route_name, f"https://{info['host']}")
-    except ConfigError:
-        return safe_url(route_name, override or fallback)
+def endpoint(args: argparse.Namespace, route_name: str, override: str | None) -> str:
+    if override:
+        return safe_url(route_name, override)
+    info = route_info(args, route_name)
+    if info["target"] != "praxis":
+        raise ConfigError(f"route {route_name!r} does not target praxis")
+    return safe_url(route_name, f"https://{info['host']}")
 
 
 def prepare(args: argparse.Namespace) -> dict[str, Any]:
     preflight_price_tag(args)
-    openai_url = endpoint(args, args.openai_route, args.openai_url, DEFAULT_OPENAI_URL)
-    anthropic_url = endpoint(args, args.anthropic_route, args.anthropic_url, DEFAULT_ANTHROPIC_URL)
-    gateway_url = endpoint(args, args.gateway_route, args.gateway_url, DEFAULT_GATEWAY_URL)
+    openai_url = endpoint(args, args.openai_route, args.openai_url)
+    anthropic_url = endpoint(args, args.anthropic_route, args.anthropic_url)
+    gateway_url = endpoint(args, args.gateway_route, args.gateway_url)
     if args.phase == "canary":
         for resource in ("deployment/praxis-shadow", "service/praxis-shadow"):
             try:
@@ -486,7 +482,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--openai-route", default=DEFAULT_OPENAI_ROUTE); result.add_argument("--anthropic-route", default=DEFAULT_ANTHROPIC_ROUTE)
     result.add_argument("--gateway-route", default=DEFAULT_GATEWAY_ROUTE)
     result.add_argument("--openai-url"); result.add_argument("--anthropic-url"); result.add_argument("--gateway-url")
-    result.add_argument("--openai-model", default=DEFAULT_ECHO_MODEL); result.add_argument("--echo-model", default=DEFAULT_GLM_MODEL)
+    result.add_argument("--openai-model", default=DEFAULT_ECHO_MODEL); result.add_argument("--echo-model", default=DEFAULT_ECHO_MODEL)
     result.add_argument("--glm-model", default=DEFAULT_GLM_MODEL); result.add_argument("--key-file", default="~/.mykey")
     result.add_argument("--user-count", type=int, default=96); result.add_argument("--interval", type=float, default=5.0)
     result.add_argument("--glm-interval", type=float, default=30.0); result.add_argument("--timeout", type=float, default=20.0)

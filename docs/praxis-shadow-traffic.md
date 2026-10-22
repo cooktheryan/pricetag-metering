@@ -23,6 +23,9 @@ single dashboard and JSONL evidence file.
   overridden.
 - EnMaaS markers are rejected before any `oc` command.
 - `oc` is used read-only and only against the configured PriceTag namespace.
+- Route discovery uses the explicit `--namespace`; a missing or non-Praxis route
+  fails closed unless its URL is supplied with `--openai-url`,
+  `--anthropic-url`, or `--gateway-url`.
 - Baseline does not require shadow resources. Canary requires the shadow
   deployment and Service, but still sends to the same normal URLs.
 - No retries; timeouts, resets, incomplete responses, and non-2xx responses are
