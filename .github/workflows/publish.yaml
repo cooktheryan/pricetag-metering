@@ -1,0 +1,41 @@
+name: Publish
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      # Interim namespace: personal (quay.io/modden) with a dedicated push
+      # robot. Migration to a team org is a one-line change here plus the
+      # cluster pull secret.
+      IMAGE: quay.io/modden/enmaas-metering-service
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: |
+          docker build \
+            -t "$IMAGE:main" \
+            -t "$IMAGE:sha-${GITHUB_SHA::7}" \
+            -f Dockerfile .
+
+      - name: Push to quay
+        run: |
+          echo "${{ secrets.QUAY_TOKEN }}" | docker login quay.io \
+            -u "${{ secrets.QUAY_USERNAME }}" --password-stdin
+          docker push "$IMAGE:main"
+          docker push "$IMAGE:sha-${GITHUB_SHA::7}"
+
+      - name: Print digest (for the opps digest pin)
+        run: |
+          docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE:main"
