@@ -63,6 +63,7 @@ h1{margin:0;font-size:21px}
 .team-combo-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .team-combo-sub{color:var(--muted);font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .team-combo-badge{color:var(--accent2);border:1px solid #4da0f855;border-radius:4px;padding:0 4px;font-size:10px;margin-left:6px;vertical-align:1px}
+.team-combo-badge-person{color:var(--muted);border-color:var(--border)}
 .team-combo-empty{padding:14px 10px;color:var(--muted);font-size:12px;text-align:center}
 .team-combo-meta{padding:6px 8px 0;color:var(--muted);font-size:10.5px;text-align:right}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:14px 0 20px}
@@ -197,7 +198,7 @@ td.num{text-align:right}
   <div class="head-row">
     <h1 id="scopeTitle">Team view</h1>
     <div id="teamFilter" class="team-combo" style="display:none">
-      <button id="teamFilterBtn" class="team-combo-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="teamFilterPop" title="Focus on one manager's branch of your team">
+      <button id="teamFilterBtn" class="team-combo-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="teamFilterPop" title="Focus on a team or person">
         <svg class="icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         <span id="teamFilterLabel" class="lbl">Whole organisation</span>
         <svg class="caret" viewBox="0 0 10 6" width="10" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -205,10 +206,10 @@ td.num{text-align:right}
       <div id="teamFilterPop" class="team-combo-pop" hidden>
         <div class="team-combo-search">
           <svg class="icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-          <input id="teamFilterSearch" type="text" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="teamFilterList" aria-label="Search managers by name or username" autocomplete="off" spellcheck="false" placeholder="Search managers by name or username…">
+          <input id="teamFilterSearch" type="text" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="teamFilterList" aria-label="Search anyone by name or username" autocomplete="off" spellcheck="false" placeholder="Search anyone by name or username…">
           <button id="teamFilterClear" class="team-combo-clear" type="button" aria-label="Clear search" hidden>×</button>
         </div>
-        <div id="teamFilterList" class="team-combo-list" role="listbox" aria-label="Teams"></div>
+        <div id="teamFilterList" class="team-combo-list" role="listbox" aria-label="People and teams"></div>
         <div id="teamFilterMeta" class="team-combo-meta" aria-live="polite"></div>
       </div>
     </div>
@@ -260,7 +261,7 @@ td.num{text-align:right}
     <canvas id="tl" height="70"></canvas>
   </div>
   <div class="panel">
-    <h2>Team members <span class="dim" style="text-transform:none;letter-spacing:0;font-weight:400">— click a person for their per-model breakdown</span></h2>
+    <h2><span id="membersTitle">Team members</span> <span class="dim" style="text-transform:none;letter-spacing:0;font-weight:400">— click a person for their per-model breakdown</span></h2>
     <div style="overflow-x:auto">
     <table>
       <thead><tr>
@@ -424,14 +425,16 @@ function budgetCell(r){
     <span class="gauge ${cls}"><i style="width:${pct}%"></i></span></div>`;
 }
 
-// Drill into one manager's branch. The server re-checks that the root is
-// inside the caller's subtree, so a bad slug just yields a 403 -> error row.
+// Drill into one team's branch or one person's usage. The server re-checks
+// that the root is inside the caller's subtree, so a bad slug just yields a
+// 403 -> error row.
 function drillTo(slug){
   if(slug===drillRoot)slug=''; // drilling into one's own root IS the whole team
   drillSlug=slug;
   if(slug){
     const m=rows0.find(r=>r.slug===slug);
-    document.getElementById('scopeTitle').textContent=(m?m.full_name:'Team')+'’s team';
+    const name=m?(m.full_name||m.username||m.slug):'Team';
+    document.getElementById('scopeTitle').textContent=name+(m&&!m.is_manager?'’s usage':'’s team');
   } else {
     document.getElementById('scopeTitle').textContent=defaultTitle();
   }
@@ -446,11 +449,11 @@ const TEAM_SEARCH_LIMIT=200;
 function teamNorm(s){
   return String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 }
-function teamPath(r){
+function teamPath(r,bySlug){
   const out=[]; let cur=r; const seen=new Set();
   while(cur.manager_slug&&!seen.has(cur.manager_slug)){
     seen.add(cur.manager_slug);
-    const p=rows0.find(x=>x.slug===cur.manager_slug);
+    const p=bySlug?bySlug.get(cur.manager_slug):rows0.find(x=>x.slug===cur.manager_slug);
     if(!p)break;
     out.unshift(p.full_name||p.username||p.slug);
     cur=p;
@@ -474,21 +477,22 @@ function positionTeamPopover(){
 }
 function buildFilter(){
   const combo=document.getElementById('teamFilter');
-  const mgrs=rows0.filter(r=>r.is_manager&&r.slug!==drillRoot);
-  // Sub-managers are the drill targets; with none there is nothing to focus.
-  if(!mgrs.length&&!drillSlug){combo.style.display='none';closeTeamCombo(false);return;}
+  const people=rows0.filter(r=>r.slug!==drillRoot);
+  // With no reports and no active person root there is nothing to focus.
+  if(!people.length&&!drillSlug){combo.style.display='none';closeTeamCombo(false);return;}
   const whole=adminScope?'Whole organisation':'Whole team';
   const selected=rows0.find(r=>r.slug===drillSlug);
-  const label=selected?selected.full_name:(drillSlug?'Team':whole);
+  const label=selected?(selected.full_name||selected.username||selected.slug):(drillSlug?'Team':whole);
   const lbl=document.getElementById('teamFilterLabel');
   lbl.textContent=label; lbl.title=label;
-  mgrs.sort((a,b)=>String(a.full_name||a.username||a.slug).localeCompare(String(b.full_name||b.username||b.slug)));
-  teamOptions=[{slug:'',name:whole,username:'',path:[],root:true}].concat(mgrs.map(r=>({
+  people.sort((a,b)=>String(a.full_name||a.username||a.slug).localeCompare(String(b.full_name||b.username||b.slug)));
+  const bySlug=new Map(rows0.map(r=>[r.slug,r]));
+  teamOptions=[{slug:'',name:whole,username:'',path:[],root:true}].concat(people.map(r=>({
     slug:r.slug,
     name:r.full_name||r.username||r.slug,
     username:r.username||r.slug||'',
-    path:teamPath(r),
-    manager:true
+    path:teamPath(r,bySlug),
+    manager:!!r.is_manager
   })));
   combo.style.display='';
   if(teamIsOpen())renderTeamOptions();
@@ -512,8 +516,11 @@ function teamScore(o,terms){
   return score;
 }
 function teamSub(o){
-  if(o.root)return adminScope?'All teams in the organisation':'Everyone in your team';
-  const base=o.path&&o.path.length?'↳ under '+o.path.join(' › '):'Top-level manager';
+  if(o.root)return adminScope?'All teams and people in the organisation':'Everyone in your team';
+  const kind=o.manager?'Team':'Person';
+  const base=o.path&&o.path.length
+    ? kind+' · ↳ under '+o.path.join(' › ')
+    : (o.manager?'Top-level manager':'Person · no manager listed');
   const user=o.username&&teamNorm(o.username)!==teamNorm(o.name)?' · @'+o.username:'';
   return base+user;
 }
@@ -525,21 +532,27 @@ function renderTeamOptions(){
   const terms=q?q.split(/\s+/).filter(Boolean):[];
   let ranked=teamOptions.map(opt=>({opt,score:teamScore(opt,terms)})).filter(x=>x.score>=0);
   if(terms.length)ranked.sort((a,b)=>a.score-b.score||a.opt.name.localeCompare(b.opt.name));
+  else{
+    ranked=ranked.filter(x=>x.opt.root||x.opt.manager||x.opt.slug===drillSlug);
+    const selectedIndex=ranked.findIndex(x=>x.opt.slug===drillSlug);
+    if(selectedIndex>1)ranked.splice(1,0,ranked.splice(selectedIndex,1)[0]);
+  }
   const total=ranked.length, shown=ranked.slice(0,TEAM_SEARCH_LIMIT);
-  const managerTotal=ranked.filter(x=>!x.opt.root).length;
-  const managerShown=shown.filter(x=>!x.opt.root).length;
+  const managerTotal=ranked.filter(x=>x.opt.manager).length;
+  const managerShown=shown.filter(x=>x.opt.manager).length;
   teamMatched=shown.map(x=>x.opt);
   const si=teamMatched.findIndex(o=>o.slug===drillSlug);
   teamActive=si>=0?si:(teamMatched.length?0:-1);
   list.innerHTML=shown.length?shown.map((x,i)=>{
     const o=x.opt, sel=o.slug===drillSlug, sub=teamSub(o);
+    const badge=o.root?'':(o.manager?'<span class="team-combo-badge">team</span>':'<span class="team-combo-badge team-combo-badge-person">person</span>');
     return '<div id="teamFilterOpt-'+i+'" class="team-combo-opt" role="option" aria-selected="'+sel+'" data-slug="'+esc(o.slug)+'" data-index="'+i+'" aria-label="'+esc(o.name+(sub?', '+sub:''))+'">'
       +'<span class="team-combo-check" aria-hidden="true">'+(sel?'✓':'')+'</span>'
-      +'<span class="team-combo-text"><span class="team-combo-name">'+esc(o.name)+(o.manager?'<span class="team-combo-badge">mgr</span>':'')+'</span><span class="team-combo-sub" title="'+esc(sub)+'">'+esc(sub)+'</span></span></div>';
+      +'<span class="team-combo-text"><span class="team-combo-name">'+esc(o.name)+badge+'</span><span class="team-combo-sub" title="'+esc(sub)+'">'+esc(sub)+'</span></span></div>';
   }).join(''):'<div class="team-combo-empty">No people or teams match “'+esc(search.value.trim())+'”.</div>';
   meta.textContent=terms.length
     ? (total?(total>shown.length?'Showing '+shown.length+' of '+total+' matches':total+' match'+(total===1?'':'es')):'')
-    : (managerTotal?(managerTotal>managerShown?'Showing '+managerShown+' of '+managerTotal+' managers':managerTotal+' manager'+(managerTotal===1?'':'s')):'');
+    : (managerTotal?(managerTotal>managerShown?'Showing '+managerShown+' of '+managerTotal+' managers · type to search all people':managerTotal+' manager'+(managerTotal===1?'':'s')+' · type to search all people'):'Type to search all people');
   syncTeamActive();
 }
 function syncTeamActive(){
@@ -630,12 +643,16 @@ async function load(){
     const active=rows.filter(r=>r.requests>0).length;
     document.getElementById('kPeople').textContent=rows.length;
     document.getElementById('kPeopleS').textContent=active+' with usage this window';
+    const selected=drillSlug?(rows0.find(r=>r.slug===drillSlug)||rows[0]):null;
+    const personView=!!(selected&&!selected.is_manager);
+    document.getElementById('membersTitle').textContent=personView?'Person usage':(adminScope&&!drillSlug?'Organisation members':'Team members');
     // The boot subtitle counts directory identities; once the roster is in,
     // restate it as people and key-holders so "46 in your tree" and the
     // Members tile (113) can't look like they disagree.
     const keyed=rows.filter(r=>r.username).length;
-    document.getElementById('scopeSub').textContent=
-      rows.length+' people in your tree · '+keyed+' with a gateway key · their spend and yours, this window';
+    document.getElementById('scopeSub').textContent=personView
+      ? 'Individual usage · '+keyed+' with a gateway key · this window'
+      : rows.length+' people in your tree · '+keyed+' with a gateway key · their spend and yours, this window';
     // Team budget: both sums cover the calendar month (quota_spent_usd is
     // deliberately month-to-date on the server, whatever range is shown).
     const lim=rows.reduce((s,r)=>s+(r.quota_usd||0),0);
@@ -905,7 +922,7 @@ async function boot(){
     // lands in the manager branch above and sees their own tree.
     adminScope=true;
     document.getElementById('scopeTitle').textContent='Org view';
-    document.getElementById('scopeSub').textContent='Super admin — everyone in the organisation, one table. Filter to any manager’s branch above.';
+    document.getElementById('scopeSub').textContent='Super admin — everyone in the organisation, one table. Filter to any team or person above.';
     document.getElementById('kBudgetL').textContent='Org budget';
   }
   loadInbox();
