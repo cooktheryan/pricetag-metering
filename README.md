@@ -44,6 +44,13 @@ docker compose up
 kubectl apply -f deploy/
 ```
 
+### Image publishing
+
+Images are built and pushed to Quay on every push to `main`. See
+[docs/operations/image-publishing.md](docs/operations/image-publishing.md)
+for the image location, ownership, credential rotation, and release/promotion
+policy.
+
 ### Environment Variables
 
 | Variable | Required | Default | Description |

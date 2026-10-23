@@ -13,29 +13,69 @@ jobs:
     permissions:
       contents: read
     env:
-      # Interim namespace: personal (quay.io/modden) with a dedicated push
-      # robot. Migration to a team org is a one-line change here plus the
-      # cluster pull secret.
+      # Interim namespace: personal (quay.io/modden) with a repo-scoped
+      # builder robot. Ownership, rotation, and the Konflux exit are documented
+      # in docs/operations/image-publishing.md. Migration to an org-owned repo
+      # is a one-line change here plus the cluster pull secret.
       IMAGE: quay.io/modden/enmaas-metering-service
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
       - name: Build image
         run: |
           docker build \
+            --platform linux/amd64 \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.version=$GITHUB_REF_NAME" \
             -t "$IMAGE:main" \
-            -t "$IMAGE:sha-${GITHUB_SHA::7}" \
+            -t "$IMAGE:sha-$GITHUB_SHA" \
             -f Dockerfile .
 
-      - name: Push to quay
+      - name: Log in to Quay
+        env:
+          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
         run: |
-          echo "${{ secrets.QUAY_TOKEN }}" | docker login quay.io \
-            -u "${{ secrets.QUAY_USERNAME }}" --password-stdin
-          docker push "$IMAGE:main"
-          docker push "$IMAGE:sha-${GITHUB_SHA::7}"
+          printf '%s' "$QUAY_TOKEN" | docker login quay.io \
+            -u "$QUAY_USERNAME" --password-stdin
 
-      - name: Print digest (for the opps digest pin)
+      - name: Push full-SHA tag
+        run: docker push "$IMAGE:sha-$GITHUB_SHA"
+
+      - name: Record digest
+        id: digest
         run: |
-          docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE:main"
+          digest="$(docker buildx imagetools inspect \
+            "$IMAGE:sha-$GITHUB_SHA" --format '{{.Manifest.Digest}}')"
+          test -n "$digest"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Published metering image"
+            echo ""
+            echo "\`$IMAGE@$digest\`"
+            echo ""
+            echo "- commit: \`$GITHUB_SHA\`"
+            echo "- ref: \`$GITHUB_REF\`"
+            echo "- workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Move main tag
+        run: docker push "$IMAGE:main"
+
+      - name: Log out of Quay
+        if: always()
+        run: docker logout quay.io || true
