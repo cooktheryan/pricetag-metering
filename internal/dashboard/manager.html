@@ -38,7 +38,34 @@ main{max-width:1080px;margin:0 auto;padding:22px 18px 48px}
 .head-row{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
 h1{margin:0;font-size:21px}
 .sub{color:var(--muted);margin:4px 0 18px}
-.team-filter{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:5px 9px;font-size:13px;max-width:280px}
+/* Searchable scope picker (replaces the native select). */
+.team-combo{position:relative;min-width:210px;max-width:320px}
+.team-combo-trigger{display:flex;align-items:center;gap:8px;width:100%;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:5px 9px;font:inherit;font-size:13px;cursor:pointer;text-align:left}
+.team-combo-trigger:hover,.team-combo-trigger:focus-visible{border-color:var(--accent2);outline:none}
+.team-combo-trigger .icon{color:var(--muted);font-size:14px;line-height:1}
+.team-combo-trigger .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-combo-trigger .caret{flex:0 0 auto;color:var(--muted)}
+.team-combo-pop{position:absolute;z-index:60;top:calc(100% + 6px);left:0;width:min(390px,calc(100vw - 36px));max-height:min(65vh,480px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--border);border-radius:9px;box-shadow:0 16px 40px #0009;padding:8px}
+.team-combo-pop[hidden]{display:none}
+.team-combo-search{display:flex;align-items:center;gap:7px;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:6px 8px}
+.team-combo-search:focus-within{border-color:var(--accent2)}
+.team-combo-search .icon{color:var(--muted);font-size:14px;line-height:1}
+.team-combo-search input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--text);font:inherit;font-size:13px}
+.team-combo-search input::placeholder{color:var(--muted)}
+.team-combo-clear{background:none;border:0;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0 2px}
+.team-combo-clear:hover{color:var(--text)}
+.team-combo-list{overflow:auto;margin-top:6px;padding:2px;min-height:0}
+.team-combo-opt{display:flex;align-items:flex-start;gap:7px;border-radius:6px;padding:7px 8px;font-size:13px;line-height:1.25;cursor:pointer;color:var(--text)}
+.team-combo-opt:hover,.team-combo-opt.active{background:#1b2638}
+.team-combo-opt[aria-selected="true"]{background:#1b2c44}
+.team-combo-check{flex:0 0 14px;width:14px;margin-top:1px;color:var(--accent2);font-weight:700;text-align:center}
+.team-combo-text{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.team-combo-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-combo-sub{color:var(--muted);font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.team-combo-badge{color:var(--accent2);border:1px solid #4da0f855;border-radius:4px;padding:0 4px;font-size:10px;margin-left:6px;vertical-align:1px}
+.team-combo-badge-person{color:var(--muted);border-color:var(--border)}
+.team-combo-empty{padding:14px 10px;color:var(--muted);font-size:12px;text-align:center}
+.team-combo-meta{padding:6px 8px 0;color:var(--muted);font-size:10.5px;text-align:right}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:14px 0 20px}
 .kpi{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:13px 15px}
 .kpi .l{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
@@ -170,7 +197,22 @@ td.num{text-align:right}
 <main>
   <div class="head-row">
     <h1 id="scopeTitle">Team view</h1>
-    <select id="teamFilter" class="team-filter" title="Focus on one manager's branch of your team" onchange="drillTo(this.value)" style="display:none"></select>
+    <div id="teamFilter" class="team-combo" style="display:none">
+      <button id="teamFilterBtn" class="team-combo-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="teamFilterPop" title="Focus on a team or person">
+        <svg class="icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span id="teamFilterLabel" class="lbl">Whole organisation</span>
+        <svg class="caret" viewBox="0 0 10 6" width="10" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div id="teamFilterPop" class="team-combo-pop" hidden>
+        <div class="team-combo-search">
+          <svg class="icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <input id="teamFilterSearch" type="text" role="combobox" aria-autocomplete="list" aria-controls="teamFilterList" aria-label="Search anyone by name or username" aria-expanded="false" autocomplete="off" spellcheck="false" placeholder="Search anyone by name or username…">
+          <button id="teamFilterClear" class="team-combo-clear" type="button" aria-label="Clear search" hidden>×</button>
+        </div>
+        <div id="teamFilterList" class="team-combo-list" role="listbox" aria-label="People and teams"></div>
+        <div id="teamFilterMeta" class="team-combo-meta" aria-live="polite"></div>
+      </div>
+    </div>
     <div class="ranges" id="ranges" style="margin-left:auto;display:flex;gap:2px">
       <button data-r="24h" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:4px 10px;cursor:pointer;font-size:12.5px">24h</button>
       <button data-r="7d" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:4px 10px;cursor:pointer;font-size:12.5px">7d</button>
@@ -219,7 +261,7 @@ td.num{text-align:right}
     <canvas id="tl" height="70"></canvas>
   </div>
   <div class="panel">
-    <h2>Team members <span class="dim" style="text-transform:none;letter-spacing:0;font-weight:400">— click a person for their per-model breakdown</span></h2>
+    <h2><span id="membersTitle">Team members</span> <span class="dim" style="text-transform:none;letter-spacing:0;font-weight:400">— click a person for their per-model breakdown</span></h2>
     <div style="overflow-x:auto">
     <table>
       <thead><tr>
@@ -383,14 +425,16 @@ function budgetCell(r){
     <span class="gauge ${cls}"><i style="width:${pct}%"></i></span></div>`;
 }
 
-// Drill into one manager's branch. The server re-checks that the root is
-// inside the caller's subtree, so a bad slug just yields a 403 -> error row.
+// Drill into one team's branch or one person's usage. The server re-checks
+// that the root is inside the caller's subtree, so a bad slug just yields a
+// 403 -> error row.
 function drillTo(slug){
   if(slug===drillRoot)slug=''; // drilling into one's own root IS the whole team
   drillSlug=slug;
   if(slug){
     const m=rows0.find(r=>r.slug===slug);
-    document.getElementById('scopeTitle').innerHTML='<span class="demo-pii">'+esc(m?m.full_name:'Team')+'</span>’s team';
+    const name=m?(m.full_name||m.username||m.slug):'Team';
+    document.getElementById('scopeTitle').innerHTML='<span class="demo-pii">'+esc(name)+'</span>'+(m&&!m.is_manager?'’s usage':'’s team');
   } else {
     document.getElementById('scopeTitle').textContent=defaultTitle();
   }
@@ -399,19 +443,240 @@ function drillTo(slug){
 }
 function defaultTitle(){ return adminScope ? 'Org view' : 'Team view' }
 let rows0=[]; // full (undrilled) roster, kept for filter labels/titles
+let teamOptions=[], teamMatched=[], teamActive=-1;
+const TEAM_SEARCH_LIMIT=200;
 
+function teamNorm(s){
+  return String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+}
+function teamPath(r,bySlug){
+  const out=[]; let cur=r; const seen=new Set();
+  while(cur.manager_slug&&!seen.has(cur.manager_slug)){
+    seen.add(cur.manager_slug);
+    const p=bySlug?bySlug.get(cur.manager_slug):rows0.find(x=>x.slug===cur.manager_slug);
+    if(!p)break;
+    out.unshift(p.full_name||p.username||p.slug);
+    cur=p;
+  }
+  return out;
+}
+function teamIsOpen(){
+  const pop=document.getElementById('teamFilterPop');
+  return !!pop&&!pop.hidden;
+}
+function positionTeamPopover(){
+  const combo=document.getElementById('teamFilter');
+  const pop=document.getElementById('teamFilterPop');
+  if(!combo||!pop||pop.hidden)return;
+  pop.style.left='0px';
+  const cr=combo.getBoundingClientRect(), pr=pop.getBoundingClientRect();
+  const pad=16;
+  if(cr.left+pr.width>window.innerWidth-pad){
+    pop.style.left=Math.min(0,window.innerWidth-pad-pr.width-cr.left)+'px';
+  }
+}
 function buildFilter(){
-  const sel=document.getElementById('teamFilter');
-  const mgrs=rows0.filter(r=>r.is_manager&&r.slug!==drillRoot);
-  // Sub-managers are the drill targets; with none there is nothing to focus.
-  if(!mgrs.length&&!drillSlug){sel.style.display='none';return;}
-  const depth=r=>{let d=0,cur=r;const seen=new Set();while(cur.manager_slug&&!seen.has(cur.manager_slug)){seen.add(cur.manager_slug);const p=rows0.find(x=>x.slug===cur.manager_slug);if(!p)break;cur=p;d++;}return d;};
-  sel.innerHTML='<option value="">'+(adminScope?'Whole organisation':'Whole team')+'</option>'+mgrs.sort((a,b)=>depth(a)-depth(b)).map(r=>{
-    const d=depth(r);
-    const name=demoPrivacyEnabled()?demoUserName(r.full_name,d):r.full_name;
-    return '<option value="'+esc(r.slug)+'"'+(r.slug===drillSlug?' selected':'')+'>'+esc('　'.repeat(d)+name)+'</option>';
-  }).join('');
-  sel.style.display='';
+  const combo=document.getElementById('teamFilter');
+  const people=rows0.filter(r=>r.slug!==drillRoot);
+  // With no reports and no active person root there is nothing to focus.
+  if(!people.length&&!drillSlug){combo.style.display='none';closeTeamCombo(false);return;}
+  const whole=adminScope?'Whole organisation':'Whole team';
+  const selected=rows0.find(r=>r.slug===drillSlug);
+  const label=selected?(selected.full_name||selected.username||selected.slug):(drillSlug?'Team':whole);
+  const lbl=document.getElementById('teamFilterLabel');
+  lbl.textContent='';
+  if(selected&&demoPrivacyEnabled()){
+    const span=document.createElement('span');
+    span.className='demo-pii';
+    span.textContent=label;
+    lbl.appendChild(span);
+    lbl.title=demoUserName(label,0);
+  }else{
+    lbl.textContent=label;
+    lbl.title=label;
+  }
+  people.sort((a,b)=>String(a.full_name||a.username||a.slug).localeCompare(String(b.full_name||b.username||b.slug)));
+  const bySlug=new Map(rows0.map(r=>[r.slug,r]));
+  teamOptions=[{slug:'',name:whole,username:'',path:[],root:true}].concat(people.map(r=>({
+    slug:r.slug,
+    name:r.full_name||r.username||r.slug,
+    username:r.username||'',
+    path:teamPath(r,bySlug),
+    managerSlug:r.manager_slug||'',
+    manager:!!r.is_manager
+  })));
+  combo.style.display='';
+  if(teamIsOpen())renderTeamOptions();
+}
+function teamScore(o,terms){
+  if(!terms.length)return 0;
+  if(o.root){
+    const hay=teamNorm(o.name+(adminScope?' organisation organization all':' team all')+' teams everyone');
+    return terms.every(t=>hay.includes(t))?0:-1;
+  }
+  const name=teamNorm(o.name), user=teamNorm(o.username), path=teamNorm((o.path||[]).join(' '));
+  let score=0;
+  for(const term of terms){
+    const inName=name.indexOf(term), inUser=user.indexOf(term), inPath=path.indexOf(term);
+    if(inName<0&&inUser<0&&inPath<0)return -1;
+    if(name===term||user===term)score+=0;
+    else if(name.startsWith(term)||user.startsWith(term))score+=1;
+    else if(name.split(/\s+/).some(w=>w.startsWith(term)))score+=2;
+    else score+=3;
+  }
+  return score;
+}
+function teamDisplayName(o){
+  const n=o.name||'';
+  return (o.root||!demoPrivacyEnabled())?esc(n):'<span class="demo-pii">'+esc(n)+'</span>';
+}
+function teamSubParts(o){
+  if(o.root){
+    const text=adminScope?'All teams and people in the organisation':'Everyone in your team';
+    return {html:esc(text),text};
+  }
+  const kind=o.manager?'Team':'Person';
+  let html,text;
+  if(o.path&&o.path.length){
+    html=kind+' · ↳ under '+o.path.map(n=>demoPrivacyEnabled()?'<span class="demo-pii">'+esc(n)+'</span>':esc(n)).join(' › ');
+    text=kind+' · ↳ under '+o.path.map(n=>demoPrivacyEnabled()?demoUserName(n,0):n).join(' › ');
+  }else{
+    text=o.managerSlug?kind+' · manager outside this view':(o.manager?'Top-level manager':'Person · no manager listed');
+    html=esc(text);
+  }
+  let tailHtml='',tailText='';
+  if(!o.username){tailText=' · no key yet';tailHtml=esc(tailText);}
+  else if(!demoPrivacyEnabled()&&teamNorm(o.username)!==teamNorm(o.name)){tailText=' · @'+o.username;tailHtml=esc(tailText);}
+  return {html:html+tailHtml,text:text+tailText};
+}
+function renderTeamOptions(){
+  const search=document.getElementById('teamFilterSearch');
+  const list=document.getElementById('teamFilterList');
+  const meta=document.getElementById('teamFilterMeta');
+  const q=teamNorm(search.value.trim());
+  const terms=q?q.split(/\s+/).filter(Boolean):[];
+  let ranked=teamOptions.map(opt=>({opt,score:teamScore(opt,terms)})).filter(x=>x.score>=0);
+  const rootOpt=teamOptions.find(o=>o.root);
+  let rootMatched=false;
+  if(terms.length){
+    ranked.sort((a,b)=>a.score-b.score||a.opt.name.localeCompare(b.opt.name));
+    const rootEntry=rootOpt?ranked.find(x=>x.opt===rootOpt):null;
+    rootMatched=!!rootEntry;
+    // Keep the whole-organisation/whole-team reset option pinned when the
+    // query has any results, but leave an honest empty state when it doesn't.
+    if(rootEntry||ranked.some(x=>!x.opt.root)){
+      if(rootEntry){
+        const i=ranked.indexOf(rootEntry);
+        if(i>0)ranked.splice(0,0,ranked.splice(i,1)[0]);
+      }else if(rootOpt)ranked.unshift({opt:rootOpt,score:0});
+    }
+  }else{
+    ranked=ranked.filter(x=>x.opt.root||x.opt.manager||x.opt.slug===drillSlug);
+    const selectedIndex=ranked.findIndex(x=>x.opt.slug===drillSlug);
+    if(selectedIndex>1)ranked.splice(1,0,ranked.splice(selectedIndex,1)[0]);
+  }
+  const shown=ranked.slice(0,TEAM_SEARCH_LIMIT);
+  const matchTotal=ranked.filter(x=>!x.opt.root).length+(rootMatched?1:0);
+  const matchShown=shown.filter(x=>!x.opt.root).length+(rootMatched?1:0);
+  const managerTotal=ranked.filter(x=>x.opt.manager).length;
+  const managerShown=shown.filter(x=>x.opt.manager).length;
+  teamMatched=shown.map(x=>x.opt);
+  let activeIndex=drillSlug?teamMatched.findIndex(o=>o.slug===drillSlug):-1;
+  if(activeIndex<0&&terms.length)activeIndex=teamMatched.findIndex(o=>!o.root);
+  if(activeIndex<0)activeIndex=teamMatched.length?0:-1;
+  teamActive=activeIndex;
+  list.innerHTML=shown.length?shown.map((x,i)=>{
+    const o=x.opt, sel=o.slug===drillSlug, sub=teamSubParts(o);
+    const nameText=(o.root||!demoPrivacyEnabled())?o.name:demoUserName(o.name,0);
+    const badge=o.root?'':(o.manager?'<span class="team-combo-badge">team</span>':'<span class="team-combo-badge team-combo-badge-person">person</span>');
+    return '<div id="teamFilterOpt-'+i+'" class="team-combo-opt" role="option" aria-selected="'+sel+'" data-slug="'+esc(o.slug)+'" data-index="'+i+'" aria-label="'+esc(nameText+(sub.text?', '+sub.text:''))+'">'
+      +'<span class="team-combo-check" aria-hidden="true">'+(sel?'✓':'')+'</span>'
+      +'<span class="team-combo-text"><span class="team-combo-name">'+teamDisplayName(o)+badge+'</span><span class="team-combo-sub" title="'+esc(sub.text)+'">'+sub.html+'</span></span></div>';
+  }).join(''):'<div class="team-combo-empty">No people or teams match “'+esc(search.value.trim())+'”.</div>';
+  meta.textContent=terms.length
+    ? (matchTotal?(matchTotal>matchShown?'Showing '+matchShown+' of '+matchTotal+' matches':matchTotal+' match'+(matchTotal===1?'':'es')):'No matches')
+    : (managerTotal?(managerTotal>managerShown?'Showing '+managerShown+' of '+managerTotal+' managers · type to search all people':managerTotal+' manager'+(managerTotal===1?'':'s')+' · type to search all people'):'Type to search all people');
+  syncTeamActive();
+}
+function syncTeamActive(){
+  const list=document.getElementById('teamFilterList');
+  const search=document.getElementById('teamFilterSearch');
+  const nodes=list.querySelectorAll('.team-combo-opt');
+  nodes.forEach((n,i)=>n.classList.toggle('active',i===teamActive));
+  const active=nodes[teamActive];
+  if(active){search.setAttribute('aria-activedescendant',active.id);active.scrollIntoView({block:'nearest'});}
+  else search.removeAttribute('aria-activedescendant');
+}
+function moveTeamActive(delta){
+  if(!teamMatched.length)return;
+  teamActive=(teamActive+delta+teamMatched.length)%teamMatched.length;
+  syncTeamActive();
+}
+function openTeamCombo(){
+  if(!teamOptions.length)return;
+  const pop=document.getElementById('teamFilterPop');
+  const btn=document.getElementById('teamFilterBtn');
+  const search=document.getElementById('teamFilterSearch');
+  const clear=document.getElementById('teamFilterClear');
+  pop.hidden=false; btn.setAttribute('aria-expanded','true'); search.setAttribute('aria-expanded','true');
+  search.value=''; clear.hidden=true;
+  renderTeamOptions();
+  positionTeamPopover();
+  requestAnimationFrame(()=>{positionTeamPopover();search.focus();});
+}
+function closeTeamCombo(focus){
+  const pop=document.getElementById('teamFilterPop');
+  const btn=document.getElementById('teamFilterBtn');
+  if(pop.hidden)return;
+  pop.hidden=true; btn.setAttribute('aria-expanded','false');
+  const search=document.getElementById('teamFilterSearch');
+  search.setAttribute('aria-expanded','false'); search.removeAttribute('aria-activedescendant');
+  if(focus)btn.focus();
+}
+function chooseTeam(slug){
+  closeTeamCombo(true);
+  drillTo(slug);
+}
+function setupTeamCombobox(){
+  const combo=document.getElementById('teamFilter');
+  const btn=document.getElementById('teamFilterBtn');
+  const pop=document.getElementById('teamFilterPop');
+  const search=document.getElementById('teamFilterSearch');
+  const list=document.getElementById('teamFilterList');
+  const clear=document.getElementById('teamFilterClear');
+  if(!combo||!btn||!pop||!search||!list||!clear)return;
+  btn.addEventListener('click',e=>{e.stopPropagation();pop.hidden?openTeamCombo():closeTeamCombo(true);});
+  btn.addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'||e.key==='Enter'||e.key===' '){e.preventDefault();openTeamCombo();}
+  });
+  search.addEventListener('input',()=>{clear.hidden=!search.value;renderTeamOptions();});
+  search.addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'){e.preventDefault();moveTeamActive(1);}
+    else if(e.key==='ArrowUp'){e.preventDefault();moveTeamActive(-1);}
+    else if(e.key==='Home'&&!search.value){e.preventDefault();if(teamMatched.length){teamActive=0;syncTeamActive();}}
+    else if(e.key==='End'&&!search.value){e.preventDefault();if(teamMatched.length){teamActive=teamMatched.length-1;syncTeamActive();}}
+    else if(e.key==='PageDown'){e.preventDefault();moveTeamActive(10);}
+    else if(e.key==='PageUp'){e.preventDefault();moveTeamActive(-10);}
+    else if(e.key==='Enter'){e.preventDefault();const opt=teamMatched[teamActive];if(opt)chooseTeam(opt.slug);}
+    else if(e.key==='Escape'){e.preventDefault();closeTeamCombo(true);}
+    else if(e.key==='Tab'){closeTeamCombo(false);}
+  });
+  list.addEventListener('mousedown',e=>{
+    if(e.button!==0)return;
+    const opt=e.target.closest('.team-combo-opt');
+    if(!opt)return;
+    e.preventDefault();
+    chooseTeam(opt.dataset.slug);
+  });
+  list.addEventListener('mousemove',e=>{
+    const opt=e.target.closest('.team-combo-opt');
+    if(!opt)return;
+    const i=Number(opt.dataset.index);
+    if(i!==teamActive){teamActive=i;syncTeamActive();}
+  });
+  clear.addEventListener('click',()=>{search.value='';clear.hidden=true;renderTeamOptions();search.focus();});
+  document.addEventListener('mousedown',e=>{if(!pop.hidden&&!combo.contains(e.target))closeTeamCombo(false);});
+  window.addEventListener('resize',()=>{if(teamIsOpen())positionTeamPopover();});
 }
 
 async function load(){
@@ -425,12 +690,16 @@ async function load(){
     const active=rows.filter(r=>r.requests>0).length;
     document.getElementById('kPeople').textContent=rows.length;
     document.getElementById('kPeopleS').textContent=active+' with usage this window';
+    const selected=drillSlug?rows0.find(r=>r.slug===drillSlug):null;
+    const personView=!!(selected&&!selected.is_manager);
+    document.getElementById('membersTitle').textContent=personView?'Person usage':(adminScope&&!drillSlug?'Organisation members':'Team members');
     // The boot subtitle counts directory identities; once the roster is in,
     // restate it as people and key-holders so "46 in your tree" and the
     // Members tile (113) can't look like they disagree.
     const keyed=rows.filter(r=>r.username).length;
-    document.getElementById('scopeSub').textContent=
-      rows.length+' people in your tree · '+keyed+' with a gateway key · their spend and yours, this window';
+    document.getElementById('scopeSub').textContent=personView
+      ? 'Individual usage · '+keyed+' with a gateway key · this window'
+      : rows.length+' people in your tree · '+keyed+' with a gateway key · their spend and yours, this window';
     // Team budget: both sums cover the calendar month (quota_spent_usd is
     // deliberately month-to-date on the server, whatever range is shown).
     const lim=rows.reduce((s,r)=>s+(r.quota_usd||0),0);
@@ -802,7 +1071,7 @@ async function boot(){
     // lands in the manager branch above and sees their own tree.
     adminScope=true;
     document.getElementById('scopeTitle').textContent='Org view';
-    document.getElementById('scopeSub').textContent='Super admin — everyone in the organisation, one table. Filter to any manager’s branch above.';
+    document.getElementById('scopeSub').textContent='Super admin — everyone in the organisation, one table. Filter to any team or person above.';
     document.getElementById('kBudgetL').textContent='Org budget';
   }
   loadInbox();
@@ -975,6 +1244,7 @@ function loadPricing(){
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){closePricing();closeDetail();}});
 
+setupTeamCombobox();
 boot();
 </script>
 <script>
