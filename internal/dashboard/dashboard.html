@@ -179,7 +179,7 @@ tr.clickable{cursor:pointer}
 .ab-clock{font-size:11px;color:var(--text2,var(--t2,#8090a8));white-space:nowrap}
 .ab-user{font-size:12px;font-weight:700;color:#3dcc6e}
 .ab-user .role{color:var(--text2,var(--t2,#8090a8));font-weight:600;font-size:11px}
-.demo-pii{transition:filter .18s ease}.demo-private .demo-pii,.demo-private .user-name,.demo-private .user-mail,.demo-private .person-name,.demo-private .det-name,.demo-private .det-who{filter:blur(3px);user-select:none}.demo-private #user-cost-chart{filter:blur(3px)}.ab-user{cursor:default}.ab-user.demo-privacy-active .role{color:#e8a830;font-weight:800}
+.demo-pii{transition:filter .18s ease}.demo-private .demo-pii,.demo-private .user-name,.demo-private .user-mail,.demo-private .person-name,.demo-private .det-name,.demo-private .det-who{filter:blur(3px);user-select:none}.ab-user{cursor:default}.ab-user.demo-privacy-active .role{color:#e8a830;font-weight:800}
 .ab-out{color:#e8554e;border:1px solid var(--border,var(--bdr,#2e3848));padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none}
 .ab-out:hover{border-color:#e8554e}
 </style>
@@ -486,6 +486,21 @@ function userCell(username,displayName,tags){
   return flag+'<span class="demo-pii">'+esc(username)+'</span>';
 }
 
+// Canvas labels cannot receive the CSS blur used by table cells. Replace
+// only user-name labels with a stable mask; amounts, percentages and chart
+// geometry remain visible.
+function demoPrivacyEnabled(){
+  return document.documentElement.classList.contains('demo-private');
+}
+function demoUserNumber(name){
+  var s=String(name||''),h=0;
+  for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;
+  return (h%97)+1;
+}
+function demoUserName(name,index){
+  return demoPrivacyEnabled() ? '████████ '+demoUserNumber(name) : name;
+}
+
 async function api(path, fresh){
   const opts={cache:'no-store'};
   if(fresh)opts.headers={'Cache-Control':'no-cache'};
@@ -681,11 +696,21 @@ function pieUnit(metric){
   if(metric==='user_count')return ' users';
   return '';
 }
-function renderPieLegend(id,labels,colors){
+function renderPieLegend(id,labels,colors,redactName,parts){
   var el=document.getElementById(id);if(!el)return;
+  function html(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
   el.innerHTML=labels.map(function(label,i){
-    var text=String(label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return '<div class="pie-legend-item" title="'+text+'"><span class="pie-legend-swatch" style="background:'+colors[i]+'"></span><span class="pie-legend-label">'+text+'</span></div>';
+    var text=html(label);
+    var labelHtml=text;
+    var part=parts&&parts[i];
+    if(redactName&&part){
+      if(!/^Other\b/.test(part.name))labelHtml='<span class="demo-pii">'+html(part.name)+'</span>'+html(part.rest||'');
+    }else if(redactName&&text.indexOf('Other —')!==0){
+      var sep=text.indexOf(' — ');
+      if(sep>=0)labelHtml='<span class="demo-pii">'+text.slice(0,sep)+'</span>'+text.slice(sep);
+    }
+    var title=redactName?'':' title="'+text+'"';
+    return '<div class="pie-legend-item"'+title+'><span class="pie-legend-swatch" style="background:'+colors[i]+'"></span><span class="pie-legend-label">'+labelHtml+'</span></div>';
   }).join('');
 }
 function topFiveItems(items,valueFn,labelFn,limit){
@@ -868,7 +893,7 @@ function renderUserChecklist(){
     var label=nameByUser[n]?nameByUser[n]+' <span style="color:var(--text2);font-size:10px">'+safe+'</span>':safe;
     return '<label style="display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:12px;cursor:pointer;color:var(--text)" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'transparent\'">'+
       '<input type="checkbox" value="'+safe+'"'+checked+' onchange="onUserCheck(this)" style="cursor:pointer">'+
-      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+label+'</span></label>';
+      '<span class="demo-pii" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+label+'</span></label>';
   }).join('');
 }
 
@@ -897,7 +922,13 @@ function updateUserFilterLabel(){
   var lbl=document.getElementById('user-filter-label');
   if(!lbl)return;
   if(!userFilter.length)lbl.textContent='All';
-  else if(userFilter.length===1)lbl.textContent=userFilter[0];
+  else if(userFilter.length===1){
+    lbl.textContent='';
+    var span=document.createElement('span');
+    if(demoPrivacyEnabled())span.className='demo-pii';
+    span.textContent=userFilter[0];
+    lbl.appendChild(span);
+  }
   else lbl.textContent=userFilter.length+' selected';
 }
 
@@ -961,25 +992,40 @@ function renderUserCostChart(){
   const data=topFiveItems(chartUsers,function(d){return pieVal(d,userPieMetric);},function(d){return d.display_name||d.username;}).slice(0,5);
   const m=userPieMetric;
   const vals=data.map(d=>d.value);
-  const labels=data.map(d=>`${d.label} — ${m==='cost'&&d.value===0?'Free':pieFmt(d.value,m)}`);
+  const displayNames=data.map((d,i)=>d.item===null?'Other':demoUserName(d.label,i));
+  const legendParts=data.map(d=>({name:d.item===null?'Other':d.label,rest:' — '+(m==='cost'&&d.value===0?'Free':pieFmt(d.value,m))}));
+  const labels=legendParts.map(p=>p.name+p.rest);
   const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
+  const tooltipLabel=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return displayNames[ctx.dataIndex]+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
+  const tooltipTitle=function(items){
+    if(!demoPrivacyEnabled())return items.length?items[0].label:'';
+    const i=items.length?items[0].dataIndex:0;
+    const d=data[i];
+    return d&&d.item===null?'Other':demoUserName(d?d.label:'',i);
+  };
   if(userCostChart){
     userCostChart.data.labels=labels;
     userCostChart.data.datasets[0].data=vals;
     userCostChart.data.datasets[0].backgroundColor=colors;
-    userCostChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
+    userCostChart.options.plugins.tooltip.callbacks.label=tooltipLabel;
+    userCostChart.options.plugins.tooltip.callbacks.title=tooltipTitle;
     userCostChart.update();
-    renderPieLegend('user-legend',labels,colors);
+    renderPieLegend('user-legend',labels,colors,demoPrivacyEnabled(),legendParts);
     return;
   }
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
     options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
-      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
-    }}
+      tooltip:{callbacks:{label:tooltipLabel,title:tooltipTitle}}}
+    }
   });
-  renderPieLegend('user-legend',labels,colors);
+  renderPieLegend('user-legend',labels,colors,demoPrivacyEnabled(),legendParts);
 }
+
+window.refreshDemoPrivacy=function(){
+  if(typeof updateUserFilterLabel==='function')updateUserFilterLabel();
+  if(typeof renderUserCostChart==='function')renderUserCostChart();
+};
 
 async function refreshUserChartOnly(){
   var r=range;
@@ -1311,6 +1357,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeQuotaMo
       document.documentElement.classList.toggle('demo-private',on);
       trigger.classList.toggle('demo-privacy-active',on);
       try{localStorage.setItem(KEY,on?'1':'0')}catch(e){}
+      if(typeof window.refreshDemoPrivacy==='function')window.refreshDemoPrivacy(on);
     }
     if(trigger.dataset.demoPrivacyBound)return;
     trigger.dataset.demoPrivacyBound='1';
