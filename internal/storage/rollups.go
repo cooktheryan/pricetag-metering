@@ -842,6 +842,7 @@ var rollupUsersSelect = `
 		LEFT JOIN (SELECT l.username AS username, pu.tags->>'first_name' AS first_name, pu.tags->>'last_name' AS last_name FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username
 		LEFT JOIN sv ON sv.username = e.username
 		WHERE e.hour >= $1 AND e.hour < $2 AND ($3 = '' OR e.group_name = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5)
+			AND ($9 = '' OR lower(e.username) LIKE '%%' || lower($9) || '%%' OR lower(TRIM(CONCAT_WS(' ', up.first_name, up.last_name))) LIKE '%%' || lower($9) || '%%')
 		GROUP BY e.username, %s, COALESCE(e.group_name, '')
 		ORDER BY %s %s, e.username ASC, COALESCE(e.group_name, '') ASC
 		LIMIT $6 OFFSET $7`
