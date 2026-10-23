@@ -32,10 +32,9 @@ Two separate robot accounts are used:
   `Write` permission and no broader access. The `enmaas-metering-service`
   builder credentials are stored only as the `QUAY_USERNAME` and `QUAY_TOKEN`
   GitHub Actions repository secrets and are used only by this workflow.
-- **Pull:** one separate read-only robot with `Read` permission on the four
-  EnMaaS repositories (`praxis-ai`, `enmaas-metering-service`,
-  `enmaas-usage-exporter`, `enmaas-maas-api`). Its credentials are stored only
-  in the staging and production cluster pull secrets. It is not used by CI.
+- **Pull:** one separate read-only robot with `Read` permission on the related
+  EnMaaS image repositories. Its credentials are stored only in the cluster
+  pull secrets. It is not used by CI.
 
 The workflow passes the builder credentials through step-level environment
 variables and `docker login --password-stdin`; secrets are never interpolated
@@ -49,7 +48,7 @@ leaves, and otherwise on a regular schedule (at least every 90 days).
 1. Create a replacement robot token in Quay with the same scope.
 2. Update the single location that holds the old credential:
    - builder: the `QUAY_USERNAME` and `QUAY_TOKEN` repository secrets;
-   - pull: the staging and production cluster pull secrets.
+   - pull: the cluster pull secrets.
 3. Run the publish workflow and verify the image pushes, or verify a test pod
    can pull the image.
 4. Revoke the old robot token.
@@ -66,8 +65,9 @@ leaves, and otherwise on a regular schedule (at least every 90 days).
   authoritative deployment reference.
 - Deploy by digest. Never deploy `:main`.
 - Promotion is explicit: build on `main`, validate the digest in staging, then
-  update the digest pin in `redhat-et/EnMaaS-opps` for stage and production.
+  update the digest pin in the EnMaaS deployment configuration for staging and
+  production.
 - Version tags and signed provenance attestations are deferred until the
-  App SRE/Konflux migration. The OCI source, revision, and version labels
+  Konflux-based build migration. The OCI source, revision, and version labels
   provide traceability metadata only; they are not a signature.
 - Publishing is gated on `go test ./...` and `go vet ./...`.
