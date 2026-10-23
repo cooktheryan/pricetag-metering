@@ -29,7 +29,7 @@ a{color:inherit;text-decoration:none}
 .appbar .ab-right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .ab-user{color:var(--accent2);font-size:13px;font-weight:600}
 .ab-user .role{color:var(--muted);font-weight:400}
-.demo-pii{transition:filter .18s ease}.demo-private .demo-pii,.demo-private .person-name,.demo-private .det-name,.demo-private .det-who{filter:blur(3px);user-select:none}.demo-private #userChart,.demo-private #tl{filter:blur(3px)}.ab-user{cursor:default}.ab-user.demo-privacy-active .role{color:#e8a830;font-weight:800}
+.demo-pii{transition:filter .18s ease}.demo-private .demo-pii,.demo-private .person-name,.demo-private .det-name,.demo-private .det-who{filter:blur(3px);user-select:none}.ab-user{cursor:default}.ab-user.demo-privacy-active .role{color:#e8a830;font-weight:800}
 .ab-out{color:var(--warn);border:1px solid var(--border);border-radius:7px;padding:4px 11px;font-size:13px}
 .ab-out:hover{border-color:var(--warn)}
 .imp-banner{display:none;align-items:center;gap:12px;padding:8px 18px;background:#3a2c10;border-bottom:1px solid var(--warn);color:var(--warn);font-size:13px}
@@ -525,13 +525,22 @@ function personName(username){
   return (r&&(r.full_name||r.username))||username;
 }
 
+// Canvas text cannot use the CSS blur applied to table cells. Redact only
+// user-name labels in charts; values and chart geometry stay visible.
+function demoPrivacyEnabled(){
+  return document.documentElement.classList.contains('demo-private');
+}
+function demoUserName(name,index){
+  return demoPrivacyEnabled() ? '████████ '+(index+1) : name;
+}
+
 function renderTimeline(buckets){
   const byDay={}, names=new Set();
   const val=b=>tlMetric==='cost'?(b.total_cost_usd||0):(b.total_tokens||0);
   for(const b of buckets){const d=b.bucket.slice(0,10);byDay[d]=byDay[d]||{};byDay[d][b.series]=val(b);names.add(b.series);}
   const days=Object.keys(byDay).sort();
   const palette=['#4da0f8','#3dcc6e','#eba830','#a88cf8','#38d4c2','#e8554e','#8090a8'];
-  const ds=[...names].slice(0,7).map((n,i)=>({label:personName(n),data:days.map(d=>byDay[d][n]||0),
+  const ds=[...names].slice(0,7).map((n,i)=>({label:demoUserName(personName(n),i),data:days.map(d=>byDay[d][n]||0),
     borderColor:palette[i%7],backgroundColor:palette[i%7]+'22',tension:.3,fill:false,pointRadius:2,borderWidth:2}));
   if(tlChart)tlChart.destroy();
   tlChart=new Chart(document.getElementById('tl'),{type:'line',
@@ -624,7 +633,7 @@ function renderPies(){
   const rankedU=(chartsCache.users||[]).map(d=>({name:uName(d),val:pieVal(d,userPieMetric)}))
     .sort((a,b)=>b.val-a.val);
   const topU=rankedU.slice(0,TOPN), tailU=rankedU.slice(TOPN);
-  const pieU=topU.concat(tailU.length?[{name:'Other — '+tailU.length+' users',val:tailU.reduce((s,d)=>s+d.val,0),other:true}]:[]);
+  const pieU=topU.map((d,i)=>({...d,name:demoUserName(d.name,i)})).concat(tailU.length?[{name:'Other — '+tailU.length+' users',val:tailU.reduce((s,d)=>s+d.val,0),other:true}]:[]);
   const uv=pieU.map(d=>d.val);
   const uLabel=d=>{const n=d.name.length>26?d.name.slice(0,25)+'…':d.name;return n+' — '+pieFmt(d.val,userPieMetric);};
   if(userChart)userChart.destroy();
@@ -637,6 +646,12 @@ function renderPies(){
     options:donutOpts(i=>pieU[i].name,uv,userPieMetric)
   });
 }
+
+window.refreshDemoPrivacy=function(){
+  if(!chartsCache)return;
+  renderTimeline(chartsCache.timeline||[]);
+  renderPies();
+};
 
 document.getElementById('mmToggle').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
@@ -878,7 +893,7 @@ boot();
   window.initDemoPrivacy=function(isSuperAdmin){
     var trigger=document.getElementById('abUser');
     if(!isSuperAdmin||!trigger)return;
-    function apply(on){document.documentElement.classList.toggle('demo-private',on);trigger.classList.toggle('demo-privacy-active',on);try{localStorage.setItem(KEY,on?'1':'0')}catch(e){}}
+    function apply(on){document.documentElement.classList.toggle('demo-private',on);trigger.classList.toggle('demo-privacy-active',on);try{localStorage.setItem(KEY,on?'1':'0')}catch(e){}if(typeof window.refreshDemoPrivacy==='function')window.refreshDemoPrivacy(on);}
     if(trigger.dataset.demoPrivacyBound)return;
     trigger.dataset.demoPrivacyBound='1';
     try{apply(localStorage.getItem(KEY)==='1')}catch(e){apply(false)}

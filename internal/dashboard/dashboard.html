@@ -179,7 +179,7 @@ tr.clickable{cursor:pointer}
 .ab-clock{font-size:11px;color:var(--text2,var(--t2,#8090a8));white-space:nowrap}
 .ab-user{font-size:12px;font-weight:700;color:#3dcc6e}
 .ab-user .role{color:var(--text2,var(--t2,#8090a8));font-weight:600;font-size:11px}
-.demo-pii{transition:filter .18s ease}.demo-private .demo-pii,.demo-private .user-name,.demo-private .user-mail,.demo-private .person-name,.demo-private .det-name,.demo-private .det-who{filter:blur(3px);user-select:none}.demo-private #user-cost-chart{filter:blur(3px)}.ab-user{cursor:default}.ab-user.demo-privacy-active .role{color:#e8a830;font-weight:800}
+.demo-pii{transition:filter .18s ease}.demo-private .demo-pii,.demo-private .user-name,.demo-private .user-mail,.demo-private .person-name,.demo-private .det-name,.demo-private .det-who{filter:blur(3px);user-select:none}.ab-user{cursor:default}.ab-user.demo-privacy-active .role{color:#e8a830;font-weight:800}
 .ab-out{color:#e8554e;border:1px solid var(--border,var(--bdr,#2e3848));padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none}
 .ab-out:hover{border-color:#e8554e}
 </style>
@@ -484,6 +484,16 @@ function userCell(username,displayName,tags){
   const flag=countryFlag(tags&&tags.country);
   if(displayName)return `<div class="user-name demo-pii">${flag}${esc(displayName)}</div><div class="user-mail demo-pii">${esc(username)}</div>`;
   return flag+'<span class="demo-pii">'+esc(username)+'</span>';
+}
+
+// Canvas labels cannot receive the CSS blur used by table cells. Replace
+// only user-name labels with a stable mask; amounts, percentages and chart
+// geometry remain visible.
+function demoPrivacyEnabled(){
+  return document.documentElement.classList.contains('demo-private');
+}
+function demoUserName(name,index){
+  return demoPrivacyEnabled() ? '████████ '+(index+1) : name;
 }
 
 async function api(path, fresh){
@@ -868,7 +878,7 @@ function renderUserChecklist(){
     var label=nameByUser[n]?nameByUser[n]+' <span style="color:var(--text2);font-size:10px">'+safe+'</span>':safe;
     return '<label style="display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:12px;cursor:pointer;color:var(--text)" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'transparent\'">'+
       '<input type="checkbox" value="'+safe+'"'+checked+' onchange="onUserCheck(this)" style="cursor:pointer">'+
-      '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+label+'</span></label>';
+      '<span class="demo-pii" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+label+'</span></label>';
   }).join('');
 }
 
@@ -961,13 +971,14 @@ function renderUserCostChart(){
   const data=topFiveItems(chartUsers,function(d){return pieVal(d,userPieMetric);},function(d){return d.display_name||d.username;}).slice(0,5);
   const m=userPieMetric;
   const vals=data.map(d=>d.value);
-  const labels=data.map(d=>`${d.label} — ${m==='cost'&&d.value===0?'Free':pieFmt(d.value,m)}`);
+  const displayNames=data.map((d,i)=>d.item===null?'Other':demoUserName(d.label,i));
+  const labels=data.map((d,i)=>`${displayNames[i]} — ${m==='cost'&&d.value===0?'Free':pieFmt(d.value,m)}`);
   const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
   if(userCostChart){
     userCostChart.data.labels=labels;
     userCostChart.data.datasets[0].data=vals;
     userCostChart.data.datasets[0].backgroundColor=colors;
-    userCostChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
+    userCostChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return displayNames[ctx.dataIndex]+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
     userCostChart.update();
     renderPieLegend('user-legend',labels,colors);
     return;
@@ -975,11 +986,15 @@ function renderUserCostChart(){
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
     options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
-      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
+      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return displayNames[ctx.dataIndex]+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
   renderPieLegend('user-legend',labels,colors);
 }
+
+window.refreshDemoPrivacy=function(){
+  if(typeof renderUserCostChart==='function')renderUserCostChart();
+};
 
 async function refreshUserChartOnly(){
   var r=range;
@@ -1311,6 +1326,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeQuotaMo
       document.documentElement.classList.toggle('demo-private',on);
       trigger.classList.toggle('demo-privacy-active',on);
       try{localStorage.setItem(KEY,on?'1':'0')}catch(e){}
+      if(typeof window.refreshDemoPrivacy==='function')window.refreshDemoPrivacy(on);
     }
     if(trigger.dataset.demoPrivacyBound)return;
     trigger.dataset.demoPrivacyBound='1';
