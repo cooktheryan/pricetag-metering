@@ -54,6 +54,11 @@ h1{margin:0;font-size:21px}
 /* Usage-style pie row (Hosted vs Vendor / By Model / By User) */
 .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0 14px}
 .charts .panel{min-width:0}
+.chart-legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:0 0 10px;color:var(--muted);font:11px/18px "IBM Plex Mono",monospace}
+.chart-legend-item{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%}
+.chart-legend-swatch{width:14px;height:14px;flex:0 0 14px;border-radius:2px}
+.chart-legend-name{color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+.chart-legend-meta{color:var(--muted);white-space:nowrap}
 .chart-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .tlt{display:inline-flex;gap:2px;margin-left:auto}
 .tlt button{background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer}
@@ -209,6 +214,7 @@ td.num{text-align:right}
       <h2 class="chart-head"><span>By User</span><span class="tlt" id="umToggle">
         <button data-um="cost" class="on">Cost</button><button data-um="tokens">Tokens</button><button data-um="requests">Requests</button>
       </span></h2>
+      <div id="userLegend" class="chart-legend"></div>
       <canvas id="userChart" height="170"></canvas>
     </div>
   </div>
@@ -216,6 +222,7 @@ td.num{text-align:right}
     <h2 class="chart-head"><span>Daily member usage</span><span class="tlt" id="tlToggle">
       <button data-tm="tokens" class="on">Tokens</button><button data-tm="cost">Dollars</button>
     </span></h2>
+    <div id="tlLegend" class="chart-legend"></div>
     <canvas id="tl" height="70"></canvas>
   </div>
   <div class="panel">
@@ -534,20 +541,27 @@ function demoUserName(name,index){
   return demoPrivacyEnabled() ? '████████ '+(index+1) : name;
 }
 
+function renderDomLegend(id,items){
+  const el=document.getElementById(id);if(!el)return;
+  el.innerHTML=items.map(item=>'<span class="chart-legend-item"><span class="chart-legend-swatch" style="background:'+item.color+'"></span><span class="chart-legend-name demo-pii">'+esc(item.name)+'</span>'+(item.meta?'<span class="chart-legend-meta">'+esc(item.meta)+'</span>':'')+'</span>').join('');
+}
+
 function renderTimeline(buckets){
   const byDay={}, names=new Set();
   const val=b=>tlMetric==='cost'?(b.total_cost_usd||0):(b.total_tokens||0);
   for(const b of buckets){const d=b.bucket.slice(0,10);byDay[d]=byDay[d]||{};byDay[d][b.series]=val(b);names.add(b.series);}
   const days=Object.keys(byDay).sort();
   const palette=['#4da0f8','#3dcc6e','#eba830','#a88cf8','#38d4c2','#e8554e','#8090a8'];
-  const ds=[...names].slice(0,7).map((n,i)=>({label:demoUserName(personName(n),i),data:days.map(d=>byDay[d][n]||0),
+  const series=[...names].slice(0,7);
+  const ds=series.map((n,i)=>({label:demoUserName(personName(n),i),data:days.map(d=>byDay[d][n]||0),
     borderColor:palette[i%7],backgroundColor:palette[i%7]+'22',tension:.3,fill:false,pointRadius:2,borderWidth:2}));
   if(tlChart)tlChart.destroy();
   tlChart=new Chart(document.getElementById('tl'),{type:'line',
     data:{labels:days,datasets:ds},
-    options:{plugins:{legend:{labels:{color:'#e2e6ec',boxWidth:10}}},
+    options:{plugins:{legend:{display:false}},
       scales:{x:{ticks:{color:'#8090a8'},grid:{color:'#1a2030'}},
               y:{ticks:{color:'#8090a8',callback:v=>tlMetric==='cost'?fmt$(v):fmtTok(v)},grid:{color:'#1a2030'}}}}});
+  renderDomLegend('tlLegend',series.map((n,i)=>({name:personName(n),color:palette[i%7]})));
 }
 
 // Tokens vs dollars on the same cached buckets — no refetch, the server
@@ -635,16 +649,24 @@ function renderPies(){
   const topU=rankedU.slice(0,TOPN), tailU=rankedU.slice(TOPN);
   const pieU=topU.map((d,i)=>({...d,name:demoUserName(d.name,i)})).concat(tailU.length?[{name:'Other — '+tailU.length+' users',val:tailU.reduce((s,d)=>s+d.val,0),other:true}]:[]);
   const uv=pieU.map(d=>d.val);
+  const uColors=pieU.map((d,i)=>d.other?'#5b6b82':PIE_COLORS[i%PIE_COLORS.length]);
   const uLabel=d=>{const n=d.name.length>26?d.name.slice(0,25)+'…':d.name;return n+' — '+pieFmt(d.val,userPieMetric);};
   if(userChart)userChart.destroy();
+  const userOptions=donutOpts(i=>pieU[i].name,uv,userPieMetric);
+  userOptions.plugins.legend.display=false;
   userChart=new Chart(document.getElementById('userChart'),{
     type:'doughnut',
     data:{
       labels:pieU.map(uLabel),
-      datasets:[{data:uv,backgroundColor:pieU.map((d,i)=>d.other?'#5b6b82':PIE_COLORS[i%PIE_COLORS.length]),borderWidth:0}]
+      datasets:[{data:uv,backgroundColor:uColors,borderWidth:0}]
     },
-    options:donutOpts(i=>pieU[i].name,uv,userPieMetric)
+    options:userOptions
   });
+  renderDomLegend('userLegend',pieU.map((d,i)=>({
+    name:d.other?d.name:topU[i].name,
+    color:uColors[i],
+    meta:' — '+pieFmt(d.val,userPieMetric)
+  })));
 }
 
 window.refreshDemoPrivacy=function(){
