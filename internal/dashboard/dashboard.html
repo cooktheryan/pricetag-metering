@@ -691,11 +691,17 @@ function pieUnit(metric){
   if(metric==='user_count')return ' users';
   return '';
 }
-function renderPieLegend(id,labels,colors){
+function renderPieLegend(id,labels,colors,redactName){
   var el=document.getElementById(id);if(!el)return;
   el.innerHTML=labels.map(function(label,i){
     var text=String(label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return '<div class="pie-legend-item" title="'+text+'"><span class="pie-legend-swatch" style="background:'+colors[i]+'"></span><span class="pie-legend-label">'+text+'</span></div>';
+    var labelHtml=text;
+    if(redactName&&text.indexOf('Other —')!==0){
+      var sep=text.indexOf(' — ');
+      if(sep>=0)labelHtml='<span class="demo-pii">'+text.slice(0,sep)+'</span>'+text.slice(sep);
+    }
+    var title=redactName?'':' title="'+text+'"';
+    return '<div class="pie-legend-item"'+title+'><span class="pie-legend-swatch" style="background:'+colors[i]+'"></span><span class="pie-legend-label">'+labelHtml+'</span></div>';
   }).join('');
 }
 function topFiveItems(items,valueFn,labelFn,limit){
@@ -972,7 +978,7 @@ function renderUserCostChart(){
   const m=userPieMetric;
   const vals=data.map(d=>d.value);
   const displayNames=data.map((d,i)=>d.item===null?'Other':demoUserName(d.label,i));
-  const labels=data.map((d,i)=>`${displayNames[i]} — ${m==='cost'&&d.value===0?'Free':pieFmt(d.value,m)}`);
+  const labels=data.map(d=>`${d.label} — ${m==='cost'&&d.value===0?'Free':pieFmt(d.value,m)}`);
   const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
   if(userCostChart){
     userCostChart.data.labels=labels;
@@ -980,7 +986,7 @@ function renderUserCostChart(){
     userCostChart.data.datasets[0].backgroundColor=colors;
     userCostChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return displayNames[ctx.dataIndex]+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
     userCostChart.update();
-    renderPieLegend('user-legend',labels,colors);
+    renderPieLegend('user-legend',labels,colors,true);
     return;
   }
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
@@ -989,7 +995,7 @@ function renderUserCostChart(){
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return displayNames[ctx.dataIndex]+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
-  renderPieLegend('user-legend',labels,colors);
+  renderPieLegend('user-legend',labels,colors,true);
 }
 
 window.refreshDemoPrivacy=function(){
