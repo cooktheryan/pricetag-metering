@@ -209,8 +209,8 @@
   <div class="shell">
     <div class="hero-inner reveal">
       <span class="eyebrow"><span class="dot"></span> Welcome to EnMaaS</span>
-      <h1 id="title">Welcome, <span class="name" id="hero-name">there</span>.</h1>
-      <p id="subtitle">One key unlocks frontier and hosted models through a single gateway — with your spend and usage in plain sight.</p>
+      <h1 id="title">Welcome <span class="name" id="hero-name">there</span> to EnMaaS</h1>
+      <p id="subtitle">One key to access hosted and frontier models from any tool, through one governed gateway.</p>
       <div class="chips">
         <span class="chip"><b>1</b> API key</span>
         <span class="chip"><b>2</b> API dialects</span>
@@ -315,11 +315,11 @@
 
   function setSubtitle() {
     if (state.state === 'blocked') {
-      $('subtitle').textContent = "You're signed in. One access check needs attention before we can open the gateway.";
+      $('subtitle').textContent = "EnMaaS gives you one key to access hosted and frontier models from any tool. One access check needs attention before we can open the gateway.";
     } else if (state.state === 'needs_terms') {
-      $('subtitle').textContent = "Your identity, group and region are already verified. Accept the terms and your account is ready — usually under a minute.";
+      $('subtitle').textContent = "EnMaaS gives you one key to access hosted and frontier models from any tool. Your identity, group, and region are verified — accept the terms to get started.";
     } else {
-      $('subtitle').textContent = "Your access is approved. Create a key and start using frontier and hosted models through one gateway.";
+      $('subtitle').textContent = "EnMaaS gives you one key to access hosted and frontier models from any tool. Your access is approved — create a key to get started.";
     }
   }
 
