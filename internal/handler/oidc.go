@@ -22,6 +22,36 @@ const oidcStateCookie = "metering_oidc_state"
 
 var errOIDCUnavailable = errors.New("oidc is not enabled")
 
+// testLoginPanel is injected into the login page only when OIDC_TEST_LOGIN is
+// enabled. It is intentionally separate from <!-- OIDC_LOGIN --> so the real
+// SSO button stays untouched while the provider integration is in progress.
+var testLoginPanel = []byte(`<div class="test-login">
+  <div class="divider"><span>Test sign-in</span></div>
+  <p>Local demo only. Choose a seeded persona to simulate a user.</p>
+  <div class="persona-grid">
+    <a class="persona" href="/oauth/login?persona=new-user"><strong>Nina New</strong><span>First-time user</span></a>
+    <a class="persona" href="/oauth/login?persona=returning-user"><strong>Ravi Return</strong><span>Returning user</span></a>
+    <a class="persona" href="/oauth/login?persona=blocked-country"><strong>Bea Blocked</strong><span>Blocked country</span></a>
+    <a class="persona" href="/oauth/login?persona=no-group"><strong>Noah Nogroup</strong><span>No access group</span></a>
+    <a class="persona admin" href="/oauth/login?persona=admin"><strong>Noy Itzikowitz</strong><span>Super admin</span></a>
+  </div>
+</div>`)
+
+// validTestPersona keeps the optional login hint to the safe persona-key
+// alphabet used by the local mock IdP. Real deployments never enable it.
+func validTestPersona(key string) bool {
+	if key == "" || len(key) > 32 {
+		return false
+	}
+	for _, r := range key {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 type oidcState struct {
 	State        string `json:"state"`
 	Nonce        string `json:"nonce"`
@@ -167,11 +197,20 @@ func (h *AuthHandler) HandleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unable to start SSO", http.StatusInternalServerError)
 		return
 	}
-	url := h.oidc.config.AuthCodeURL(stateValue,
+	options := []oauth2.AuthCodeOption{
 		oauth2.SetAuthURLParam("nonce", nonce),
 		oauth2.SetAuthURLParam("code_challenge", pkceChallenge(verifier)),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
-	)
+	}
+	if h.cfg.OIDC.TestLogin {
+		if persona := r.URL.Query().Get("persona"); validTestPersona(persona) {
+			// The local mock IdP reads login_hint as its persona key. Real
+			// providers would simply treat it as a username hint, but this
+			// branch is only reachable with OIDC_TEST_LOGIN enabled.
+			options = append(options, oauth2.SetAuthURLParam("login_hint", persona))
+		}
+	}
+	url := h.oidc.config.AuthCodeURL(stateValue, options...)
 	http.Redirect(w, r, url, http.StatusFound)
 }
 

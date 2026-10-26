@@ -50,6 +50,93 @@ func TestOIDCLoginIsUnavailableWhenDisabled(t *testing.T) {
 	}
 }
 
+// newTestOIDCHandler starts a minimal discovery document so InitOIDC succeeds.
+// The token and JWKS endpoints are never called by these tests.
+func newTestOIDCHandler(t *testing.T, testLogin bool) *AuthHandler {
+	t.Helper()
+	provider := httptest.NewServer(nil)
+	provider.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/.well-known/openid-configuration" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"issuer":"` + provider.URL + `","authorization_endpoint":"` + provider.URL + `/authorize","token_endpoint":"` + provider.URL + `/token","jwks_uri":"` + provider.URL + `/jwks"}`))
+	})
+	t.Cleanup(provider.Close)
+
+	h := NewAuthHandler(config.Config{OIDC: config.OIDC{
+		Enabled: true, TestLogin: testLogin,
+		IssuerURL: provider.URL, ClientID: "client",
+		ClientSecret: "secret", RedirectURL: "https://dashboard.example/oauth/callback",
+		Scopes: []string{"openid", "profile", "email", "groups"},
+	}})
+	if err := h.InitOIDC(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	return h
+}
+
+func TestOIDCLoginForwardsPersonaOnlyWhenTestLoginEnabled(t *testing.T) {
+	tests := []struct {
+		name      string
+		testLogin bool
+		query     string
+		wantHint  bool
+	}{
+		{name: "test login enabled", testLogin: true, query: "?persona=new-user", wantHint: true},
+		{name: "test login disabled", testLogin: false, query: "?persona=new-user", wantHint: false},
+		{name: "invalid persona ignored", testLogin: true, query: "?persona=NEW%20USER", wantHint: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newTestOIDCHandler(t, tc.testLogin)
+			response := httptest.NewRecorder()
+			h.HandleOIDCLogin(response, httptest.NewRequest(http.MethodGet, "/oauth/login"+tc.query, nil))
+			if response.Code != http.StatusFound {
+				t.Fatalf("status = %d, want %d", response.Code, http.StatusFound)
+			}
+			location := response.Header().Get("Location")
+			hasHint := strings.Contains(location, "login_hint=")
+			if hasHint != tc.wantHint {
+				t.Fatalf("login_hint present = %v, want %v: %s", hasHint, tc.wantHint, location)
+			}
+			if tc.wantHint && !strings.Contains(location, "login_hint=new-user") {
+				t.Fatalf("authorization URL missing persona hint: %s", location)
+			}
+		})
+	}
+}
+
+func TestLoginPageTestPanelDoesNotChangeSSOLink(t *testing.T) {
+	const ssoLink = `<a class="sso-button" href="/oauth/login">Sign in with Red Hat SSO</a>`
+
+	enabled := newTestOIDCHandler(t, true)
+	response := httptest.NewRecorder()
+	enabled.HandleLogin(response, httptest.NewRequest(http.MethodGet, "/login", nil))
+	body := response.Body.String()
+	if !strings.Contains(body, ssoLink) {
+		t.Fatalf("SSO link changed or missing from login page:\n%s", body)
+	}
+	if !strings.Contains(body, "Test sign-in") || !strings.Contains(body, "/oauth/login?persona=new-user") {
+		t.Fatalf("test-login panel missing when enabled:\n%s", body)
+	}
+	if strings.Contains(body, "<!-- TEST_LOGIN -->") {
+		t.Fatal("test-login placeholder was not replaced")
+	}
+
+	disabled := newTestOIDCHandler(t, false)
+	response = httptest.NewRecorder()
+	disabled.HandleLogin(response, httptest.NewRequest(http.MethodGet, "/login", nil))
+	body = response.Body.String()
+	if !strings.Contains(body, ssoLink) {
+		t.Fatalf("SSO link changed or missing from login page:\n%s", body)
+	}
+	if strings.Contains(body, "Test sign-in") || strings.Contains(body, "<!-- TEST_LOGIN -->") {
+		t.Fatalf("test-login panel leaked when disabled:\n%s", body)
+	}
+}
+
 func TestOIDCLoginBuildsAuthorizationCodePKCERequest(t *testing.T) {
 	t.Setenv("SESSION_SECRET", "test-session-secret")
 	provider := httptest.NewServer(nil)

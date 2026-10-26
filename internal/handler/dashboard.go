@@ -261,10 +261,16 @@ func parseTimeWindow(r *http.Request) (since, until time.Time) {
 		return time.Date(y, m, 1, 0, 0, 0, 0, now.Location()), now
 	case "30d":
 		return now.Add(-30 * 24 * time.Hour), now
+	case "90d":
+		return now.Add(-90 * 24 * time.Hour), now
+	case "180d":
+		return now.Add(-180 * 24 * time.Hour), now
+	case "365d":
+		return now.Add(-365 * 24 * time.Hour), now
 	case "custom":
 		const layout = "2006-01-02"
-		from, errFrom := time.Parse(layout, r.URL.Query().Get("from"))
-		to, errTo := time.Parse(layout, r.URL.Query().Get("to"))
+		from, errFrom := time.ParseInLocation(layout, r.URL.Query().Get("from"), now.Location())
+		to, errTo := time.ParseInLocation(layout, r.URL.Query().Get("to"), now.Location())
 		if errFrom != nil || errTo != nil {
 			return now.Add(-7 * 24 * time.Hour), now
 		}

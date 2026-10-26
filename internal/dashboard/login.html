@@ -24,6 +24,16 @@ button:hover{opacity:.9}
 .hint{margin-top:14px;font-size:11px;color:var(--t2);text-align:center}
 .sso-button{display:block;margin-top:16px;background:transparent;border:1px solid var(--blu);border-radius:6px;padding:10px;text-align:center;color:var(--blu);font-size:14px;font-weight:600;text-decoration:none}
 .sso-button:hover{opacity:.9}
+.test-login{margin-top:22px;border-top:1px solid var(--bdr);padding-top:16px}
+.test-login .divider{display:flex;align-items:center;gap:10px;color:var(--t2);font-size:10px;text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px}
+.test-login .divider:before,.test-login .divider:after{content:"";flex:1;height:1px;background:var(--bdr)}
+.test-login p{font-size:11px;color:var(--t2);margin-bottom:10px;line-height:1.45}
+.persona-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.persona{display:block;background:var(--c2);border:1px solid var(--bdr);border-radius:6px;padding:8px 9px;text-decoration:none;color:var(--t);transition:border-color .15s,background .15s}
+.persona:hover{border-color:var(--blu);background:#282d34}
+.persona strong{display:block;font-size:11.5px;font-weight:600;line-height:1.2}
+.persona span{display:block;font-size:10px;color:var(--t2);margin-top:2px}
+.persona.admin{grid-column:1/-1}
 </style>
 </head>
 <body>
@@ -38,6 +48,7 @@ button:hover{opacity:.9}
   </form>
   <!-- OIDC_LOGIN -->
   <div class="hint">Your key was provided by your team lead.</div>
+  <!-- TEST_LOGIN -->
 </div>
 <script>
 if(location.search.includes('error=invalid'))document.getElementById('err').style.display='block';

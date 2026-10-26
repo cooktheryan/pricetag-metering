@@ -2,174 +2,494 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Welcome to EnMaaS</title>
+<meta name="description" content="Finish setting up your EnMaaS access — one key for frontier and hosted models.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#0b0e11;--c1:#141820;--c2:#1a2030;--bdr:#2e3848;
-    --t:#e2e6ec;--t2:#8090a8;--blu:#4da0f8;--grn:#3dcc6e;--org:#eba830;--red:#e8554e;
+    --bg:#fff;--soft:#f5f8f6;--card:#fff;--ink:#15231d;--muted:#52655b;--dim:#788a80;
+    --line:#dce7df;--en:#087f50;--en-soft:#e3f4e9;--en-line:#b9e2c8;
+    --maas:#2f65c8;--maas-soft:#eef4ff;--maas-line:#c9daf5;
+    --amber:#d39218;--amber-soft:#fff8e8;--red:#c84d4d;--red-soft:#fff5f5;
+    --shadow:0 12px 30px rgba(21,35,29,.09);
   }
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{background:radial-gradient(1200px 600px at 50% -200px,#16273d 0%,var(--bg) 60%);color:var(--t);
-       font:14px/1.6 Inter,-apple-system,BlinkMacSystemFont,sans-serif;min-height:100vh}
-  .wrap{max-width:820px;margin:0 auto;padding:32px 24px 64px}
-  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:40px}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.3px}
-  .logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--blu),#8b5cf6);
-        display:grid;place-items:center;font-size:13px;font-weight:900;color:#fff}
-  .who{font-size:12px;color:var(--t2)}
-  .who b{color:var(--t);font-weight:600}
-  .hero{text-align:center;margin-bottom:34px}
-  .hero h1{font-size:32px;line-height:1.2;margin-bottom:10px}
-  .hero p{color:var(--t2);max-width:520px;margin:0 auto}
-  .card{background:var(--c1);border:1px solid var(--bdr);border-radius:14px;padding:24px 26px;margin-bottom:18px}
-  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--t2);margin-bottom:16px;font-weight:700}
-  .checks{display:flex;flex-direction:column;gap:2px}
-  .check{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--c2)}
-  .check:last-child{border-bottom:0}
-  .dot{flex:0 0 22px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
-       font-size:12px;font-weight:800;margin-top:1px}
-  .dot.pass{background:rgba(61,204,110,.15);color:var(--grn);border:1px solid rgba(61,204,110,.4)}
-  .dot.pending{background:rgba(235,168,48,.12);color:var(--org);border:1px solid rgba(235,168,48,.4)}
-  .dot.fail{background:rgba(232,85,78,.12);color:var(--red);border:1px solid rgba(232,85,78,.4)}
-  .dot.skipped{background:var(--c2);color:var(--t2);border:1px solid var(--bdr)}
-  .check-body{flex:1}
-  .check-label{font-weight:600}
-  .check-detail{font-size:12px;color:var(--t2);margin-top:2px}
-  .check-action{font-size:11px;color:var(--blu);text-decoration:none;margin-left:auto;white-space:nowrap;padding-top:2px}
-  .terms-box{background:var(--c2);border:1px solid var(--bdr);border-radius:10px;padding:14px 16px;
-             display:flex;gap:12px;align-items:flex-start;margin-top:6px}
-  .terms-box input{width:18px;height:18px;margin-top:2px;accent-color:var(--grn);cursor:pointer;flex:0 0 auto}
-  .terms-box label{font-size:13px;color:var(--t);cursor:pointer}
-  .terms-box a{color:var(--blu)}
-  .actions{display:flex;justify-content:center;gap:12px;margin-top:24px}
-  .btn{border:0;border-radius:9px;padding:12px 26px;font:600 13px Inter,sans-serif;cursor:pointer;transition:.18s}
-  .btn-primary{background:var(--blu);color:#04121f}
-  .btn-primary:hover:not(:disabled){background:#6cb3ff;box-shadow:0 8px 24px rgba(77,160,248,.25)}
-  .btn-primary:disabled{opacity:.35;cursor:not-allowed}
-  .btn-ghost{background:transparent;color:var(--t2);border:1px solid var(--bdr)}
-  .btn-ghost:hover{color:var(--t);border-color:var(--t2)}
-  .btn-blocked{background:var(--c2);color:var(--t);border:1px solid var(--bdr)}
-  .benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
-  .benefit{background:var(--c2);border:1px solid var(--bdr);border-radius:10px;padding:14px}
-  .benefit b{display:block;font-size:12px;margin-bottom:3px}
-  .benefit span{font-size:11px;color:var(--t2)}
-  .err{color:var(--red);text-align:center;font-size:12px;margin-top:12px;min-height:18px}
-  .blocked .hero h1{color:var(--org)}
-  .foot{text-align:center;color:var(--t2);font-size:11px;margin-top:28px}
-  .foot a{color:var(--t2)}
-  @media(max-width:640px){.benefits{grid-template-columns:1fr}.hero h1{font-size:25px}.card{padding:20px}}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;color:var(--ink);background:var(--bg);font:16px/1.65 "IBM Plex Sans",sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:var(--maas)}
+  code,.mono{font-family:"IBM Plex Mono",monospace}
+  .shell{max-width:1120px;margin:auto;padding:0 28px}
+
+  /* ---------- top bar ---------- */
+  .top{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  .top .shell{height:66px;display:flex;align-items:center;gap:20px}
+  .brand{color:var(--ink);text-decoration:none;font:800 24px "Bricolage Grotesque",sans-serif;letter-spacing:-.04em}
+  .brand .en{color:var(--en)}
+  .brand .maas{color:var(--maas)}
+  .who{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--muted);font-size:13px;white-space:nowrap}
+  .who b{color:var(--ink);font-weight:600}
+  .who .out{color:var(--muted);text-decoration:none;border:1px solid var(--line);border-radius:7px;padding:5px 11px;font-size:12px}
+  .who .out:hover{color:var(--maas);border-color:var(--maas-line)}
+
+  /* ---------- hero ---------- */
+  .hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line);background:linear-gradient(125deg,#eef8f1 0%,#f7f9ff 62%,#fff 100%)}
+  #flow{position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity .3s ease}
+  #flow.flow-ready{opacity:.4}
+  .floaters{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+  .floater{position:absolute;color:rgba(8,127,80,.3);font:500 16px "IBM Plex Mono",monospace;animation:float 10s ease-in-out infinite;white-space:nowrap}
+  .floater:nth-child(3n){color:rgba(47,101,200,.24);animation-duration:13s}
+  .floater:nth-child(3n+1){color:rgba(211,146,24,.3);animation-duration:11s}
+  @keyframes float{0%,100%{transform:translate3d(0,10px,0) rotate(-2deg);opacity:.3}50%{transform:translate3d(10px,-16px,0) rotate(3deg);opacity:.8}}
+  .hero .shell{position:relative;padding:54px 28px 58px}
+  .hero-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(300px,.75fr);gap:44px;align-items:center}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;color:var(--en);background:var(--en-soft);border:1px solid var(--en-line);border-radius:99px;padding:5px 12px;text-transform:uppercase;letter-spacing:.13em;font:600 10.5px "IBM Plex Mono",monospace}
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--en);box-shadow:0 0 0 3px rgba(8,127,80,.12)}
+  h1,h2,h3{font-family:"Bricolage Grotesque",sans-serif;line-height:1.06;margin:0}
+  h1{max-width:760px;margin-top:18px;font-size:clamp(42px,6vw,68px);letter-spacing:-.05em}
+  h1 .name{color:var(--en)}
+  h1 .accent{color:var(--maas)}
+  .hero p{max-width:600px;color:var(--muted);font-size:17px;margin:18px 0 0}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
+  .chip{padding:4px 10px;border:1px solid var(--line);border-radius:99px;color:var(--muted);background:rgba(255,255,255,.78);font:500 11px "IBM Plex Mono",monospace;backdrop-filter:blur(4px)}
+  .chip b{color:var(--en);font-weight:600}
+
+  /* hero “at a glance” card */
+  .glance{position:relative;padding:22px;border:1px solid var(--en-line);border-radius:16px;background:rgba(255,255,255,.82);backdrop-filter:blur(10px);box-shadow:0 18px 44px rgba(21,35,29,.1)}
+  .glance:before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(145deg,rgba(8,127,80,.06),transparent 55%)}
+  .glance .tag{position:relative;color:var(--en);font:600 10px "IBM Plex Mono",monospace;letter-spacing:.12em;text-transform:uppercase}
+  .glance h3{position:relative;font-size:19px;margin:7px 0 14px}
+  .glance-row{position:relative;display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+  .glance-row:first-of-type{border-top:0}
+  .glance-row .ic{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:var(--en-soft);color:var(--en);font:700 13px "Bricolage Grotesque",sans-serif;flex:0 0 auto}
+  .glance-row:nth-of-type(3) .ic{background:var(--maas-soft);color:var(--maas)}
+  .glance-row:nth-of-type(4) .ic{background:var(--amber-soft);color:var(--amber)}
+  .glance-row b{display:block;color:var(--ink);font-weight:600;font-size:13px}
+  .glance-row span{font-size:11.5px}
+  .glance .fine{position:relative;margin-top:12px;color:var(--dim);font:11px "IBM Plex Mono",monospace}
+
+  /* ---------- main layout ---------- */
+  main.shell{padding-top:34px;padding-bottom:10px}
+  .layout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(310px,.8fr);gap:20px;align-items:start}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:26px 28px}
+  .panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:6px}
+  .kicker{display:block;color:var(--en);font:600 10px "IBM Plex Mono",monospace;letter-spacing:.13em;text-transform:uppercase;margin-bottom:7px}
+  .panel h2{font-size:clamp(23px,3vw,30px);letter-spacing:-.035em}
+  .panel .lede{color:var(--muted);font-size:14px;margin:8px 0 0;max-width:52ch}
+
+  /* progress */
+  .progress{flex:0 0 auto;text-align:right;min-width:120px}
+  .progress b{display:block;font:800 24px "Bricolage Grotesque",sans-serif;letter-spacing:-.03em;color:var(--ink)}
+  .progress b i{font-style:normal;color:var(--dim);font-size:15px;font-weight:600}
+  .progress span{font:600 10px "IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .progress .track{height:7px;border-radius:99px;background:#edf3ef;overflow:hidden;margin-top:9px;width:150px}
+  .progress .fill{height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,var(--en),#65d997);transition:width .7s cubic-bezier(.2,.8,.2,1)}
+
+  /* checklist */
+  .checks{display:flex;flex-direction:column;margin-top:18px}
+  .check{display:flex;align-items:flex-start;gap:13px;padding:15px 0;border-top:1px solid var(--line)}
+  .check:first-child{border-top:0}
+  .check .dot{flex:0 0 28px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font:800 12px "IBM Plex Sans",sans-serif;margin-top:1px}
+  .check .dot.pass{background:var(--en-soft);color:var(--en);border:1px solid var(--en-line)}
+  .check .dot.pending{background:var(--amber-soft);color:var(--amber);border:1px solid #f1d99e}
+  .check .dot.fail{background:var(--red-soft);color:var(--red);border:1px solid #e9bcbc}
+  .check .dot.skipped{background:var(--soft);color:var(--dim);border:1px solid var(--line)}
+  .check .dot.queued{background:var(--soft);color:#b3c1b8;border:1px solid var(--line);font-size:14px}
+  .check .dot.checking{background:var(--maas-soft);border:1px solid var(--maas-line)}
+  .check .dot.checking:after{content:"";width:10px;height:10px;border:2px solid rgba(47,101,200,.22);border-top-color:var(--maas);border-radius:50%;animation:spin .7s linear infinite}
+  .check.resolved{animation:checkIn .5s ease both}
+  .check-body{flex:1;min-width:0}
+  .check-label{font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .check-detail{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .check-action{font-size:12px;color:var(--maas);text-decoration:none;margin-left:auto;white-space:nowrap;padding-top:3px}
+  .check-action:hover{text-decoration:underline}
+  .badge{display:inline-block;border-radius:99px;padding:1px 8px;font:600 9.5px "IBM Plex Mono",monospace;letter-spacing:.06em;text-transform:uppercase}
+  .badge.pass{background:var(--en-soft);color:var(--en);border:1px solid var(--en-line)}
+  .badge.pending{background:var(--amber-soft);color:#94620d;border:1px solid #f1d99e}
+  .badge.fail{background:var(--red-soft);color:var(--red);border:1px solid #e9bcbc}
+  .badge.skipped{background:var(--soft);color:var(--dim);border:1px solid var(--line)}
+  .badge.queued{background:var(--soft);color:var(--dim);border:1px solid var(--line)}
+  .badge.checking{background:var(--maas-soft);color:var(--maas);border:1px solid var(--maas-line)}
+  .check-skel{display:flex;gap:13px;padding:14px 0;align-items:center}
+  .skel-dot{width:28px;height:28px;border-radius:50%;background:#eef3ef;animation:pulse 1.4s infinite}
+  .skel-lines{flex:1}
+  .skel-line{height:10px;border-radius:5px;background:#eef3ef;animation:pulse 1.4s infinite}
+  .skel-line.short{width:38%;margin-top:7px}
+  @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes checkIn{0%{background:rgba(8,127,80,.09)}100%{background:transparent}}
+
+  /* benefits */
+  .unlock{background:linear-gradient(150deg,#f6fbf8,#fff 62%);border-top:4px solid var(--en)}
+  .unlock h2{font-size:22px}
+  .benefits{list-style:none;margin:17px 0 0;padding:0;display:flex;flex-direction:column;gap:14px}
+  .benefit{display:flex;gap:12px;align-items:flex-start}
+  .benefit .ic{flex:0 0 34px;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--en-soft);color:var(--en);font:700 14px "Bricolage Grotesque",sans-serif}
+  .benefit:nth-child(2) .ic{background:var(--maas-soft);color:var(--maas)}
+  .benefit:nth-child(3) .ic{background:var(--amber-soft);color:var(--amber)}
+  .benefit b{display:block;font-size:13.5px;font-weight:600;line-height:1.35}
+  .benefit span{display:block;color:var(--muted);font-size:12px;line-height:1.5;margin-top:1px}
+  .unlock .fine{margin-top:18px;padding-top:14px;border-top:1px solid var(--line);color:var(--dim);font:11px "IBM Plex Mono",monospace}
+
+  /* terms / status panels */
+  .terms-panel{border-color:var(--en-line);border-top:4px solid var(--en);background:linear-gradient(150deg,#f7fcf9,#fff 60%)}
+  .terms-panel .kicker{color:var(--en)}
+  .terms-copy{color:var(--muted);font-size:13.5px;margin:9px 0 16px}
+  .consent{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:11px;background:#fff;padding:14px 15px;cursor:pointer;transition:border-color .18s,box-shadow .18s}
+  .consent:hover{border-color:var(--en-line);box-shadow:0 6px 18px rgba(21,35,29,.05)}
+  .consent input{position:absolute;opacity:0;pointer-events:none}
+  .box{flex:0 0 20px;width:20px;height:20px;border-radius:6px;border:1.5px solid #b9c9bf;background:#fff;display:grid;place-items:center;margin-top:1px;transition:.18s}
+  .box svg{width:12px;height:12px;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;opacity:0;transform:scale(.6);transition:.18s}
+  .consent input:checked + .box{background:var(--en);border-color:var(--en)}
+  .consent input:checked + .box svg{opacity:1;transform:none}
+  .consent input:focus-visible + .box{outline:3px solid rgba(8,127,80,.2);outline-offset:2px}
+  .consent-text{font-size:13px;line-height:1.55}
+  .consent-text a{font-weight:600}
+  .version{display:inline-block;margin-left:5px;font:600 10px "IBM Plex Mono",monospace;color:var(--muted);background:var(--soft);border:1px solid var(--line);border-radius:99px;padding:1px 7px;vertical-align:1px}
+  .cta-row{display:flex;align-items:center;gap:12px;margin-top:18px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:8px;padding:11px 18px;background:var(--maas);color:#fff;font:600 14px "IBM Plex Sans",sans-serif;text-decoration:none;cursor:pointer;transition:filter .16s,transform .16s,box-shadow .16s}
+  .btn:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px);box-shadow:0 8px 20px rgba(47,101,200,.2)}
+  .btn:disabled{opacity:.38;cursor:not-allowed;box-shadow:none;transform:none}
+  .btn.green{background:var(--en);color:#fff}
+  .btn.green:hover:not(:disabled){box-shadow:0 8px 20px rgba(8,127,80,.2)}
+  .btn.ghost{background:#fff;border:1px solid var(--line);color:var(--maas)}
+  .btn.ghost:hover{box-shadow:0 6px 16px rgba(21,35,29,.06)}
+  .btn.small{padding:8px 13px;font-size:12.5px}
+  .err{color:var(--red);font-size:12.5px;min-height:19px;margin-top:9px}
+  .hint{color:var(--dim);font-size:11.5px;margin-top:10px}
+
+  .status-panel{border-top:4px solid var(--amber);background:linear-gradient(150deg,#fffdf7,#fff 65%)}
+  .status-panel.bad{border-top-color:var(--red);background:linear-gradient(150deg,#fff9f9,#fff 65%)}
+  .status-ic{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:var(--amber-soft);color:var(--amber);font:800 20px "Bricolage Grotesque",sans-serif;margin-bottom:12px}
+  .status-panel.bad .status-ic{background:var(--red-soft);color:var(--red)}
+  .status-panel p{color:var(--muted);font-size:13.5px;margin:8px 0 0}
+  .status-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:17px}
+  .next-steps{margin:16px 0 0;padding:14px 16px;border-radius:10px;background:#fff;border:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .next-steps b{display:block;color:var(--ink);font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-family:"IBM Plex Mono",monospace;margin-bottom:6px}
+  .next-steps ul{margin:0;padding-left:16px}
+  .next-steps li{margin:3px 0}
+
+  .ready-panel{border-color:var(--en-line);border-top:4px solid var(--en);background:linear-gradient(150deg,#f4fbf7,#fff 65%)}
+  .ready-panel .status-ic{background:var(--en-soft);color:var(--en)}
+  .ready-panel .cta-row{margin-top:18px}
+
+  footer{margin:38px 0 32px;padding-top:17px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;display:flex;gap:14px;flex-wrap:wrap}
+  footer a{color:var(--dim);text-decoration:none}
+  footer a:hover{color:var(--maas)}
+  footer .sp{margin-left:auto}
+
+  .hidden{display:none!important}
+  .reveal{animation:rise .65s cubic-bezier(.2,.8,.2,1) both}
+  .reveal.d1{animation-delay:.06s}
+  .reveal.d2{animation-delay:.12s}
+  @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+  @media(max-width:900px){
+    .hero-grid{grid-template-columns:1fr;gap:26px}
+    .glance{max-width:520px}
+    .layout{grid-template-columns:1fr}
+    .progress .track{width:120px}
+  }
+  @media(max-width:640px){
+    .shell{padding:0 18px}
+    .top .shell{height:60px}
+    .who{gap:8px}
+    .who span.w{display:none}
+    .hero .shell{padding:38px 18px 42px}
+    h1{font-size:clamp(36px,10vw,48px)}
+    .panel{padding:22px 20px}
+    .panel-head{flex-direction:column;gap:10px}
+    .progress{text-align:left}
+    .progress .track{width:100%}
+    .check-action{margin-left:0;padding-top:0;width:100%}
+    .floater:nth-child(n+7){display:none}
+  }
+  @media(prefers-reduced-motion:reduce){
+    *{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="top">
-    <div class="brand"><div class="logo">E</div> EnMaaS</div>
-    <div class="who">Signed in as <b id="who">…</b></div>
-  </div>
 
-  <div class="hero">
-    <h1 id="title">Welcome to EnMaaS</h1>
-    <p id="subtitle">One governed front door for frontier and hosted models.</p>
-  </div>
-
-  <div class="card">
-    <h2>Before you start</h2>
-    <div class="checks" id="checks">
-      <div class="check"><div class="dot pending">…</div><div class="check-body"><div class="check-label">Checking your access…</div></div></div>
+<header class="top">
+  <div class="shell">
+    <a class="brand" href="/welcome"><span class="en">En</span><span class="maas">MaaS</span></a>
+    <div class="who">
+      <span class="w">Signed in as <b id="who">…</b></span>
+      <a class="out" href="/logout">Sign out</a>
     </div>
   </div>
+</header>
 
-  <div class="card" id="terms-card" style="display:none">
-    <h2>Terms &amp; Conditions</h2>
-    <div class="terms-box">
+<header class="hero">
+  <canvas id="flow" aria-hidden="true"></canvas>
+  <div class="floaters" aria-hidden="true">
+    <span class="floater" style="left:5%;top:22%">$0.47</span>
+    <span class="floater" style="left:14%;top:70%">tok</span>
+    <span class="floater" style="left:28%;top:14%">$0.02</span>
+    <span class="floater" style="left:47%;top:78%">{ }</span>
+    <span class="floater" style="left:62%;top:16%">$15</span>
+    <span class="floater" style="left:78%;top:62%">ƒ(x)</span>
+    <span class="floater" style="left:90%;top:30%">$1.20</span>
+    <span class="floater" style="left:38%;top:44%">1010</span>
+    <span class="floater" style="left:70%;top:86%">$0.016</span>
+  </div>
+  <div class="shell">
+    <div class="hero-grid">
+      <div class="reveal">
+        <span class="eyebrow"><span class="dot"></span> Welcome to EnMaaS</span>
+        <h1 id="title">Welcome, <span class="name" id="hero-name">there</span>.</h1>
+        <p id="subtitle">One key unlocks frontier and hosted models through a single gateway — with your spend and usage in plain sight.</p>
+        <div class="chips">
+          <span class="chip"><b>1</b> API key</span>
+          <span class="chip"><b>2</b> API dialects</span>
+          <span class="chip"><b>0</b> extra accounts</span>
+          <span class="chip">Usage included</span>
+        </div>
+      </div>
+      <aside class="glance reveal d2" aria-label="What you get">
+        <span class="tag">At a glance</span>
+        <h3>Everything in one place.</h3>
+        <div class="glance-row"><span class="ic">⌘</span><span><b>One governed gateway</b><span>Anthropic &amp; OpenAI compatible endpoints</span></span></div>
+        <div class="glance-row"><span class="ic">◎</span><span><b>Frontier + hosted models</b><span>Claude, GPT, DeepSeek, GLM and more</span></span></div>
+        <div class="glance-row"><span class="ic">$</span><span><b>Clear usage, no surprises</b><span>Spend by model and monthly budget</span></span></div>
+        <div class="fine">No separate vendor accounts. No key sharing.</div>
+      </aside>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+  <div class="layout">
+    <section class="panel reveal d1" aria-labelledby="setup-title">
+      <div class="panel-head">
+        <div>
+          <span class="kicker">Your access</span>
+          <h2 id="setup-title">A few quick checks</h2>
+          <p class="lede" id="setup-lede">We verify your identity, group, and region automatically. You only need to accept the terms.</p>
+        </div>
+        <div class="progress" aria-live="polite">
+          <b><span id="progress-count">0</span><i>/ 4</i></b>
+          <span>checks complete</span>
+          <div class="track"><div class="fill" id="progress-fill"></div></div>
+        </div>
+      </div>
+      <div class="checks" id="checks">
+        <div class="check-skel"><div class="skel-dot"></div><div class="skel-lines"><div class="skel-line"></div><div class="skel-line short"></div></div></div>
+        <div class="check-skel"><div class="skel-dot"></div><div class="skel-lines"><div class="skel-line"></div><div class="skel-line short"></div></div></div>
+        <div class="check-skel"><div class="skel-dot"></div><div class="skel-lines"><div class="skel-line"></div><div class="skel-line short"></div></div></div>
+      </div>
+    </section>
+
+    <aside class="panel unlock reveal d2" aria-labelledby="unlock-title">
+      <span class="kicker">What you get</span>
+      <h2 id="unlock-title">Built for the way you work.</h2>
+      <ul class="benefits">
+        <li class="benefit"><span class="ic">⌘</span><span><b>One key, every tool</b><span>Claude Code, Codex, OpenCode, Pi and plain curl.</span></span></li>
+        <li class="benefit"><span class="ic">◎</span><span><b>Frontier and hosted</b><span>Choose the right model per task, not per vendor.</span></span></li>
+        <li class="benefit"><span class="ic">$</span><span><b>See where it goes</b><span>Spend by model, hosted-vs-frontier split, recent requests.</span></span></li>
+      </ul>
+      <div class="fine">90-day keys by default · revoke anytime</div>
+    </aside>
+  </div>
+
+  <section class="panel terms-panel hidden" id="terms-card" aria-labelledby="terms-title" style="margin-top:20px">
+    <span class="kicker">One last step</span>
+    <h2 id="terms-title">Terms &amp; Conditions</h2>
+    <p class="terms-copy">Please read and accept the EnMaaS terms. We keep them short: acceptable use, keeping keys safe, how usage is metered, and what data is appropriate for each model.</p>
+    <label class="consent" for="accept">
       <input type="checkbox" id="accept">
-      <label for="accept">I have read and accept the EnMaaS Terms &amp; Conditions
-        (<span id="terms-version"></span>). <a href="/legal/terms" target="_blank" rel="noopener">Read the terms</a></label>
-    </div>
+      <span class="box" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M2.5 8.5 6 12l7.5-8"/></svg></span>
+      <span class="consent-text">I have read and accept the EnMaaS Terms &amp; Conditions <span class="version" id="terms-version">draft-tbd</span>.<br><a href="/legal/terms" target="_blank" rel="noopener">Read the full terms ↗</a></span>
+    </label>
     <div class="err" id="err"></div>
-    <div class="actions">
-      <button class="btn btn-primary" id="start" disabled>Get started →</button>
+    <div class="cta-row">
+      <button class="btn green" id="start" disabled>Accept &amp; open my account →</button>
+      <span class="hint">Your acceptance is recorded with the date and version.</span>
     </div>
-  </div>
+  </section>
 
-  <div class="card" id="blocked-card" style="display:none">
-    <h2>Access status</h2>
-    <p id="blocked-copy" style="color:var(--t2)"></p>
-    <div class="actions">
-      <button class="btn btn-blocked" id="retry">Check again</button>
-      <a class="btn btn-ghost" href="/logout" style="text-decoration:none;display:inline-block">Sign out</a>
+  <section class="panel status-panel hidden" id="blocked-card" aria-labelledby="blocked-title" style="margin-top:20px">
+    <div class="status-ic">!</div>
+    <span class="kicker">Access status</span>
+    <h2 id="blocked-title">You're signed in, but not enabled yet.</h2>
+    <p id="blocked-copy"></p>
+    <div class="next-steps">
+      <b>What to do next</b>
+      <ul id="next-steps">
+        <li>Ask your manager or the EnMaaS team to add you to an authorized group.</li>
+        <li>Contact the EnMaaS team if you believe your profile or region is wrong.</li>
+      </ul>
     </div>
-  </div>
-
-  <div class="card" id="ready-card" style="display:none">
-    <h2>What you get</h2>
-    <div class="benefits">
-      <div class="benefit"><b>API keys</b><span>Create and revoke keys for your tools.</span></div>
-      <div class="benefit"><b>Your usage</b><span>Spend by model, hosted vs frontier.</span></div>
-      <div class="benefit"><b>One gateway</b><span>Anthropic and OpenAI compatible APIs.</span></div>
+    <div class="status-actions">
+      <button class="btn ghost" id="retry">Check again</button>
+      <a class="btn ghost" href="/welcome">About EnMaaS</a>
     </div>
-    <div class="actions"><a class="btn btn-primary" id="continue" href="/account?tab=keys&first=1" style="text-decoration:none">Continue</a></div>
-  </div>
+  </section>
 
-  <div class="foot">EnMaaS · <a href="/welcome">About the service</a> · <a href="/logout">Sign out</a></div>
-</div>
+  <section class="panel ready-panel hidden" id="ready-card" aria-labelledby="ready-title" style="margin-top:20px">
+    <div class="status-ic">✓</div>
+    <span class="kicker">All set</span>
+    <h2 id="ready-title">You're in.</h2>
+    <p>Your access is approved. Create your first API key, then point Claude Code, Codex, OpenCode, or curl at the gateway.</p>
+    <div class="cta-row">
+      <a class="btn green" id="continue" href="/account?tab=keys&amp;first=1">Create my first key →</a>
+      <a class="btn ghost" href="/account?tab=usage">Explore usage</a>
+    </div>
+  </section>
+
+  <footer>
+    <span>EnMaaS · Engineering AI access</span>
+    <a href="/welcome">About the service</a>
+    <a href="/legal/terms">Terms</a>
+    <a class="sp" href="/logout">Sign out</a>
+  </footer>
+</main>
 
 <script>
 (function () {
   var state = null;
   var labels = {identity:'Red Hat identity', group:'EnMaaS access group', country:'Region eligibility', terms:'Terms & Conditions'};
-  var icons = {pass:'✓', fail:'✕', pending:'●', skipped:'–'};
+  var icons = {pass:'✓', fail:'✕', pending:'●', skipped:'–', queued:'·', checking:''};
+  var badgeText = {pass:'done', pending:'action needed', fail:'blocked', skipped:'skipped', queued:'queued', checking:'checking'};
 
+  function $(id){ return document.getElementById(id); }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function firstName(name){ return String(name || '').trim().split(/\s+/)[0] || 'there'; }
 
-  function render() {
-    document.getElementById('who').textContent = state.display_name || state.username || 'you';
-    var box = document.getElementById('checks');
-    box.innerHTML = state.checks.map(function (c) {
-      var action = '';
-      if (c.id === 'terms') action = '<a class="check-action" href="/legal/terms" target="_blank" rel="noopener">Read terms</a>';
-      var detail = c.detail ? '<div class="check-detail">' + esc(c.detail) + '</div>' : '';
-      return '<div class="check"><div class="dot ' + esc(c.status) + '">' + (icons[c.status] || '?') + '</div>' +
-        '<div class="check-body"><div class="check-label">' + esc(c.label || labels[c.id] || c.id) + '</div>' + detail + '</div>' + action + '</div>';
-    }).join('');
+  function setSubtitle() {
+    if (state.state === 'blocked') {
+      $('subtitle').textContent = "You're signed in. One access check needs attention before we can open the gateway.";
+    } else if (state.state === 'needs_terms') {
+      $('subtitle').textContent = "Your identity, group and region are already verified. Accept the terms and your account is ready — usually under a minute.";
+    } else {
+      $('subtitle').textContent = "Your access is approved. Create a key and start using frontier and hosted models through one gateway.";
+    }
+  }
 
-    var terms = document.getElementById('terms-card');
-    var blocked = document.getElementById('blocked-card');
-    var ready = document.getElementById('ready-card');
-    var title = document.getElementById('title');
-    var sub = document.getElementById('subtitle');
-    terms.style.display = 'none';
-    blocked.style.display = 'none';
-    ready.style.display = 'none';
+  var CHECK_DETAILS = {
+    identity: 'Verifying your Red Hat identity…',
+    group: 'Looking up your EnMaaS groups…',
+    country: 'Checking your region against the access policy…',
+    terms: 'Checking your current acceptance…'
+  };
+
+  function checkRow(c, flash) {
+    var action = c.id === 'terms' ? '<a class="check-action" href="/legal/terms" target="_blank" rel="noopener">Read terms ↗</a>' : '';
+    var detail = c.detail ? '<div class="check-detail">' + esc(c.detail) + '</div>' : '';
+    var badge = c.status === 'pass' ? '' : '<span class="badge ' + esc(c.status) + '">' + esc(badgeText[c.status] || c.status) + '</span>';
+    var icon = icons[c.status];
+    if (icon === undefined) icon = '?';
+    return '<div class="check' + (flash ? ' resolved' : '') + '"><div class="dot ' + esc(c.status) + '">' + icon + '</div>' +
+      '<div class="check-body"><div class="check-label">' + esc(c.label || labels[c.id] || c.id) + badge + '</div>' + detail + '</div>' + action + '</div>';
+  }
+
+  function paintChecks(items, flashId) {
+    $('checks').innerHTML = items.map(function (c) { return checkRow(c, c.id === flashId); }).join('');
+  }
+
+  function updateProgress(items) {
+    var passed = items.filter(function (c) { return c.status === 'pass'; }).length;
+    var total = items.length || 4;
+    $('progress-count').textContent = passed;
+    $('progress-fill').style.width = Math.round(passed / total * 100) + '%';
+    $('progress').setAttribute('aria-label', passed + ' of ' + total + ' checks complete');
+  }
+
+  function showStatus() {
+    var terms = $('terms-card');
+    var blocked = $('blocked-card');
+    var ready = $('ready-card');
+    terms.classList.add('hidden');
+    blocked.classList.add('hidden');
+    ready.classList.add('hidden');
 
     if (state.state === 'blocked') {
-      title.textContent = "You're signed in, but not enabled yet";
-      sub.textContent = 'One of the access checks below needs attention before you can use EnMaaS.';
-      blocked.style.display = '';
-      document.getElementById('blocked-copy').textContent = blockedCopy(state.blocked_reason);
+      blocked.classList.remove('hidden');
+      blocked.classList.toggle('bad', state.blocked_reason !== 'directory_unavailable');
+      $('blocked-copy').textContent = blockedCopy(state.blocked_reason);
+      var steps = $('next-steps');
+      if (state.blocked_reason === 'group_required') {
+        steps.innerHTML = '<li>Ask your manager or the EnMaaS team to add you to an authorized group.</li><li>Sign out and back in so your groups claim refreshes.</li><li>Use “Check again” below.</li>';
+      } else if (state.blocked_reason === 'country_blocked' || state.blocked_reason === 'country_unknown') {
+        steps.innerHTML = '<li>Contact the EnMaaS team if you believe your region is recorded incorrectly.</li><li>Include your Red Hat username and the country on your employee profile.</li>';
+      } else {
+        steps.innerHTML = '<li>Confirm you are signed in with your Red Hat identity.</li><li>Contact the EnMaaS team if this persists.</li>';
+      }
     } else if (state.state === 'needs_terms') {
-      title.textContent = 'Welcome, ' + (state.display_name || 'there') + '!';
-      sub.textContent = 'Review the checks below, then accept the Terms & Conditions to continue.';
-      terms.style.display = '';
-      document.getElementById('terms-version').textContent = state.terms.version;
-      document.getElementById('start').disabled = !document.getElementById('accept').checked;
+      terms.classList.remove('hidden');
+      $('terms-version').textContent = state.terms.version;
+      $('start').disabled = !$('accept').checked;
+      $('err').textContent = '';
     } else {
-      title.textContent = 'Welcome, ' + (state.display_name || 'there') + '!';
-      sub.textContent = 'Your access is ready. You can create your first API key now.';
-      ready.style.display = '';
+      ready.classList.remove('hidden');
     }
+  }
+
+  function render() {
+    var name = state.display_name || state.username || 'there';
+    $('who').textContent = name;
+    $('hero-name').textContent = firstName(name);
+    setSubtitle();
+
+    var results = {};
+    (state.checks || []).forEach(function (c) { results[c.id] = c; });
+    var order = ['identity', 'group', 'country', 'terms'].filter(function (id) { return results[id]; });
+    if (!order.length) order = (state.checks || []).map(function (c) { return c.id; });
+
+    var items = order.map(function (id) {
+      return {id: id, label: results[id].label, status: 'queued', detail: ''};
+    });
+
+    // Hide the verdict until the checks have visibly run.
+    ['terms-card', 'blocked-card', 'ready-card'].forEach(function (id) { $(id).classList.add('hidden'); });
+    paintChecks(items);
+    updateProgress(items);
+    $('setup-lede').textContent = 'Hang on — we are verifying your identity, group, and region now.';
+
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) {
+      items = order.map(function (id) { return results[id]; });
+      paintChecks(items);
+      updateProgress(items);
+      $('setup-lede').textContent = 'We verify your identity, group, and region automatically. You only need to accept the terms.';
+      showStatus();
+      return;
+    }
+
+    var idx = 0;
+    function next() {
+      if (idx >= order.length) {
+        $('setup-lede').textContent = 'We verify your identity, group, and region automatically. You only need to accept the terms.';
+        showStatus();
+        return;
+      }
+      var id = order[idx];
+      items[idx] = {id: id, label: results[id].label, status: 'checking', detail: CHECK_DETAILS[id] || 'Checking…'};
+      paintChecks(items);
+      var wait = 560 + (idx * 90);
+      setTimeout(function () {
+        items[idx] = {id: id, label: results[id].label, status: results[id].status, detail: results[id].detail || ''};
+        paintChecks(items, id);
+        updateProgress(items);
+        idx++;
+        setTimeout(next, 150);
+      }, wait);
+    }
+    next();
   }
 
   function blockedCopy(reason) {
     switch (reason) {
       case 'group_required':
-        return 'Your account is not in an authorized EnMaaS group. Ask your manager or the EnMaaS team to request access, then check again.';
+        return 'Your account is not in an authorized EnMaaS group. Access is granted by group, so the EnMaaS team needs to add you before you can continue.';
       case 'country_blocked':
         return "EnMaaS isn't available in your region. Contact the EnMaaS team if you believe this is a mistake.";
       case 'country_unknown':
-        return 'We could not verify your region. Contact the EnMaaS team to have your profile corrected.';
+        return 'We could not verify your region. Contact the EnMaaS team to have your employee profile corrected.';
       case 'inactive':
         return 'This account is not active. Contact the EnMaaS team if you believe this is a mistake.';
       case 'not_provisioned':
@@ -188,14 +508,14 @@
       .catch(function () {});
   }
 
-  document.getElementById('accept').addEventListener('change', function () {
-    document.getElementById('start').disabled = !this.checked;
+  $('accept').addEventListener('change', function () {
+    $('start').disabled = !this.checked;
   });
 
-  document.getElementById('start').addEventListener('click', function () {
+  $('start').addEventListener('click', function () {
     var btn = this;
     btn.disabled = true;
-    document.getElementById('err').textContent = '';
+    $('err').textContent = '';
     fetch('/api/v1/me/onboarding/accept', {
       method: 'POST',
       credentials: 'same-origin',
@@ -205,19 +525,82 @@
       return r.json().then(function (j) { return {ok: r.ok, body: j}; });
     }).then(function (res) {
       if (!res.ok) {
-        document.getElementById('err').textContent = (res.body && res.body.error) || 'Could not record acceptance.';
+        $('err').textContent = (res.body && res.body.error) || 'Could not record acceptance.';
         btn.disabled = false;
         return;
       }
       location.href = (res.body && res.body.redirect) || '/account?tab=keys&first=1';
     }).catch(function () {
-      document.getElementById('err').textContent = 'Network error. Try again.';
+      $('err').textContent = 'Network error. Try again.';
       btn.disabled = false;
     });
   });
 
-  document.getElementById('retry').addEventListener('click', load);
+  $('retry').addEventListener('click', load);
   load();
+
+  // Same animated "cost flow" as the public welcome page: tokens drift toward
+  // the gateway and pick up a price as they cross it.
+  var cv = document.getElementById('flow');
+  if (!cv || !cv.getContext) return;
+  var ctx = cv.getContext('2d'), dpr = Math.min(window.devicePixelRatio || 1, 2), W = 0, H = 0, cx = 0, tokens = [], running = true;
+  var GLYPHS = ['0x7f3a','tok','ƒ(x)','⧉','{ }','42','1010','>>','$?','…'];
+  var PRICES = ['$0.15','$0.47','$0.016','$3','$15','$0.60','$0.02','$1.20'];
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function resize(){
+    var r = cv.parentElement.getBoundingClientRect();
+    W = r.width; H = r.height;
+    cv.width = W * dpr; cv.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx = Math.min(W - 24, Math.max(24, W * .62));
+  }
+  function spawn(){
+    return {x:-30, y:16 + Math.random() * Math.max(30, H - 32), vx:.4 + Math.random() * .8,
+      g:GLYPHS[(Math.random() * GLYPHS.length) | 0], priced:false,
+      stamp:PRICES[(Math.random() * PRICES.length) | 0], born:0, alpha:0};
+  }
+  resize();
+  addEventListener('resize', resize);
+  addEventListener('load', resize);
+  for (var i = 0; i < 26; i++) { var t = spawn(); t.x = 24 + Math.random() * Math.max(24, cx - 48); t.y = 18 + ((i + .5) / 26) * Math.max(20, H - 36); tokens.push(t); }
+  cv.classList.add('flow-ready');
+  function frame(ts){
+    ctx.clearRect(0, 0, W, H);
+    var grad = ctx.createLinearGradient(cx - 42, 0, cx + 42, 0);
+    grad.addColorStop(0, 'rgba(8,127,80,0)');
+    grad.addColorStop(.5, 'rgba(8,127,80,.12)');
+    grad.addColorStop(1, 'rgba(8,127,80,0)');
+    ctx.fillStyle = grad; ctx.fillRect(cx - 42, 0, 84, H);
+    ctx.strokeStyle = 'rgba(8,127,80,.38)';
+    ctx.setLineDash([3, 5]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
+    ctx.setLineDash([]); ctx.textBaseline = 'middle';
+    for (var i = 0; i < tokens.length; i++) {
+      var t = tokens[i];
+      if (!t.priced && t.x >= cx) { t.priced = true; t.born = ts; }
+      t.x += t.vx * (t.priced ? .35 : 1);
+      t.alpha = Math.min(t.alpha + .03, 1);
+      if (!t.priced) {
+        ctx.font = '500 12px "IBM Plex Mono",monospace';
+        ctx.fillStyle = 'rgba(82,101,91,.7)';
+        ctx.globalAlpha = t.alpha;
+        ctx.fillText(t.g, t.x, t.y);
+      } else {
+        var age = ts - t.born, fade = age > 2400 ? Math.max(0, 1 - (age - 2400) / 1600) : 1, pop = age < 180 ? 1 + .35 * (1 - age / 180) : 1;
+        ctx.globalAlpha = t.alpha * fade;
+        ctx.fillStyle = '#087f50';
+        ctx.font = '600 ' + (12 * pop).toFixed(1) + 'px "IBM Plex Mono",monospace';
+        ctx.fillText(t.stamp, t.x, t.y);
+      }
+      ctx.globalAlpha = 1;
+      if ((t.priced && (ts - t.born) > 4200) || t.x > W + 60) tokens[i] = spawn();
+    }
+    if (!reduced && running) requestAnimationFrame(frame);
+  }
+  if (reduced) frame(0); else requestAnimationFrame(frame);
+  if (!reduced && 'IntersectionObserver' in window) new IntersectionObserver(function(es){
+    es.forEach(function(e){ if (e.isIntersecting && !running) { running = true; requestAnimationFrame(frame); } else if (!e.isIntersecting) running = false; });
+  }, {threshold:.01}).observe(cv);
 })();
 </script>
 </body>

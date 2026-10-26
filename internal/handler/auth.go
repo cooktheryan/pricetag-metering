@@ -143,6 +143,13 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		} else {
 			data = bytes.Replace(data, []byte("<!-- OIDC_LOGIN -->"), nil, 1)
 		}
+		// Local/demo shortcuts only. The production SSO link above is never
+		// modified; this is a separate, env-gated section below it.
+		if h.oidc != nil && h.cfg.OIDC.TestLogin {
+			data = bytes.Replace(data, []byte("<!-- TEST_LOGIN -->"), testLoginPanel, 1)
+		} else {
+			data = bytes.Replace(data, []byte("<!-- TEST_LOGIN -->"), nil, 1)
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(data)

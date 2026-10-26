@@ -74,6 +74,7 @@ echo "==> starting metering-service"
   OIDC_CLIENT_SECRET=local-secret \
   OIDC_REDIRECT_URL=http://localhost:8080/oauth/callback \
   OIDC_SCOPES="openid profile email groups" \
+  OIDC_TEST_LOGIN=true \
   ONBOARDING_MODE=enforce \
   ONBOARDING_TERMS_VERSION=draft-tbd \
   ONBOARDING_TERMS_URL=/legal/terms \
@@ -118,7 +119,7 @@ EnMaaS local demo is running.
   Admin policy      http://localhost:8080/admin/access
   API-key login     local-noy-key
 
-  Personas (pick at the mock IdP):
+  Personas (Test sign-in on /login, or pick at the mock IdP):
     new-user          first login → onboarding + Terms → keys
     returning-user    terms accepted, has keys + month-to-date usage
     blocked-country   GE group, IR (IRN) → region block

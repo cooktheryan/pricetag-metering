@@ -30,6 +30,13 @@
   h1{font-size:22px;font-weight:700}
   .sub{color:var(--t2);font-size:12px;margin-top:3px}
   .range{background:var(--c1);border:1px solid var(--bdr);color:var(--t);border-radius:8px;padding:8px 12px;font:600 12px Inter,sans-serif;cursor:pointer;outline:none}
+  .range-group{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+  .custom-range{display:flex;align-items:center;gap:7px;background:var(--c1);border:1px solid var(--bdr);border-radius:9px;padding:5px 6px 5px 9px}
+  .custom-range input[type=date]{background:var(--c2);border:1px solid var(--bdr);color:var(--t);border-radius:6px;padding:6px 8px;font:600 11.5px Inter,sans-serif;color-scheme:dark;outline:none}
+  .custom-range input[type=date]:focus{border-color:var(--blu)}
+  .custom-range .sep{color:var(--t2);font-size:11px}
+  .custom-range .btn{padding:6px 12px;font-size:11px;border-radius:6px}
+  .range-err{width:100%;text-align:right;color:var(--red);font-size:11px;min-height:14px}
   .banner{display:flex;gap:12px;align-items:flex-start;background:rgba(77,160,248,.08);border:1px solid rgba(77,160,248,.3);
           border-radius:10px;padding:14px 18px;margin-bottom:20px;font-size:12.5px}
   .banner b{color:var(--blu)}
@@ -143,12 +150,24 @@
         <h1>Your spend</h1>
         <div class="sub" id="usage-sub">Month to date · updated just now</div>
       </div>
-      <select class="range" id="range">
-        <option value="mtd" selected>Month to date</option>
-        <option value="24h">Last 24 hours</option>
-        <option value="7d">Last 7 days</option>
-        <option value="30d">Last 30 days</option>
-      </select>
+      <div class="range-group">
+        <select class="range" id="range">
+          <option value="mtd" selected>Month to date</option>
+          <option value="24h">Last 24 hours</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+          <option value="90d">Last 90 days</option>
+          <option value="365d">Last 12 months</option>
+          <option value="custom">Custom range…</option>
+        </select>
+        <div class="custom-range hidden" id="custom-range">
+          <input type="date" id="range-from" aria-label="From date">
+          <span class="sep">→</span>
+          <input type="date" id="range-to" aria-label="To date">
+          <button class="btn btn-primary" id="range-apply">Apply</button>
+        </div>
+        <div class="range-err" id="range-err"></div>
+      </div>
     </div>
 
     <div class="kpis">
@@ -331,7 +350,7 @@ export OPENAI_API_KEY=<your-key>
 
 <script>
 (function () {
-  var state = {tab:'usage', range:'mtd', keys:[], models:[], overview:null, revokeId:''};
+  var state = {tab:'usage', range:'mtd', from:'', to:'', keys:[], models:[], overview:null, revokeId:''};
   var COLORS = ['#4da0f8','#3dcc6e','#eba830','#a88cf8','#38d4c2','#e8554e','#8090a8'];
 
   function $(id){ return document.getElementById(id); }
@@ -393,7 +412,7 @@ export OPENAI_API_KEY=<your-key>
   /* ---------------- usage ---------------- */
   function loadUsage(){
     $('usage-sub').textContent = rangeLabel() + ' · updated ' + new Date().toLocaleTimeString();
-    api('/api/v1/me/usage/summary?range='+state.range).then(function(d){
+    api('/api/v1/me/usage/summary?'+rangeQuery()).then(function(d){
       state.overview = d.overview || {};
       var q = d.quota || state.quota;
       var o = state.overview;
@@ -412,7 +431,7 @@ export OPENAI_API_KEY=<your-key>
       }
     }).catch(function(){ toast('Could not load usage', true); });
 
-    api('/api/v1/me/usage/models?range='+state.range).then(function(rows){
+    api('/api/v1/me/usage/models?'+rangeQuery()).then(function(rows){
       state.models = rows || [];
       renderModels();
     }).catch(function(){
@@ -427,7 +446,29 @@ export OPENAI_API_KEY=<your-key>
   }
 
   function rangeLabel(){
-    return {mtd:'Month to date','24h':'Last 24 hours','7d':'Last 7 days','30d':'Last 30 days'}[state.range] || 'Month to date';
+    if(state.range === 'custom' && state.from && state.to){
+      return fmtRangeDate(state.from) + ' – ' + fmtRangeDate(state.to);
+    }
+    return {mtd:'Month to date','24h':'Last 24 hours','7d':'Last 7 days','30d':'Last 30 days',
+      '90d':'Last 90 days','365d':'Last 12 months'}[state.range] || 'Month to date';
+  }
+
+  function fmtRangeDate(value){
+    var d = new Date(value + 'T00:00:00');
+    if(isNaN(d)) return value;
+    return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  }
+
+  function rangeQuery(){
+    if(state.range === 'custom' && state.from && state.to){
+      return 'range=custom&from='+encodeURIComponent(state.from)+'&to='+encodeURIComponent(state.to);
+    }
+    return 'range='+encodeURIComponent(state.range);
+  }
+
+  function isoDate(d){
+    var y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+day;
   }
 
   function renderModels(){
@@ -607,11 +648,52 @@ export OPENAI_API_KEY=<your-key>
     b.onclick=function(){ navigator.clipboard.writeText(b.getAttribute('data-copy')).then(function(){toast('Copied');}); };
   });
 
-  $('range').onchange=function(){ state.range=this.value; loadUsage(); };
+  $('range').onchange=function(){
+    if(this.value === 'custom'){
+      $('custom-range').classList.remove('hidden');
+      $('range-err').textContent='';
+      if(!$('range-from').value || !$('range-to').value){
+        var today=new Date(), start=new Date(); start.setDate(start.getDate()-29);
+        $('range-from').value=isoDate(start);
+        $('range-to').value=isoDate(today);
+      }
+      return;
+    }
+    state.range=this.value;
+    $('custom-range').classList.add('hidden');
+    $('range-err').textContent='';
+    loadUsage();
+  };
+
+  function applyCustomRange(){
+    var from=$('range-from').value, to=$('range-to').value;
+    if(!from || !to){ $('range-err').textContent='Choose both a start and end date.'; return; }
+    if(from > to){ $('range-err').textContent='The start date must be before the end date.'; return; }
+    var today=isoDate(new Date());
+    if(to > today){ $('range-err').textContent='The end date cannot be in the future.'; return; }
+    $('range-err').textContent='';
+    state.range='custom'; state.from=from; state.to=to;
+    loadUsage();
+  }
+  $('range-apply').onclick=applyCustomRange;
+  $('range-from').onchange=function(){
+    $('range-to').min=this.value;
+    if($('range-to').value && $('range-to').value < this.value) $('range-to').value=this.value;
+  };
 
   /* ---------------- boot ---------------- */
   var params=new URLSearchParams(location.search);
   if(params.get('first')==='1'){ $('first-banner').className='banner'; history.replaceState(null,'',location.pathname+'?tab=keys'); }
+  var initialRange=params.get('range');
+  if(initialRange){
+    if(initialRange==='custom' && params.get('from') && params.get('to')){
+      state.range='custom'; state.from=params.get('from'); state.to=params.get('to');
+      $('range').value='custom'; $('custom-range').classList.remove('hidden');
+      $('range-from').value=state.from; $('range-to').value=state.to;
+    } else if(['mtd','24h','7d','30d','90d','365d'].indexOf(initialRange)>=0){
+      state.range=initialRange; $('range').value=initialRange;
+    }
+  }
   loadWho();
   setTab(params.get('tab')==='keys'?'keys':'usage', false);
 })();

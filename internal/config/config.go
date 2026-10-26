@@ -209,8 +209,12 @@ type Access struct {
 // disabled by default: shipping OIDC code must not change the production login
 // path until the provider, redirect URI, and rollout have been reviewed.
 type OIDC struct {
-	Enabled               bool
-	ClaimsDebug           bool
+	Enabled     bool
+	ClaimsDebug bool
+	// TestLogin exposes local persona shortcuts on the login page and forwards
+	// a persona hint to the identity provider. It exists purely for the local
+	// mock IdP; leave it false everywhere else.
+	TestLogin             bool
 	IssuerURL             string
 	ClientID              string
 	ClientSecret          string
@@ -395,6 +399,7 @@ func Load() Config {
 		OIDC: OIDC{
 			Enabled:               envBool("OIDC_ENABLED", false),
 			ClaimsDebug:           envBool("OIDC_CLAIMS_DEBUG", false),
+			TestLogin:             envBool("OIDC_TEST_LOGIN", false),
 			IssuerURL:             strings.TrimSuffix(os.Getenv("OIDC_ISSUER_URL"), "/"),
 			ClientID:              os.Getenv("OIDC_CLIENT_ID"),
 			ClientSecret:          os.Getenv("OIDC_CLIENT_SECRET"),
