@@ -31,6 +31,7 @@ var testLoginPanel = []byte(`<div class="test-login">
   <div class="persona-grid">
     <a class="persona" href="/oauth/login?persona=new-user"><strong>Nina New</strong><span>First-time user</span></a>
     <a class="persona" href="/oauth/login?persona=returning-user"><strong>Ravi Return</strong><span>Returning user</span></a>
+    <a class="persona" href="/oauth/login?persona=manager-user"><strong>Maya Manager</strong><span>Team manager</span></a>
     <a class="persona" href="/oauth/login?persona=blocked-country"><strong>Bea Blocked</strong><span>Blocked country</span></a>
     <a class="persona" href="/oauth/login?persona=no-group"><strong>Noah Nogroup</strong><span>No access group</span></a>
     <a class="persona admin" href="/oauth/login?persona=admin"><strong>Noy Itzikowitz</strong><span>Super admin</span></a>
