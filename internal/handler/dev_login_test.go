@@ -91,6 +91,27 @@ func TestDevLoginGroups(t *testing.T) {
 	}
 }
 
+func TestIsDevResetUser(t *testing.T) {
+	cases := []struct {
+		name string
+		tags map[string]any
+		want bool
+	}{
+		{"missing", map[string]any{}, false},
+		{"bool true", map[string]any{"dev_reset_on_login": true}, true},
+		{"bool false", map[string]any{"dev_reset_on_login": false}, false},
+		{"string true", map[string]any{"dev_reset_on_login": "true"}, true},
+		{"other type", map[string]any{"dev_reset_on_login": 1}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isDevResetUser(tc.tags); got != tc.want {
+				t.Fatalf("isDevResetUser(%v) = %v, want %v", tc.tags, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestIsDevTestUser(t *testing.T) {
 	cases := []struct {
 		name string

@@ -146,8 +146,10 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 			data = bytes.Replace(data, []byte("<!-- OIDC_LOGIN -->"), nil, 1)
 		}
 		// Local/demo shortcuts only. The production SSO link above is never
-		// modified; this is a separate, env-gated section below it.
-		if h.oidc != nil && h.cfg.OIDC.TestLogin {
+		// modified; this is a separate, env-gated section below it. When the
+		// direct dev identities are configured they replace this mock-IdP
+		// picker; the mock picker is still reachable through the SSO button.
+		if h.oidc != nil && h.cfg.OIDC.TestLogin && len(h.cfg.DevLoginUsers) == 0 {
 			data = bytes.Replace(data, []byte("<!-- TEST_LOGIN -->"), testLoginPanel, 1)
 		} else {
 			data = bytes.Replace(data, []byte("<!-- TEST_LOGIN -->"), nil, 1)
@@ -233,7 +235,7 @@ func (h *AuthHandler) devLoginPanel(r *http.Request) []byte {
   <p>Development environment only. Seeded demo accounts with sample usage.</p>
   <div class="persona-grid">`)
 	for _, username := range h.cfg.DevLoginUsers {
-		label := username
+		label, detail := username, username
 		if h.orgStore != nil {
 			if pu, err := h.orgStore.PartnerUserByMaaSUsername(r.Context(), username); err == nil {
 				first, _ := pu.Tags["first_name"].(string)
@@ -241,10 +243,13 @@ func (h *AuthHandler) devLoginPanel(r *http.Request) []byte {
 				if name := strings.TrimSpace(first + " " + last); name != "" {
 					label = name
 				}
+				if role, _ := pu.Tags["dev_label"].(string); role != "" {
+					detail = role
+				}
 			}
 		}
-		fmt.Fprintf(&b, `<a class="persona" href="/dev-login?as=%s"><strong>%s</strong><span>%s</span></a>`,
-			url.QueryEscape(username), html.EscapeString(label), html.EscapeString(username))
+		fmt.Fprintf(&b, `<a class="persona" href="/dev-login?as=%s" title="%s"><strong>%s</strong><span>%s</span></a>`,
+			url.QueryEscape(username), html.EscapeString(username), html.EscapeString(label), html.EscapeString(detail))
 	}
 	b.WriteString(`</div></div>`)
 	return []byte(b.String())
@@ -288,9 +293,34 @@ func (h *AuthHandler) HandleDevLogin(w http.ResponseWriter, r *http.Request) {
 	// seeded directory row so the same access gates run as they would after
 	// SSO; an empty list deliberately exercises the no-group gate.
 	groups := devLoginGroups(pu.Tags)
+	// The "new user" persona must start the first-run flow again on every
+	// click, exactly like the local mock IdP does. Driven by a directory tag
+	// so no test address is hardcoded here.
+	if isDevResetUser(pu.Tags) {
+		if err := h.orgStore.ResetAgreement(r.Context(), pu.UserID, "terms", h.cfg.Onboarding.TermsVersion); err != nil {
+			slog.Warn("dev test persona reset failed", "username", target, "error", err)
+		}
+	}
 	slog.Warn("dev test login used", "username", target, "remote", r.RemoteAddr)
 	h.setCookie(w, target, groups, "")
-	http.Redirect(w, r, h.loginDestination(r, target, groups), http.StatusFound)
+	// Always exercise the enforced gates for dev identities. This lets a
+	// tester see the country/group/terms failures without flipping the whole
+	// deployment to ONBOARDING_MODE=enforce, which would affect real users.
+	http.Redirect(w, r, h.loginDestinationWithMode(r, target, groups, config.OnboardingEnforce), http.StatusFound)
+}
+
+func isDevResetUser(tags map[string]any) bool {
+	value, ok := tags["dev_reset_on_login"]
+	if !ok {
+		return false
+	}
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(v, "true")
+	}
+	return false
 }
 
 // devLoginGroups reads the optional dev_groups tag (JSON array or
@@ -343,6 +373,14 @@ func isDevTestUser(tags map[string]any) bool {
 // partner_users is the single identity source. Users without a partner role
 // land on /account. Fails closed to /dashboard.
 func (h *AuthHandler) loginDestination(r *http.Request, username string, groups []string) string {
+	return h.loginDestinationWithMode(r, username, groups, "")
+}
+
+// loginDestinationWithMode is loginDestination with an optional onboarding
+// mode override. Dev test identities use "enforce" so the country/group/terms
+// failures can be exercised even when the deployment itself ships onboarding
+// disabled (which is the safe production default).
+func (h *AuthHandler) loginDestinationWithMode(r *http.Request, username string, groups []string, mode string) string {
 	if h.orgStore == nil {
 		return "/dashboard"
 	}
@@ -351,7 +389,11 @@ func (h *AuthHandler) loginDestination(r *http.Request, username string, groups 
 	}
 	// Incomplete onboarding always wins over the role-based landing page:
 	// nothing else is usable until the three gates pass.
-	if NewAccessGate(h.cfg, h.orgStore).NeedsOnboarding(r.Context(), username, groups) {
+	gateCfg := h.cfg
+	if mode != "" {
+		gateCfg.Onboarding.Mode = mode
+	}
+	if NewAccessGate(gateCfg, h.orgStore).NeedsOnboarding(r.Context(), username, groups) {
 		return "/onboarding"
 	}
 	// Manager routing is derived from the partner hierarchy only.
