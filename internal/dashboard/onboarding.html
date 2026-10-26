@@ -97,6 +97,15 @@
   .check-detail{font-size:12.5px;color:var(--muted);margin-top:3px}
   .check-action{font-size:12px;color:var(--maas);text-decoration:none;margin-left:auto;white-space:nowrap;padding-top:3px}
   .check-action:hover{text-decoration:underline}
+  .terms-row-action{display:flex;align-items:center;gap:12px;margin-left:auto;white-space:nowrap}
+  .terms-toggle{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:12px;cursor:pointer}
+  .terms-toggle input{position:absolute;opacity:0;pointer-events:none}
+  .terms-toggle .box{flex:0 0 19px;width:19px;height:19px;border-radius:5px;border:1.5px solid #566574;background:#0b0f13;display:grid;place-items:center;margin:0;transition:.18s}
+  .terms-toggle .box svg{width:12px;height:12px;fill:none;stroke:#06130a;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;opacity:0;transform:scale(.6);transition:.18s}
+  .terms-toggle input:checked + .box{background:var(--en);border-color:var(--en)}
+  .terms-toggle input:checked + .box svg{opacity:1;transform:none}
+  .terms-toggle input:disabled + .box{opacity:.45;cursor:not-allowed}
+  .terms-toggle input:disabled ~ span:last-child{opacity:.45}
   .badge{display:inline-block;border-radius:99px;padding:1px 8px;font:600 9.5px "IBM Plex Mono",monospace;letter-spacing:.06em;text-transform:uppercase;background:#192128;color:var(--dim);border:1px solid var(--line2)}
   .badge:empty{display:none}
   .badge.checking{background:var(--maas-soft);color:var(--maas);border-color:var(--maas-line)}
@@ -325,7 +334,7 @@
 
   function buildRows(order, results) {
     $('checks').innerHTML = order.map(function (id) {
-      var action = id === 'terms' ? '<a class="check-action" href="/legal/terms" target="_blank" rel="noopener">Read terms ↗</a>' : '';
+      var action = id === 'terms' ? '<span class="terms-row-action"><label class="terms-toggle" for="terms-row-checkbox"><input type="checkbox" id="terms-row-checkbox" disabled><span class="box" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M2.5 8.5 6 12l7.5-8"/></svg></span><span>Accept terms</span></label><a class="check-action" href="/legal/terms" target="_blank" rel="noopener">Read terms ↗</a></span>' : '';
       return '<div class="check queued" data-id="' + esc(id) + '">' +
         '<span class="ck" aria-hidden="true"><svg viewBox="0 0 24 24"><path pathLength="1" d="M5.4 12.5l4.3 4.3L18.7 7.4"/></svg><span class="glyph"></span></span>' +
         '<div class="check-body"><div class="check-label">' + esc(results[id].label || labels[id] || id) + ' <span class="badge"></span></div><div class="check-detail"></div></div>' +
@@ -346,6 +355,11 @@
     badge.className = 'badge ' + status;
     badge.textContent = badgeText[status] || '';
     el.querySelector('.check-detail').textContent = detail || '';
+    var toggle = el.querySelector('#terms-row-checkbox');
+    if (toggle) {
+      toggle.disabled = status !== 'pending';
+      toggle.checked = $('accept').checked;
+    }
   }
 
   function syncProgress() {
@@ -483,6 +497,15 @@
 
   $('accept').addEventListener('change', function () {
     $('start').disabled = !this.checked;
+    var rowToggle = $('terms-row-checkbox');
+    if (rowToggle) rowToggle.checked = this.checked;
+  });
+
+  document.addEventListener('change', function (event) {
+    if (event.target.id !== 'terms-row-checkbox') return;
+    $('accept').checked = event.target.checked;
+    $('start').disabled = !event.target.checked;
+    if (event.target.checked) $('terms-card').scrollIntoView({behavior:'smooth', block:'center'});
   });
 
   $('start').addEventListener('click', function () {
