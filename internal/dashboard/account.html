@@ -106,9 +106,11 @@
   .err{color:var(--red);font-size:12px;min-height:18px;margin-top:6px}
   .secret{position:relative;background:rgba(61,204,110,.07);border:1px solid rgba(61,204,110,.35);border-radius:9px;padding:14px 16px;margin:6px 0 12px}
   .secret .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--grn);font-weight:800;margin-bottom:6px}
-  .secret code{font-family:'SF Mono',SFMono-Regular,Consolas,Menlo,monospace;font-size:12.5px;word-break:break-all;user-select:all;line-height:1.6}
-  .secret-copy{position:absolute;top:13px;right:14px;background:none;border:0;color:var(--blu);font:600 11px Inter,sans-serif;cursor:pointer;padding:2px 0}
-  .secret-copy:hover{text-decoration:underline}
+  .secret code{display:block;padding-right:82px;font-family:'SF Mono',SFMono-Regular,Consolas,Menlo,monospace;font-size:12.5px;word-break:break-all;user-select:all;line-height:1.6}
+  .secret-show,.secret-copy{position:absolute;top:13px;background:none;border:0;color:var(--blu);font:600 11px Inter,sans-serif;cursor:pointer;padding:2px 0}
+  .secret-show{right:50px}
+  .secret-copy{right:14px}
+  .secret-show:hover,.secret-copy:hover{text-decoration:underline}
   .key-success{color:var(--t2);font-size:12px;line-height:1.55;margin:12px 0 14px}
   .key-success strong{display:block;color:var(--grn);font-size:14px;margin-bottom:3px}
   .key-success a{color:var(--blu);text-decoration:none}
@@ -280,7 +282,8 @@
       <div class="hint">Copy it now. This is the only time it will be displayed.</div>
       <div class="secret">
         <div class="lbl">API key</div>
-        <code id="reveal-key">—</code>
+        <code id="reveal-key">••••••••••••••••••••</code>
+        <button class="secret-show" id="reveal-show" type="button" aria-pressed="false">Show</button>
         <button class="secret-copy" id="reveal-copy" type="button">Copy</button>
         <div class="warn">⚠ Do not share it or commit it to a repository.</div>
       </div>
@@ -563,7 +566,10 @@
     if(!name){ $('create-err').textContent='Give the key a name.'; return; }
     var btn=this; btn.disabled=true;
     api('/api/v1/me/keys',{method:'POST',body:{name:name,expiresIn:$('key-expiry').value}}).then(function(k){
-      $('reveal-key').textContent = k.key || '';
+      $('reveal-key').textContent = '••••••••••••••••••••';
+      $('reveal-key').dataset.shown = 'false';
+      $('reveal-show').textContent = 'Show';
+      $('reveal-show').setAttribute('aria-pressed','false');
       $('create-step').className='hidden'; $('reveal-step').className='';
       $('reveal-saved').checked=false; $('reveal-done').disabled=true;
       state.lastKey = k.key||'';
@@ -574,15 +580,26 @@
   };
 
   $('reveal-saved').onchange=function(){ $('reveal-done').disabled=!this.checked; };
+  $('reveal-show').onclick=function(){
+    var shown=$('reveal-key').dataset.shown==='true';
+    $('reveal-key').textContent=shown ? '••••••••••••••••••••' : (state.lastKey || '');
+    $('reveal-key').dataset.shown=shown ? 'false' : 'true';
+    this.textContent=shown ? 'Show' : 'Hide';
+    this.setAttribute('aria-pressed',shown ? 'false' : 'true');
+  };
   $('reveal-copy').onclick=function(){
-    var v=$('reveal-key').textContent;
+    var v=state.lastKey || '';
     navigator.clipboard.writeText(v).then(function(){ toast('Key copied'); }).catch(function(){
       var ta=document.createElement('textarea'); ta.value=v; document.body.appendChild(ta); ta.select();
       document.execCommand('copy'); ta.remove(); toast('Key copied');
     });
   };
   $('reveal-done').onclick=function(){
-    $('reveal-key').textContent='—'; state.lastKey='';
+    $('reveal-key').textContent='••••••••••••••••••••';
+    $('reveal-key').dataset.shown='false';
+    $('reveal-show').textContent='Show';
+    $('reveal-show').setAttribute('aria-pressed','false');
+    state.lastKey='';
     $('create-overlay').className='overlay';
     toast('Key created');
   };
