@@ -567,7 +567,7 @@
     });
     if(!segs.length) segs.push('var(--c3) 0 100%');
     if(changed !== 'split'){
-      if(state.animateUsage) animateDonut('model-donut', segs, 1500);
+      if(state.animateUsage) animateDonut('model-donut', segs, 3000);
       else $('model-donut').style.background = 'conic-gradient('+segs.join(',')+')';
       $('model-legend').innerHTML = legend || '<div class="legend-row"><span class="nm">No spend in this period.</span></div>';
     }
@@ -584,8 +584,8 @@
     var splitSegs = splitHasData ? ['#3dcc6e 0 '+hp+'%', '#a88cf8 '+hp+'% 100%'] : ['var(--c3) 0 100%'];
     if(changed !== 'model'){
       if(state.animateUsage && splitHasData) {
-        animateDonut('split-donut', splitSegs, 1500);
-        animateNumber('split-pct', 0, hp, 1500, function(v){ return Math.round(v)+'%'; });
+        animateDonut('split-donut', splitSegs, 3000);
+        animateNumber('split-pct', 0, hp, 3000, function(v){ return Math.round(v)+'%'; });
       } else {
         $('split-donut').style.background = 'conic-gradient('+splitSegs.join(',')+')';
         $('split-pct').textContent = hp+'%';
