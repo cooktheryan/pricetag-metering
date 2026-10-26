@@ -54,6 +54,9 @@
   .card{background:var(--c1);border:1px solid var(--bdr);border-radius:12px;padding:20px}
   .card h2{font-size:13px;font-weight:700;margin-bottom:2px}
   .card .hint{font-size:11px;color:var(--t2);margin-bottom:16px}
+  .metric-toggle{display:flex;gap:3px;margin:2px 0 12px;background:var(--c2);border:1px solid var(--bdr);border-radius:7px;padding:3px;width:max-content}
+  .metric-toggle button{border:0;background:transparent;color:var(--t2);border-radius:5px;padding:4px 9px;font:600 10px Inter,sans-serif;cursor:pointer}
+  .metric-toggle button.on{background:var(--c3);color:var(--t)}
   .donut-wrap{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
   .donut{width:150px;height:150px;border-radius:50%;position:relative;flex:0 0 auto;background:conic-gradient(var(--c3) 0 100%)}
   .donut::after{content:'';position:absolute;inset:26px;border-radius:50%;background:var(--c1)}
@@ -191,8 +194,13 @@
       <div class="card">
         <h2>Spend by model</h2>
         <div class="hint">Which models are consuming your budget</div>
+        <div class="metric-toggle" role="group" aria-label="Model chart metric">
+          <button type="button" class="on" data-model-metric="cost">Cost</button>
+          <button type="button" data-model-metric="tokens">Tokens</button>
+          <button type="button" data-model-metric="requests">Requests</button>
+        </div>
         <div class="donut-wrap">
-          <div class="donut" id="model-donut"><div class="donut-center"><div><b id="model-total">—</b><span>total</span></div></div></div>
+          <div class="donut" id="model-donut"><div class="donut-center"><div><b id="model-total">—</b><span id="model-total-label">cost</span></div></div></div>
           <div class="legend" id="model-legend"></div>
         </div>
       </div>
@@ -318,7 +326,7 @@
 
 <script>
 (function () {
-  var state = {tab:'usage', range:'mtd', from:'', to:'', keys:[], models:[], overview:null, revokeId:'', animateUsage:true};
+  var state = {tab:'usage', range:'mtd', from:'', to:'', keys:[], models:[], overview:null, revokeId:'', animateUsage:true, modelMetric:'cost'};
   var COLORS = ['#4da0f8','#3dcc6e','#eba830','#a88cf8','#38d4c2','#e8554e','#8090a8'];
 
   function $(id){ return document.getElementById(id); }
@@ -366,6 +374,13 @@
   }
   $('tab-usage').onclick=function(){ setTab('usage'); };
   $('tab-keys').onclick=function(){ setTab('keys'); };
+  document.querySelectorAll('[data-model-metric]').forEach(function(btn){
+    btn.onclick=function(){
+      state.modelMetric=this.getAttribute('data-model-metric') || 'cost';
+      document.querySelectorAll('[data-model-metric]').forEach(function(b){ b.classList.toggle('on',b===btn); });
+      renderModels();
+    };
+  });
 
   /* ---------------- identity ---------------- */
   function loadWho(){
@@ -454,25 +469,29 @@
   }
 
   function renderModels(){
-    var rows = state.models.slice().sort(function(a,b){ return (b.cost_usd||0)-(a.cost_usd||0); });
-    var total = rows.reduce(function(s,r){ return s+(r.cost_usd||0); },0);
-    if(state.animateUsage) animateNumber('model-total', 0, total, 1100, wholeMoney);
-    else $('model-total').textContent = wholeMoney(total);
+    var metric=state.modelMetric;
+    function value(r){ return metric==='tokens' ? (r.total_tokens||0) : metric==='requests' ? (r.requests||0) : (r.cost_usd||0); }
+    function display(v){ return metric==='cost' ? wholeMoney(v) : compact(v); }
+    var rows = state.models.slice().sort(function(a,b){ return value(b)-value(a); });
+    var total = rows.reduce(function(s,r){ return s+value(r); },0);
+    $('model-total-label').textContent=metric;
+    if(state.animateUsage) animateNumber('model-total', 0, total, 1100, display);
+    else $('model-total').textContent = display(total);
 
     // Spend-by-model donut
-    var top = rows.filter(function(r){ return (r.cost_usd||0)>0; }).slice(0,6);
-    var rest = rows.filter(function(r){ return (r.cost_usd||0)>0; }).slice(6);
+    var top = rows.filter(function(r){ return value(r)>0; }).slice(0,6);
+    var rest = rows.filter(function(r){ return value(r)>0; }).slice(6);
     if(rest.length){
-      top.push({model:'Other ('+rest.length+')', cost_usd:rest.reduce(function(s,r){return s+(r.cost_usd||0);},0), _other:true});
+      top.push({model:'Other ('+rest.length+')', cost_usd:rest.reduce(function(s,r){return s+(r.cost_usd||0);},0), total_tokens:rest.reduce(function(s,r){return s+(r.total_tokens||0);},0), requests:rest.reduce(function(s,r){return s+(r.requests||0);},0), _other:true});
     }
     var segs=[], acc=0, legend='';
     top.forEach(function(r,i){
-      var pct = total>0 ? (r.cost_usd/total*100) : 0;
+      var pct = total>0 ? (value(r)/total*100) : 0;
       var color = COLORS[i%COLORS.length];
       segs.push(color+' '+acc.toFixed(2)+'% '+(acc+pct).toFixed(2)+'%');
       acc += pct;
       legend += '<div class="legend-row"><span class="sw" style="background:'+color+'"></span>'+
-        '<span class="nm" title="'+esc(r.model)+'">'+esc(r.model)+'</span><span class="val">'+money(r.cost_usd)+' · '+Math.round(pct)+'%</span></div>';
+        '<span class="nm" title="'+esc(r.model)+'">'+esc(r.model)+'</span><span class="val">'+display(value(r))+' · '+Math.round(pct)+'%</span></div>';
     });
     if(!segs.length) segs.push('var(--c3) 0 100%');
     if(state.animateUsage) animateDonut('model-donut', segs, 1500);
@@ -501,7 +520,7 @@
       return;
     }
     $('model-rows').innerHTML = rows.map(function(r){
-      var share = total>0 ? Math.round((r.cost_usd||0)/total*100) : 0;
+       var share = total>0 ? Math.round(value(r)/total*100) : 0;
       return '<tr><td class="mono">'+esc(r.model)+'</td>'+
         '<td><span class="pill '+(r.hosted?'hosted':'frontier')+'">'+(r.hosted?'Hosted':'Frontier')+'</span></td>'+
         '<td class="num">'+compact(r.requests)+'</td>'+
