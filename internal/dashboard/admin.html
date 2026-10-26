@@ -501,7 +501,8 @@ td .tag{white-space:nowrap}
 /* ── Shared appbar (same block on every page; var fallbacks let either
    token spelling work) ─────────────────────────────────────────────── */
 .appbar{display:flex;align-items:center;gap:16px;padding:11px 18px;background:var(--c1,#141820);border-bottom:1px solid var(--bdr,#232b3b);flex-wrap:wrap;margin:-20px -40px 16px -40px}
-.appbar .logo{font-weight:700;font-size:15px;letter-spacing:.2px;white-space:nowrap;color:var(--t,#e2e6ec);padding-left:4px}
+ .appbar .logo{font-weight:700;font-size:15px;letter-spacing:.2px;white-space:nowrap;color:var(--t,#e2e6ec);padding-left:4px}
+ .appbar .logo .en{color:#3dcc6e}
 .appbar .logo em{font-style:normal;color:var(--blu,#4da0f8)}
 .appbar nav{display:flex;gap:2px;flex-wrap:wrap}
 .appbar nav a{padding:5px 11px;border-radius:7px;color:var(--t2,#8090a8);font-size:13px;text-decoration:none}
@@ -540,7 +541,7 @@ td .tag{white-space:nowrap}
 
 <!-- Header -->
 <header class="appbar">
-  <a class="logo" href="/dashboard">Price<em>Tag</em></a>
+  <a class="logo" href="/dashboard"><span class="en">En</span><em>MaaS</em></a>
   <nav>
     <a href="/dashboard">Usage</a>
     <a href="/manager" id="team-tab" style="display:none" title="Usage for everyone on your team">My team</a>

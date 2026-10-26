@@ -14,8 +14,8 @@
   a{color:var(--blu);text-decoration:none}
   .appbar{position:sticky;top:0;z-index:40;background:rgba(11,14,17,.92);backdrop-filter:blur(10px);
           border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:20px;padding:0 28px;height:58px}
-  .brand{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:.3px;font-size:14px}
-  .logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--blu),#8b5cf6);display:grid;place-items:center;font-size:12px;font-weight:900;color:#fff}
+  .brand{display:flex;align-items:center;gap:0;font-weight:800;letter-spacing:.3px;font-size:15px}
+  .brand .en{color:var(--grn)}.brand .maas{color:var(--blu)}
   .tabs{display:flex;gap:4px;margin-left:8px}
   .tab{background:none;border:0;color:var(--t2);font:600 12px Inter,sans-serif;padding:8px 14px;border-radius:8px;cursor:pointer}
   .tab:hover{color:var(--t);background:var(--c3)}
@@ -138,7 +138,7 @@
 <body>
 
 <header class="appbar">
-  <div class="brand"><div class="logo">E</div> EnMaaS</div>
+  <div class="brand"><span class="en">En</span><span class="maas">MaaS</span></div>
   <nav class="tabs">
     <button class="tab" id="tab-usage" data-tab="usage">Usage</button>
     <button class="tab" id="tab-keys" data-tab="keys">API Keys</button>

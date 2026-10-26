@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PriceTag</title>
+<title>EnMaaS</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -167,8 +167,9 @@ tr.clickable{cursor:pointer}
    same block paste onto pages using either token spelling
    (--blue/--bg-card on the usage page, --blu/--c1 elsewhere). */
 .appbar{display:flex;align-items:center;gap:16px;padding:12px 22px;background:var(--bg-card,var(--c1,#141820));border:1px solid var(--border,var(--bdr,#2e3848));border-radius:10px;margin-bottom:16px;flex-wrap:wrap}
-.appbar .logo{font-weight:700;font-size:15px;letter-spacing:.2px;color:var(--text,var(--t,#e2e6ec));text-decoration:none;white-space:nowrap}
-.appbar .logo em{color:var(--blue,var(--blu,#4da0f8));font-style:normal}
+ .appbar .logo{font-weight:700;font-size:15px;letter-spacing:.2px;color:var(--text,var(--t,#e2e6ec));text-decoration:none;white-space:nowrap}
+ .appbar .logo .en{color:#3dcc6e}
+ .appbar .logo em{color:var(--blue,var(--blu,#4da0f8));font-style:normal}
 .appbar nav{display:flex;gap:4px;flex-wrap:wrap}
 .appbar nav a{color:var(--text2,var(--t2,#8090a8));text-decoration:none;padding:6px 14px;border-radius:8px;font-weight:600;font-size:12px}
 .appbar nav a:hover{color:var(--text,var(--t,#e2e6ec));background:var(--bg-hover,var(--c3,#232d40))}
@@ -191,7 +192,7 @@ tr.clickable{cursor:pointer}
 
 <main class="dashboard-content">
 <header class="appbar">
-  <a class="logo" href="/dashboard">Price<em>Tag</em></a>
+  <a class="logo" href="/dashboard"><span class="en">En</span><em>MaaS</em></a>
   <nav>
     <a href="/dashboard" class="on">Usage</a>
     <a href="/manager" id="tab-team" style="display:none" title="Usage for everyone on your team">My team</a>
