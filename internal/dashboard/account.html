@@ -684,25 +684,15 @@
       el.style.background='conic-gradient('+segments.join(',')+')';
       return;
     }
+    // Reveal the completed gradient progressively. Moving individual color
+    // stops lets the first slice snap to its final size in some browsers.
+    var finalGradient='conic-gradient('+segments.join(',')+')';
     // Always begin empty, including when one of the values is exactly zero.
     el.style.background='conic-gradient(var(--c3) 0 100%)';
     function tick(now){
       if(el._animationVersion!==version) return;
-      // Keep slice growth proportional to elapsed time so no slice jumps to
-      // its final percentage before the other slice has visibly grown.
-      var p=Math.min(1,(now-start)/duration), eased=p, parts=[];
-      segments.forEach(function(segment){
-        var m=segment.match(/^(.*?)\s+([0-9.]+)%\s+([0-9.]+)%$/);
-        if(!m){ parts.push(segment); return; }
-        parts.push(m[1]+' '+(parseFloat(m[2])*eased).toFixed(2)+'% '+(parseFloat(m[3])*eased).toFixed(2)+'%');
-      });
-      var end=0;
-      segments.forEach(function(segment){
-        var m=segment.match(/([0-9.]+)%$/);
-        if(m) end=Math.max(end,parseFloat(m[1])*eased);
-      });
-      if(end < 100) parts.push('var(--c3) '+end.toFixed(2)+'% 100%');
-      el.style.background='conic-gradient('+parts.join(',')+')';
+      var p=Math.min(1,(now-start)/duration), revealed=(p*100).toFixed(2)+'%';
+      el.style.background='conic-gradient(transparent 0 '+revealed+', var(--c3) '+revealed+' 100%), '+finalGradient;
       if(p<1) el._animationFrame=requestAnimationFrame(tick); else el._animationFrame=null;
     }
     el._animationFrame=requestAnimationFrame(tick);
