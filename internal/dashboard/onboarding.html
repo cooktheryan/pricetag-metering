@@ -555,6 +555,7 @@
   resize();
   addEventListener('resize', resize);
   addEventListener('load', resize);
+  if ('ResizeObserver' in window) new ResizeObserver(resize).observe(cv.parentElement);
   for (var i = 0; i < 26; i++) { var t = spawn(); t.x = 24 + Math.random() * Math.max(24, cx - 48); t.y = 18 + ((i + .5) / 26) * Math.max(20, H - 36); tokens.push(t); }
   cv.classList.add('flow-ready');
   function frame(ts){
