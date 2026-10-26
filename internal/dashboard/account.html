@@ -596,16 +596,18 @@
 
   function animateNumber(id, from, to, duration, format){
     var el=$(id), start=performance.now();
+    if(el._animationFrame) cancelAnimationFrame(el._animationFrame);
     function tick(now){
       var p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3);
       el.textContent=format(from+(to-from)*eased);
-      if(p<1) requestAnimationFrame(tick);
+      if(p<1) el._animationFrame=requestAnimationFrame(tick); else el._animationFrame=null;
     }
-    requestAnimationFrame(tick);
+    el._animationFrame=requestAnimationFrame(tick);
   }
 
   function animateWidth(id, to, duration){
     var el=$(id), start=performance.now();
+    if(el._animationFrame) cancelAnimationFrame(el._animationFrame);
     // Width is driven frame-by-frame below; the CSS transition would add a
     // second, lagging animation and make the bar trail the percentage.
     el.style.transition='none';
@@ -613,10 +615,10 @@
     function tick(now){
       var p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3);
       el.style.width=(to*eased)+'%';
-      if(p<1) requestAnimationFrame(tick);
-      else el.style.width=to+'%';
+      if(p<1) el._animationFrame=requestAnimationFrame(tick);
+      else { el.style.width=to+'%'; el._animationFrame=null; }
     }
-    requestAnimationFrame(tick);
+    el._animationFrame=requestAnimationFrame(tick);
   }
 
   function setBudgetColor(el, value, target){
@@ -628,6 +630,7 @@
 
   function animateBudget(id, from, to, duration){
     var el=$(id), start=performance.now(), reduced=window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(el._animationFrame) cancelAnimationFrame(el._animationFrame);
     if(reduced){ el.textContent=Math.round(to)+'%'; setBudgetColor(el,to,to); return; }
     function tick(now){
       var p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3), value=from+(to-from)*eased;
@@ -636,13 +639,14 @@
       // roughly 42.5%.
       el.textContent=(p < 1 ? Math.floor(value) : Math.round(to))+'%';
       setBudgetColor(el,value,to);
-      if(p<1) requestAnimationFrame(tick);
+      if(p<1) el._animationFrame=requestAnimationFrame(tick); else el._animationFrame=null;
     }
-    requestAnimationFrame(tick);
+    el._animationFrame=requestAnimationFrame(tick);
   }
 
   function animateDonut(id, segments, duration){
     var el=$(id), start=performance.now();
+    if(el._animationFrame) cancelAnimationFrame(el._animationFrame);
     var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if(reduced){
       el.style.background='conic-gradient('+segments.join(',')+')';
@@ -664,9 +668,9 @@
       });
       if(end < 100) parts.push('var(--c3) '+end.toFixed(2)+'% 100%');
       el.style.background='conic-gradient('+parts.join(',')+')';
-      if(p<1) requestAnimationFrame(tick);
+      if(p<1) el._animationFrame=requestAnimationFrame(tick); else el._animationFrame=null;
     }
-    requestAnimationFrame(tick);
+    el._animationFrame=requestAnimationFrame(tick);
   }
 
   function renderRecent(rows){
