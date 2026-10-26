@@ -325,6 +325,7 @@
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function money(v){ var n=Number(v||0); return '$'+(n>=1000?n.toLocaleString(undefined,{maximumFractionDigits:0}):n.toFixed(2)); }
+  function wholeMoney(v){ return '$'+Math.round(Number(v||0)).toLocaleString(); }
   function compact(v){ var n=Number(v||0); if(n>=1e9)return (n/1e9).toFixed(1)+'B'; if(n>=1e6)return (n/1e6).toFixed(1)+'M'; if(n>=1e3)return (n/1e3).toFixed(1)+'K'; return String(Math.round(n)); }
   function when(iso){ if(!iso)return '—'; var d=new Date(iso); if(isNaN(d))return '—';
     var diff=(Date.now()-d.getTime())/1000;
@@ -453,8 +454,8 @@
   function renderModels(){
     var rows = state.models.slice().sort(function(a,b){ return (b.cost_usd||0)-(a.cost_usd||0); });
     var total = rows.reduce(function(s,r){ return s+(r.cost_usd||0); },0);
-    if(state.animateUsage) animateNumber('model-total', 0, total, 1100, function(v){ return money(v).replace('.00',''); });
-    else $('model-total').textContent = money(total).replace('.00','');
+    if(state.animateUsage) animateNumber('model-total', 0, total, 1100, wholeMoney);
+    else $('model-total').textContent = wholeMoney(total);
 
     // Spend-by-model donut
     var top = rows.filter(function(r){ return (r.cost_usd||0)>0; }).slice(0,6);
