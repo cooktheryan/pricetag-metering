@@ -422,7 +422,7 @@ func main() {
 
 	// Pricing modal rate card — readable by any logged-in user: the rates
 	// are the same numbers every request is billed at, no user data.
-  mux.HandleFunc("/api/v1/pricing", auth(handler.NewPricingRefreshHandler(store).HandleList))
+	mux.HandleFunc("/api/v1/pricing", auth(handler.NewPricingRefreshHandler(store).HandleList))
 
 	// Operator pages (admin console, routing) are SUPER-ADMIN
 	// only. Regular admins get the org-wide Usage view on /dashboard and
@@ -470,11 +470,12 @@ func main() {
 	// scope (plain user sees self, manager sees subtree, super-admin sees
 	// all). Backed entirely by partner_users.
 	orgHandler := handler.NewPartnerOrgHandler(store, cfg)
-	mux.HandleFunc("/manager", dashboardPage(orgHandler.ServeManager))
-	mux.HandleFunc("/api/v1/org/scope", dashboardAPI(orgHandler.HandleScope))
-	mux.HandleFunc("/api/v1/org/usage", dashboardAPI(orgHandler.HandleOrgUsage))
-	mux.HandleFunc("/api/v1/org/charts", dashboardAPI(orgHandler.HandleOrgCharts))
-	mux.HandleFunc("/api/v1/org/person", dashboardAPI(orgHandler.HandleOrgPerson))
+	managerAuth := func(next http.HandlerFunc) http.HandlerFunc { return auth(next) }
+	mux.HandleFunc("/manager", managerAuth(orgHandler.ServeManager))
+	mux.HandleFunc("/api/v1/org/scope", managerAuth(orgHandler.HandleScope))
+	mux.HandleFunc("/api/v1/org/usage", managerAuth(orgHandler.HandleOrgUsage))
+	mux.HandleFunc("/api/v1/org/charts", managerAuth(orgHandler.HandleOrgCharts))
+	mux.HandleFunc("/api/v1/org/person", managerAuth(orgHandler.HandleOrgPerson))
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,

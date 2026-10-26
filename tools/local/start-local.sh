@@ -122,6 +122,7 @@ EnMaaS local demo is running.
   Personas (Test sign-in on /login, or pick at the mock IdP):
     new-user          first login → onboarding + Terms → keys
     returning-user    terms accepted, has keys + month-to-date usage
+    manager-user      Maya Manager, two direct reports + seeded team traffic → My team
     blocked-country   GE group, IR (IRN) → region block
     no-group          only technical realm roles → group block
     admin             super-admin (existing /dashboard)

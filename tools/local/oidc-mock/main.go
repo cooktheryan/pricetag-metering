@@ -56,6 +56,12 @@ var personas = []persona{
 		Groups: []string{"GE"}, Country: "US", ClaimCountry: "US",
 	},
 	{
+		Key: "manager-user", Label: "Maya Manager — team manager", Note: "Terms accepted, three-person team with seeded traffic → team view",
+		Subject: "mock-manager-user", RhatUUID: "55555555-5555-4555-8555-555555555555",
+		Email: "manager-user@example.com", First: "Maya", Last: "Manager",
+		Groups: []string{"GE"}, Country: "US", ClaimCountry: "US",
+	},
+	{
 		Key: "blocked-country", Label: "Bea Blocked — blocked country", Note: "Group passes, country is on the ISO3 blocklist → blocked",
 		Subject: "mock-blocked-user", RhatUUID: "33333333-3333-4333-8333-333333333333",
 		Email: "blocked-user@example.com", First: "Bea", Last: "Blocked",

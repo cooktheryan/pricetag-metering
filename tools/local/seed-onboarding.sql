@@ -6,22 +6,31 @@ BEGIN;
 -- ---------------------------------------------------------------------------
 -- Personas. UUIDs, emails, and countries match tools/local/oidc-mock.
 -- ---------------------------------------------------------------------------
-INSERT INTO partner_users (user_id, tags, role, active, created_by, updated_by)
+INSERT INTO partner_users (user_id, tags, role, manager_user_id, active, created_by, updated_by)
 VALUES
   ('11111111-1111-4111-8111-111111111111',
    '{"email":"new-user@example.com","first_name":"Nina","last_name":"New","country":"US","kerberos_id":"newuser"}',
-   'user', true, 'local-seed', 'local-seed'),
+   'user', NULL, true, 'local-seed', 'local-seed'),
   ('22222222-2222-4222-8222-222222222222',
    '{"email":"returning-user@example.com","first_name":"Ravi","last_name":"Return","country":"US","kerberos_id":"returning"}',
-   'user', true, 'local-seed', 'local-seed'),
+   'user', NULL, true, 'local-seed', 'local-seed'),
   ('33333333-3333-4333-8333-333333333333',
    '{"email":"blocked-user@example.com","first_name":"Bea","last_name":"Blocked","country":"IR","kerberos_id":"blocked"}',
-   'user', true, 'local-seed', 'local-seed'),
+   'user', NULL, true, 'local-seed', 'local-seed'),
   ('44444444-4444-4444-8444-444444444444',
    '{"email":"nogroup-user@example.com","first_name":"Noah","last_name":"Nogroup","country":"US","kerberos_id":"nogroup"}',
-   'user', true, 'local-seed', 'local-seed')
+   'user', NULL, true, 'local-seed', 'local-seed'),
+  ('55555555-5555-4555-8555-555555555555',
+   '{"email":"manager-user@example.com","first_name":"Maya","last_name":"Manager","country":"US","kerberos_id":"manager"}',
+   'user', NULL, true, 'local-seed', 'local-seed'),
+  ('66666666-6666-4666-8666-666666666666',
+   '{"email":"team-alice@example.com","first_name":"Alice","last_name":"Team","country":"US","kerberos_id":"team-alice"}',
+   'user', '55555555-5555-4555-8555-555555555555', true, 'local-seed', 'local-seed'),
+  ('77777777-7777-4777-8777-777777777777',
+   '{"email":"team-bob@example.com","first_name":"Bob","last_name":"Team","country":"US","kerberos_id":"team-bob"}',
+   'user', '55555555-5555-4555-8555-555555555555', true, 'local-seed', 'local-seed')
 ON CONFLICT (user_id) DO UPDATE
-  SET tags = EXCLUDED.tags, active = true, updated_by = 'local-seed';
+   SET tags = EXCLUDED.tags, manager_user_id = EXCLUDED.manager_user_id, active = true, updated_by = 'local-seed';
 
 INSERT INTO partner_user_logins (username, user_id, is_current)
 VALUES
@@ -29,6 +38,9 @@ VALUES
   ('returning-user@example.com', '22222222-2222-4222-8222-222222222222', true),
   ('blocked-user@example.com', '33333333-3333-4333-8333-333333333333', true),
   ('nogroup-user@example.com', '44444444-4444-4444-8444-444444444444', true)
+ ,('manager-user@example.com', '55555555-5555-4555-8555-555555555555', true)
+ ,('team-alice@example.com', '66666666-6666-4666-8666-666666666666', true)
+ ,('team-bob@example.com', '77777777-7777-4777-8777-777777777777', true)
 ON CONFLICT (username) DO UPDATE SET user_id = EXCLUDED.user_id, is_current = true;
 
 -- ---------------------------------------------------------------------------
@@ -52,10 +64,21 @@ DELETE FROM user_agreements WHERE user_id IN (
   '11111111-1111-4111-8111-111111111111',
   '33333333-3333-4333-8333-333333333333',
   '44444444-4444-4444-8444-444444444444'
+ , '55555555-5555-4555-8555-555555555555'
+ , '66666666-6666-4666-8666-666666666666'
+ , '77777777-7777-4777-8777-777777777777'
 );
 DELETE FROM user_agreements WHERE user_id = '22222222-2222-4222-8222-222222222222';
 INSERT INTO user_agreements (user_id, doc_type, version, accepted_at, method)
 VALUES ('22222222-2222-4222-8222-222222222222', 'terms', 'draft-tbd', NOW() - interval '30 days', 'oidc')
+ON CONFLICT DO NOTHING;
+INSERT INTO user_agreements (user_id, doc_type, version, accepted_at, method)
+SELECT id, 'terms', 'draft-tbd', NOW() - interval '14 days', 'oidc'
+FROM (VALUES
+  ('55555555-5555-4555-8555-555555555555'::uuid),
+  ('66666666-6666-4666-8666-666666666666'::uuid),
+  ('77777777-7777-4777-8777-777777777777'::uuid)
+) AS seeded(id)
 ON CONFLICT DO NOTHING;
 
 -- Pricing for the hosted models used by the demo. Without a row the rollup
@@ -115,6 +138,23 @@ VALUES
   ('local-onb-23', NOW() - interval '5 minutes', 'returning-user@example.com', 'GE', 'llama-4-scout', 'qwen-flash', 'local-onboarding', 'pi-coding-agent/0.1', 10000000, 6666667, 16666667, 0, 200, 6.000000),
   ('local-onb-24', NOW() - interval '4 minutes', 'returning-user@example.com', 'GE', 'claude-sonnet-4-5', 'anthropic', 'local-onboarding', 'claude-code/2.1.0', 150000, 66723, 216723, 0, 200, 1.450845);
 
+-- ---------------------------------------------------------------------------
+-- Local manager demo: Maya has two direct reports and team traffic.
+-- ---------------------------------------------------------------------------
+DELETE FROM usage_events WHERE username IN ('manager-user@example.com', 'team-alice@example.com', 'team-bob@example.com') AND source = 'local-manager';
+
+INSERT INTO usage_events
+  (event_id, timestamp, username, group_name, model, provider, source, user_agent,
+   prompt_tokens, completion_tokens, total_tokens, cached_input_tokens,
+   status_code, cost_usd)
+VALUES
+  ('local-mgr-01', NOW() - interval '2 hours',  'manager-user@example.com', 'GE', 'gpt-5', 'openai', 'local-manager', 'codex-tui/0.1.0', 220000, 80000, 300000, 0, 200, 0.86),
+  ('local-mgr-02', NOW() - interval '90 minutes','manager-user@example.com', 'GE', 'qwen3-coder', 'qwen-flash', 'local-manager', 'opencode-nightly/1.0', 800000, 300000, 1100000, 100000, 200, 0.85),
+  ('local-mgr-03', NOW() - interval '70 minutes','team-alice@example.com', 'GE', 'claude-sonnet-4-5', 'anthropic', 'local-manager', 'claude-code/2.1.0', 180000, 70000, 250000, 20000, 200, 1.32),
+  ('local-mgr-04', NOW() - interval '55 minutes','team-alice@example.com', 'GE', 'llama-4-scout', 'qwen-flash', 'local-manager', 'pi-coding-agent/0.1', 900000, 400000, 1300000, 0, 200, 0.42),
+  ('local-mgr-05', NOW() - interval '40 minutes','team-bob@example.com', 'GE', 'gpt-5', 'openai', 'local-manager', 'codex-tui/0.1.0', 350000, 120000, 470000, 0, 200, 1.31),
+  ('local-mgr-06', NOW() - interval '25 minutes','team-bob@example.com', 'GE', 'qwen3-coder', 'qwen-flash', 'local-manager', 'opencode-nightly/1.0', 1200000, 500000, 1700000, 200000, 200, 1.25);
+
 -- Rebuild derived rollups so the account page reads the seeded rows.
 TRUNCATE usage_hourly;
 INSERT INTO usage_hourly
@@ -127,6 +167,6 @@ SELECT date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name, ''),
   SUM(e.cached_input_tokens), SUM(e.cache_creation_tokens), COALESCE(SUM(e.cost_usd), 0)
 FROM usage_events e
 GROUP BY date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name, ''),
-  e.model, e.provider;
+   e.model, e.provider;
 
 COMMIT;
