@@ -502,9 +502,10 @@
     $('model-legend').innerHTML = legend || '<div class="legend-row"><span class="nm">No spend in this period.</span></div>';
 
     // Hosted vs frontier donut
+    var spendTotal = rows.reduce(function(s,r){ return s+(r.cost_usd||0); },0);
     var hosted = rows.filter(function(r){ return r.hosted; }).reduce(function(s,r){return s+(r.cost_usd||0);},0);
-    var frontier = total-hosted;
-    var hp = total>0 ? Math.round(hosted/total*100) : 0;
+    var frontier = Math.max(spendTotal-hosted,0);
+    var hp = spendTotal>0 ? Math.round(hosted/spendTotal*100) : 0;
     var splitSegs = ['#3dcc6e 0 '+hp+'%', '#a88cf8 '+hp+'% 100%'];
     if(state.animateUsage) {
       animateDonut('split-donut', splitSegs, 1500);
