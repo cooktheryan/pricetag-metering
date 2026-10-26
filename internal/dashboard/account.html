@@ -475,7 +475,7 @@
         '<span class="nm" title="'+esc(r.model)+'">'+esc(r.model)+'</span><span class="val">'+money(r.cost_usd)+' · '+Math.round(pct)+'%</span></div>';
     });
     if(!segs.length) segs.push('var(--c3) 0 100%');
-    if(state.animateUsage) animateDonut('model-donut', segs, 1100);
+    if(state.animateUsage) animateDonut('model-donut', segs, 1500);
     else $('model-donut').style.background = 'conic-gradient('+segs.join(',')+')';
     $('model-legend').innerHTML = legend || '<div class="legend-row"><span class="nm">No spend in this period.</span></div>';
 
@@ -485,8 +485,8 @@
     var hp = total>0 ? Math.round(hosted/total*100) : 0;
     var splitSegs = ['#3dcc6e 0 '+hp+'%', '#a88cf8 '+hp+'% 100%'];
     if(state.animateUsage) {
-      animateDonut('split-donut', splitSegs, 1100);
-      animateNumber('split-pct', 0, hp, 1100, function(v){ return Math.round(v)+'%'; });
+      animateDonut('split-donut', splitSegs, 1500);
+      animateNumber('split-pct', 0, hp, 1500, function(v){ return Math.round(v)+'%'; });
     } else {
       $('split-donut').style.background = 'conic-gradient('+splitSegs.join(',')+')';
       $('split-pct').textContent = hp+'%';
