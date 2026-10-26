@@ -317,7 +317,7 @@
 
 <script>
 (function () {
-  var state = {tab:'usage', range:'mtd', from:'', to:'', keys:[], models:[], overview:null, revokeId:'', animateUsage:false};
+  var state = {tab:'usage', range:'mtd', from:'', to:'', keys:[], models:[], overview:null, revokeId:'', animateUsage:true};
   var COLORS = ['#4da0f8','#3dcc6e','#eba830','#a88cf8','#38d4c2','#e8554e','#8090a8'];
 
   function $(id){ return document.getElementById(id); }
@@ -360,7 +360,7 @@
       history.replaceState(null,'',url.pathname+url.search);
     }
     if(state.tab==='keys') loadKeys();
-    if(state.tab==='usage') loadUsage();
+    if(state.tab==='usage') { state.animateUsage=true; loadUsage(); }
   }
   $('tab-usage').onclick=function(){ setTab('usage'); };
   $('tab-keys').onclick=function(){ setTab('keys'); };
@@ -522,6 +522,11 @@
 
   function animateDonut(id, segments, duration){
     var el=$(id), start=performance.now();
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(reduced){
+      el.style.background='conic-gradient('+segments.join(',')+')';
+      return;
+    }
     function tick(now){
       var p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3), parts=[];
       segments.forEach(function(segment){
@@ -714,10 +719,6 @@
 
   /* ---------------- boot ---------------- */
   var params=new URLSearchParams(location.search);
-  try {
-    state.animateUsage = !sessionStorage.getItem('enmaas-usage-animated');
-    if(state.animateUsage) sessionStorage.setItem('enmaas-usage-animated','1');
-  } catch(e) { state.animateUsage = true; }
   if(params.get('first')==='1'){ $('first-banner').className='banner'; history.replaceState(null,'',location.pathname+'?tab=keys'); }
   var initialRange=params.get('range');
   if(initialRange){
