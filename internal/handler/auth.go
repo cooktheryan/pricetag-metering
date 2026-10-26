@@ -200,26 +200,31 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("user logged in", "username", result.Username)
 	h.setCookie(w, result.Username, result.Groups, "")
-	http.Redirect(w, r, h.loginDestination(r, result.Username), http.StatusFound)
+	http.Redirect(w, r, h.loginDestination(r, result.Username, result.Groups), http.StatusFound)
 }
 
 // loginDestination is where a successful login lands. Admins keep the Usage
 // page; a manager (someone with direct reports in partner_users) goes straight
 // to their team view. The legacy org directory is intentionally not consulted:
-// partner_users is the single identity source. Users only in the legacy
-// directory land on /dashboard (their own usage). Fails closed to /dashboard.
-func (h *AuthHandler) loginDestination(r *http.Request, username string) string {
+// partner_users is the single identity source. Users without a partner role
+// land on /account. Fails closed to /dashboard.
+func (h *AuthHandler) loginDestination(r *http.Request, username string, groups []string) string {
 	if h.orgStore == nil {
 		return "/dashboard"
 	}
 	if IsPartnerAdminUsername(r.Context(), h.cfg, h.orgStore, username) {
 		return "/dashboard"
 	}
+	// Incomplete onboarding always wins over the role-based landing page:
+	// nothing else is usable until the three gates pass.
+	if NewAccessGate(h.cfg, h.orgStore).NeedsOnboarding(r.Context(), username, groups) {
+		return "/onboarding"
+	}
 	// Manager routing is derived from the partner hierarchy only.
 	if _, isManager, err := h.orgStore.PartnerManagerScope(r.Context(), username); err == nil && isManager {
 		return "/manager"
 	}
-	return "/dashboard"
+	return "/account"
 }
 
 // HandleImpersonate lets a super-admin open another user's view. With

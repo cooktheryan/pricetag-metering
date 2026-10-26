@@ -302,10 +302,10 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	h.setCookie(w, username, claims.Groups, "")
 	slog.Info("user logged in with OIDC", "username", username)
 	if h.cfg.OIDC.ClaimsDebug {
-		h.renderOIDCClaims(w, claims, h.loginDestination(r, username), "", rawClaims)
+		h.renderOIDCClaims(w, claims, h.loginDestination(r, username, claims.Groups), "", rawClaims)
 		return
 	}
-	http.Redirect(w, r, h.loginDestination(r, username), http.StatusFound)
+	http.Redirect(w, r, h.loginDestination(r, username, claims.Groups), http.StatusFound)
 }
 
 func mergeOIDCClaims(dst, src *oidcClaims) {

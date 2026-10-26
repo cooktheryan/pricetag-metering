@@ -53,19 +53,36 @@ func NewClient(baseURL, tenant string) *Client {
 	}
 }
 
+// CreateKeyRequest is the self-service key shape. ExpiresIn is a Go duration
+// string ("2160h"); an empty value means the MaaS deployment default.
+type CreateKeyRequest struct {
+	Name         string            `json:"name"`
+	Description  string            `json:"description,omitempty"`
+	Subscription string            `json:"subscription,omitempty"`
+	ExpiresIn    string            `json:"expiresIn,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
+}
+
 func (c *Client) CreateAPIKey(ctx context.Context, username, group, keyName string) (*APIKeyResponse, error) {
+	return c.CreateUserAPIKey(ctx, username, group, CreateKeyRequest{Name: keyName})
+}
+
+// CreateUserAPIKey mints a key for one user with optional expiry and labels.
+// The identity headers are the trusted-header contract described in the
+// Atlas handoff; the caller must be a server-side handler, never a browser.
+func (c *Client) CreateUserAPIKey(ctx context.Context, username, group string, req CreateKeyRequest) (*APIKeyResponse, error) {
 	username = strings.TrimSpace(username)
-	body, _ := json.Marshal(map[string]string{"name": keyName})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/api-keys", bytes.NewReader(body))
+	body, _ := json.Marshal(req)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/api-keys", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-MaaS-Username", username)
-	req.Header.Set("X-MaaS-Group", fmt.Sprintf(`["%s"]`, group))
-	req.Header.Set("X-MaaS-Tenant", c.tenant)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-MaaS-Username", username)
+	httpReq.Header.Set("X-MaaS-Group", fmt.Sprintf(`["%s"]`, group))
+	httpReq.Header.Set("X-MaaS-Tenant", c.tenant)
 
-	resp, err := c.client.Do(req)
+	resp, err := c.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("maas-api request failed: %w", err)
 	}

@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Welcome to EnMaaS</title>
+<style>
+  :root{
+    --bg:#0b0e11;--c1:#141820;--c2:#1a2030;--bdr:#2e3848;
+    --t:#e2e6ec;--t2:#8090a8;--blu:#4da0f8;--grn:#3dcc6e;--org:#eba830;--red:#e8554e;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:radial-gradient(1200px 600px at 50% -200px,#16273d 0%,var(--bg) 60%);color:var(--t);
+       font:14px/1.6 Inter,-apple-system,BlinkMacSystemFont,sans-serif;min-height:100vh}
+  .wrap{max-width:820px;margin:0 auto;padding:32px 24px 64px}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:40px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.3px}
+  .logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--blu),#8b5cf6);
+        display:grid;place-items:center;font-size:13px;font-weight:900;color:#fff}
+  .who{font-size:12px;color:var(--t2)}
+  .who b{color:var(--t);font-weight:600}
+  .hero{text-align:center;margin-bottom:34px}
+  .hero h1{font-size:32px;line-height:1.2;margin-bottom:10px}
+  .hero p{color:var(--t2);max-width:520px;margin:0 auto}
+  .card{background:var(--c1);border:1px solid var(--bdr);border-radius:14px;padding:24px 26px;margin-bottom:18px}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--t2);margin-bottom:16px;font-weight:700}
+  .checks{display:flex;flex-direction:column;gap:2px}
+  .check{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--c2)}
+  .check:last-child{border-bottom:0}
+  .dot{flex:0 0 22px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+       font-size:12px;font-weight:800;margin-top:1px}
+  .dot.pass{background:rgba(61,204,110,.15);color:var(--grn);border:1px solid rgba(61,204,110,.4)}
+  .dot.pending{background:rgba(235,168,48,.12);color:var(--org);border:1px solid rgba(235,168,48,.4)}
+  .dot.fail{background:rgba(232,85,78,.12);color:var(--red);border:1px solid rgba(232,85,78,.4)}
+  .dot.skipped{background:var(--c2);color:var(--t2);border:1px solid var(--bdr)}
+  .check-body{flex:1}
+  .check-label{font-weight:600}
+  .check-detail{font-size:12px;color:var(--t2);margin-top:2px}
+  .check-action{font-size:11px;color:var(--blu);text-decoration:none;margin-left:auto;white-space:nowrap;padding-top:2px}
+  .terms-box{background:var(--c2);border:1px solid var(--bdr);border-radius:10px;padding:14px 16px;
+             display:flex;gap:12px;align-items:flex-start;margin-top:6px}
+  .terms-box input{width:18px;height:18px;margin-top:2px;accent-color:var(--grn);cursor:pointer;flex:0 0 auto}
+  .terms-box label{font-size:13px;color:var(--t);cursor:pointer}
+  .terms-box a{color:var(--blu)}
+  .actions{display:flex;justify-content:center;gap:12px;margin-top:24px}
+  .btn{border:0;border-radius:9px;padding:12px 26px;font:600 13px Inter,sans-serif;cursor:pointer;transition:.18s}
+  .btn-primary{background:var(--blu);color:#04121f}
+  .btn-primary:hover:not(:disabled){background:#6cb3ff;box-shadow:0 8px 24px rgba(77,160,248,.25)}
+  .btn-primary:disabled{opacity:.35;cursor:not-allowed}
+  .btn-ghost{background:transparent;color:var(--t2);border:1px solid var(--bdr)}
+  .btn-ghost:hover{color:var(--t);border-color:var(--t2)}
+  .btn-blocked{background:var(--c2);color:var(--t);border:1px solid var(--bdr)}
+  .benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+  .benefit{background:var(--c2);border:1px solid var(--bdr);border-radius:10px;padding:14px}
+  .benefit b{display:block;font-size:12px;margin-bottom:3px}
+  .benefit span{font-size:11px;color:var(--t2)}
+  .err{color:var(--red);text-align:center;font-size:12px;margin-top:12px;min-height:18px}
+  .blocked .hero h1{color:var(--org)}
+  .foot{text-align:center;color:var(--t2);font-size:11px;margin-top:28px}
+  .foot a{color:var(--t2)}
+  @media(max-width:640px){.benefits{grid-template-columns:1fr}.hero h1{font-size:25px}.card{padding:20px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand"><div class="logo">E</div> EnMaaS</div>
+    <div class="who">Signed in as <b id="who">…</b></div>
+  </div>
+
+  <div class="hero">
+    <h1 id="title">Welcome to EnMaaS</h1>
+    <p id="subtitle">One governed front door for frontier and hosted models.</p>
+  </div>
+
+  <div class="card">
+    <h2>Before you start</h2>
+    <div class="checks" id="checks">
+      <div class="check"><div class="dot pending">…</div><div class="check-body"><div class="check-label">Checking your access…</div></div></div>
+    </div>
+  </div>
+
+  <div class="card" id="terms-card" style="display:none">
+    <h2>Terms &amp; Conditions</h2>
+    <div class="terms-box">
+      <input type="checkbox" id="accept">
+      <label for="accept">I have read and accept the EnMaaS Terms &amp; Conditions
+        (<span id="terms-version"></span>). <a href="/legal/terms" target="_blank" rel="noopener">Read the terms</a></label>
+    </div>
+    <div class="err" id="err"></div>
+    <div class="actions">
+      <button class="btn btn-primary" id="start" disabled>Get started →</button>
+    </div>
+  </div>
+
+  <div class="card" id="blocked-card" style="display:none">
+    <h2>Access status</h2>
+    <p id="blocked-copy" style="color:var(--t2)"></p>
+    <div class="actions">
+      <button class="btn btn-blocked" id="retry">Check again</button>
+      <a class="btn btn-ghost" href="/logout" style="text-decoration:none;display:inline-block">Sign out</a>
+    </div>
+  </div>
+
+  <div class="card" id="ready-card" style="display:none">
+    <h2>What you get</h2>
+    <div class="benefits">
+      <div class="benefit"><b>API keys</b><span>Create and revoke keys for your tools.</span></div>
+      <div class="benefit"><b>Your usage</b><span>Spend by model, hosted vs frontier.</span></div>
+      <div class="benefit"><b>One gateway</b><span>Anthropic and OpenAI compatible APIs.</span></div>
+    </div>
+    <div class="actions"><a class="btn btn-primary" id="continue" href="/account?tab=keys&first=1" style="text-decoration:none">Continue</a></div>
+  </div>
+
+  <div class="foot">EnMaaS · <a href="/welcome">About the service</a> · <a href="/logout">Sign out</a></div>
+</div>
+
+<script>
+(function () {
+  var state = null;
+  var labels = {identity:'Red Hat identity', group:'EnMaaS access group', country:'Region eligibility', terms:'Terms & Conditions'};
+  var icons = {pass:'✓', fail:'✕', pending:'●', skipped:'–'};
+
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  function render() {
+    document.getElementById('who').textContent = state.display_name || state.username || 'you';
+    var box = document.getElementById('checks');
+    box.innerHTML = state.checks.map(function (c) {
+      var action = '';
+      if (c.id === 'terms') action = '<a class="check-action" href="/legal/terms" target="_blank" rel="noopener">Read terms</a>';
+      var detail = c.detail ? '<div class="check-detail">' + esc(c.detail) + '</div>' : '';
+      return '<div class="check"><div class="dot ' + esc(c.status) + '">' + (icons[c.status] || '?') + '</div>' +
+        '<div class="check-body"><div class="check-label">' + esc(c.label || labels[c.id] || c.id) + '</div>' + detail + '</div>' + action + '</div>';
+    }).join('');
+
+    var terms = document.getElementById('terms-card');
+    var blocked = document.getElementById('blocked-card');
+    var ready = document.getElementById('ready-card');
+    var title = document.getElementById('title');
+    var sub = document.getElementById('subtitle');
+    terms.style.display = 'none';
+    blocked.style.display = 'none';
+    ready.style.display = 'none';
+
+    if (state.state === 'blocked') {
+      title.textContent = "You're signed in, but not enabled yet";
+      sub.textContent = 'One of the access checks below needs attention before you can use EnMaaS.';
+      blocked.style.display = '';
+      document.getElementById('blocked-copy').textContent = blockedCopy(state.blocked_reason);
+    } else if (state.state === 'needs_terms') {
+      title.textContent = 'Welcome, ' + (state.display_name || 'there') + '!';
+      sub.textContent = 'Review the checks below, then accept the Terms & Conditions to continue.';
+      terms.style.display = '';
+      document.getElementById('terms-version').textContent = state.terms.version;
+      document.getElementById('start').disabled = !document.getElementById('accept').checked;
+    } else {
+      title.textContent = 'Welcome, ' + (state.display_name || 'there') + '!';
+      sub.textContent = 'Your access is ready. You can create your first API key now.';
+      ready.style.display = '';
+    }
+  }
+
+  function blockedCopy(reason) {
+    switch (reason) {
+      case 'group_required':
+        return 'Your account is not in an authorized EnMaaS group. Ask your manager or the EnMaaS team to request access, then check again.';
+      case 'country_blocked':
+        return "EnMaaS isn't available in your region. Contact the EnMaaS team if you believe this is a mistake.";
+      case 'country_unknown':
+        return 'We could not verify your region. Contact the EnMaaS team to have your profile corrected.';
+      case 'inactive':
+        return 'This account is not active. Contact the EnMaaS team if you believe this is a mistake.';
+      case 'not_provisioned':
+        return 'This Red Hat identity is not provisioned in EnMaaS yet. Access is created from the employee directory; contact the EnMaaS team if this persists.';
+      case 'directory_unavailable':
+        return 'The user directory is temporarily unavailable. Try again in a moment.';
+      default:
+        return 'Access is not available for this account right now. Contact the EnMaaS team.';
+    }
+  }
+
+  function load() {
+    fetch('/api/v1/me/onboarding', {credentials:'same-origin'})
+      .then(function (r) { if (r.status === 401) { location.href = '/login'; throw new Error('auth'); } return r.json(); })
+      .then(function (j) { state = j; render(); })
+      .catch(function () {});
+  }
+
+  document.getElementById('accept').addEventListener('change', function () {
+    document.getElementById('start').disabled = !this.checked;
+  });
+
+  document.getElementById('start').addEventListener('click', function () {
+    var btn = this;
+    btn.disabled = true;
+    document.getElementById('err').textContent = '';
+    fetch('/api/v1/me/onboarding/accept', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({version: state.terms.version, accepted: true})
+    }).then(function (r) {
+      return r.json().then(function (j) { return {ok: r.ok, body: j}; });
+    }).then(function (res) {
+      if (!res.ok) {
+        document.getElementById('err').textContent = (res.body && res.body.error) || 'Could not record acceptance.';
+        btn.disabled = false;
+        return;
+      }
+      location.href = (res.body && res.body.redirect) || '/account?tab=keys&first=1';
+    }).catch(function () {
+      document.getElementById('err').textContent = 'Network error. Try again.';
+      btn.disabled = false;
+    });
+  });
+
+  document.getElementById('retry').addEventListener('click', load);
+  load();
+})();
+</script>
+</body>
+</html>

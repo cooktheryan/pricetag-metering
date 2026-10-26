@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Access policy — EnMaaS admin</title>
+<style>
+  :root{color-scheme:dark;--bg:#0b0e11;--c1:#141820;--c2:#1a2030;--bdr:#2e3848;--t:#e2e6ec;--t2:#8090a8;--blu:#4da0f8;--grn:#3dcc6e;--red:#e8554e;--org:#eba830}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--t);font:13px/1.6 Inter,-apple-system,BlinkMacSystemFont,sans-serif}
+  .appbar{display:flex;align-items:center;gap:16px;padding:12px 22px;background:var(--c1);border-bottom:1px solid var(--bdr);flex-wrap:wrap}
+  .logo{font-weight:700;font-size:15px}.logo em{font-style:normal;color:var(--blu)}
+  nav{display:flex;gap:2px;flex-wrap:wrap}
+  nav a{padding:5px 11px;border-radius:7px;color:var(--t2);font-size:13px;text-decoration:none}
+  nav a:hover{background:var(--c2);color:var(--t)} nav a.on{background:var(--c2);color:var(--t);font-weight:600}
+  .wrap{max-width:860px;margin:0 auto;padding:28px 22px 70px}
+  h1{font-size:22px;margin:0 0 6px}
+  .sub{color:var(--t2);font-size:12px;margin-bottom:24px}
+  .card{background:var(--c1);border:1px solid var(--bdr);border-radius:12px;padding:22px;margin-bottom:16px}
+  label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--t2);font-weight:700;margin-bottom:6px}
+  textarea{width:100%;min-height:90px;background:var(--c2);border:1px solid var(--bdr);color:var(--t);border-radius:8px;padding:11px 13px;font:12.5px 'SF Mono',Consolas,Menlo,monospace;outline:none;resize:vertical}
+  textarea:focus{border-color:var(--blu)}
+  .hint{font-size:11px;color:var(--t2);margin-top:6px}
+  .row{display:flex;align-items:center;gap:9px;margin-top:14px;font-size:12.5px}
+  .row input{accent-color:var(--grn);width:16px;height:16px}
+  .actions{display:flex;align-items:center;gap:12px;margin-top:8px}
+  button{background:var(--blu);color:#04121f;border:0;border-radius:8px;padding:10px 20px;font:600 12px Inter,sans-serif;cursor:pointer}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .msg{font-size:12px;min-height:18px}.msg.ok{color:var(--grn)}.msg.err{color:var(--red)}
+  .meta{font-size:11px;color:var(--t2);margin-top:16px}
+  .warn{background:rgba(235,168,48,.08);border:1px solid rgba(235,168,48,.3);border-radius:9px;padding:12px 14px;font-size:12px;color:var(--org);margin-bottom:18px}
+</style>
+</head>
+<body>
+<header class="appbar">
+  <div class="logo">EnMaaS <em>admin</em></div>
+  <nav>
+    <a href="/dashboard">Usage</a>
+    <a href="/routing">Routing</a>
+    <a href="/admin/access" class="on">Access</a>
+    <a href="/admin">Admin</a>
+  </nav>
+</header>
+<div class="wrap">
+  <h1>Access policy</h1>
+  <div class="sub">Group allowlist and ISO 3166-1 alpha-3 country blocklist. Changes apply on the next request — no redeploy.</div>
+
+  <div class="warn">This policy is enforced only when <code>ONBOARDING_MODE=enforce</code>. In <code>observe</code> mode decisions are logged but not blocked.</div>
+
+  <div class="card">
+    <label for="groups">Authorized groups (OIDC groups claim)</label>
+    <textarea id="groups" placeholder="GE&#10;enmaas-users"></textarea>
+    <div class="hint">One group per line or comma-separated. Matching is case-insensitive. Leave empty to accept any non-technical group.</div>
+
+    <label for="countries" style="margin-top:18px">Blocked countries — ISO 3166-1 alpha-3</label>
+    <textarea id="countries" placeholder="IRN&#10;PRK&#10;RUS"></textarea>
+    <div class="hint">Three-letter codes only (e.g. <code>IRN</code>, not <code>IR</code>). The directory's alpha-2 values are converted automatically.</div>
+
+    <div class="row"><input type="checkbox" id="unknown"><label for="unknown" style="margin:0;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--t);font-weight:400">Allow users whose country cannot be determined</label></div>
+
+    <div class="actions"><button id="save">Save policy</button><div class="msg" id="msg"></div></div>
+    <div class="meta" id="meta"></div>
+  </div>
+</div>
+<script>
+(function(){
+  function $(id){return document.getElementById(id);}
+  function lines(v){return v.split(/[\n,]+/).map(function(s){return s.trim();}).filter(Boolean);}
+  function load(){
+    fetch('/api/v1/admin/access-policy',{credentials:'same-origin'}).then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status); return r.json();
+    }).then(function(p){
+      $('groups').value=(p.allowed_groups||[]).join('\n');
+      $('countries').value=(p.blocked_countries||[]).join('\n');
+      $('unknown').checked=!!p.allow_unknown_country;
+      $('meta').textContent = p.updated_by ? ('Last changed by '+p.updated_by+' · '+new Date(p.updated_at).toLocaleString()) : 'Using deployment defaults (no saved policy yet).';
+    }).catch(function(e){ $('msg').className='msg err'; $('msg').textContent='Could not load policy: '+e.message; });
+  }
+  $('save').onclick=function(){
+    var btn=this; btn.disabled=true; $('msg').className='msg'; $('msg').textContent='Saving…';
+    fetch('/api/v1/admin/access-policy',{
+      method:'PUT', credentials:'same-origin', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({allowed_groups:lines($('groups').value),blocked_countries:lines($('countries').value),allow_unknown_country:$('unknown').checked})
+    }).then(function(r){ return r.text().then(function(t){ if(!r.ok) throw new Error(t||('HTTP '+r.status)); return t?JSON.parse(t):{}; }); })
+      .then(function(p){
+        $('msg').className='msg ok'; $('msg').textContent='Saved.';
+        $('meta').textContent='Last changed by '+(p.updated_by||'you')+' · just now';
+      }).catch(function(e){ $('msg').className='msg err'; $('msg').textContent=e.message.slice(0,200); })
+      .then(function(){ btn.disabled=false; });
+  };
+  load();
+})();
+</script>
+</body>
+</html>

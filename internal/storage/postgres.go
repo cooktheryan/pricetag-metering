@@ -1411,6 +1411,9 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.migratePartnerUsers(ctx); err != nil {
 		return err
 	}
+	if err := s.migrateOnboarding(ctx); err != nil {
+		return err
+	}
 	slog.Info("database migrations complete")
 	return nil
 }

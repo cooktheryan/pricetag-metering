@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EnMaaS Terms &amp; Conditions</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  body{margin:0;background:#0b0e11;color:#e2e6ec;font:15px/1.7 Inter,-apple-system,BlinkMacSystemFont,sans-serif}
+  main{max-width:820px;margin:0 auto;padding:48px 24px 80px}
+  h1{font-size:26px;margin:0 0 8px}
+  h2{font-size:16px;margin:32px 0 8px;color:#4da0f8}
+  p,li{color:#c3cbd8}
+  .draft{background:rgba(235,168,48,.1);border:1px solid rgba(235,168,48,.35);color:#eba830;border-radius:8px;padding:12px 16px;font-size:13px;margin:20px 0}
+  .meta{color:#8090a8;font-size:12px}
+  a{color:#4da0f8}
+  .back{display:inline-block;margin-bottom:24px;font-size:12px;text-decoration:none}
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="/onboarding">← Back to onboarding</a>
+  <h1>EnMaaS Terms &amp; Conditions</h1>
+  <div class="meta">Version {{TERMS_VERSION}}</div>
+  <div class="draft">{{TERMS_STATUS}}</div>
+
+  <p><strong>Placeholder — the final text is owned by Legal and has not been supplied yet.</strong>
+  This page exists so the acceptance flow can be built and tested end to end. Replace
+  this content with the approved agreement before enabling onboarding outside a
+  development environment.</p>
+
+  <h2>1. Acceptable use</h2>
+  <p>Use EnMaaS only for Red Hat business purposes and in line with the Red Hat
+  Acceptable Use Policy. Do not attempt to bypass quotas, share credentials, or use
+  the service to process data you are not authorized to handle.</p>
+
+  <h2>2. API keys and credentials</h2>
+  <p>You are responsible for every request made with a key issued to you. Keys are
+  shown once and must be stored in an approved secret manager. Revoke a key
+  immediately if it may have been exposed.</p>
+
+  <h2>3. Usage, cost, and quotas</h2>
+  <p>EnMaaS meters requests and calculates cost. Usage is attributed to your identity
+  and may be visible to your manager and authorized administrators. Quotas may be
+  enforced automatically.</p>
+
+  <h2>4. Data handling</h2>
+  <p>Do not submit secrets, regulated data, or customer data unless the model and
+  environment are approved for that data class. Prompts and responses may be
+  processed by external model providers for frontier models.</p>
+
+  <h2>5. Availability and changes</h2>
+  <p>The service is provided as-is during its rollout. Features, models, and limits
+  may change. Continued use after a terms update requires accepting the new
+  version.</p>
+
+  <h2>6. Audit</h2>
+  <p>Access decisions, terms acceptance, and key lifecycle actions are logged for
+  security and compliance.</p>
+
+  <p class="meta" style="margin-top:40px">Questions: contact the EnMaaS team.</p>
+</main>
+</body>
+</html>

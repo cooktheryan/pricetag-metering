@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My account — EnMaaS</title>
+<style>
+  :root{
+    --bg:#0b0e11;--c1:#141820;--c2:#1a2030;--c3:#232d40;--bdr:#2e3848;
+    --t:#e2e6ec;--t2:#8090a8;--blu:#4da0f8;--grn:#3dcc6e;--org:#eba830;--red:#e8554e;--pur:#a88cf8;--cyn:#38d4c2;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--t);font:13px/1.55 Inter,-apple-system,BlinkMacSystemFont,sans-serif}
+  a{color:var(--blu);text-decoration:none}
+  .appbar{position:sticky;top:0;z-index:40;background:rgba(11,14,17,.92);backdrop-filter:blur(10px);
+          border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:20px;padding:0 28px;height:58px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:.3px;font-size:14px}
+  .logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--blu),#8b5cf6);display:grid;place-items:center;font-size:12px;font-weight:900;color:#fff}
+  .tabs{display:flex;gap:4px;margin-left:8px}
+  .tab{background:none;border:0;color:var(--t2);font:600 12px Inter,sans-serif;padding:8px 14px;border-radius:8px;cursor:pointer}
+  .tab:hover{color:var(--t);background:var(--c3)}
+  .tab.on{color:var(--t);background:var(--c3)}
+  .right{margin-left:auto;display:flex;align-items:center;gap:14px}
+  .identity{font-size:12px;color:var(--t2);text-align:right;line-height:1.25}
+  .identity b{display:block;color:var(--t);font-weight:600}
+  .logout{background:transparent;border:1px solid var(--bdr);color:var(--t2);border-radius:7px;padding:7px 14px;font:600 11px Inter,sans-serif;cursor:pointer}
+  .logout:hover{color:var(--red);border-color:var(--red)}
+  .pg{max-width:1220px;margin:0 auto;padding:26px 28px 70px}
+  .pg-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+  h1{font-size:22px;font-weight:700}
+  .sub{color:var(--t2);font-size:12px;margin-top:3px}
+  .range{background:var(--c1);border:1px solid var(--bdr);color:var(--t);border-radius:8px;padding:8px 12px;font:600 12px Inter,sans-serif;cursor:pointer;outline:none}
+  .banner{display:flex;gap:12px;align-items:flex-start;background:rgba(77,160,248,.08);border:1px solid rgba(77,160,248,.3);
+          border-radius:10px;padding:14px 18px;margin-bottom:20px;font-size:12.5px}
+  .banner b{color:var(--blu)}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+  .kpi{background:var(--c1);border:1px solid var(--bdr);border-radius:12px;padding:18px 20px}
+  .kpi-label{font-size:10px;text-transform:uppercase;letter-spacing:.9px;color:var(--t2);font-weight:700}
+  .kpi-value{font-size:26px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums}
+  .kpi-value.blu{color:var(--blu)}.kpi-value.grn{color:var(--grn)}.kpi-value.org{color:var(--org)}.kpi-value.pur{color:var(--pur)}
+  .kpi-note{font-size:11px;color:var(--t2);margin-top:4px}
+  .bar{height:7px;border-radius:99px;background:var(--c3);margin-top:10px;overflow:hidden}
+  .bar span{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--grn),var(--org));transition:width .4s}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
+  .card{background:var(--c1);border:1px solid var(--bdr);border-radius:12px;padding:20px}
+  .card h2{font-size:13px;font-weight:700;margin-bottom:2px}
+  .card .hint{font-size:11px;color:var(--t2);margin-bottom:16px}
+  .donut-wrap{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+  .donut{width:150px;height:150px;border-radius:50%;position:relative;flex:0 0 auto;background:conic-gradient(var(--c3) 0 100%)}
+  .donut::after{content:'';position:absolute;inset:26px;border-radius:50%;background:var(--c1)}
+  .donut-center{position:absolute;inset:0;display:grid;place-items:center;z-index:1;text-align:center}
+  .donut-center b{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
+  .donut-center span{font-size:9px;text-transform:uppercase;letter-spacing:.7px;color:var(--t2)}
+  .legend{flex:1;min-width:180px;display:flex;flex-direction:column;gap:8px}
+  .legend-row{display:flex;align-items:center;gap:8px;font-size:12px}
+  .sw{width:9px;height:9px;border-radius:3px;flex:0 0 auto}
+  .legend-row .val{margin-left:auto;color:var(--t2);font-variant-numeric:tabular-nums}
+  .legend-row .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px}
+  .tbl-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{background:var(--c2);color:var(--t2);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:9px 12px;text-align:left;font-weight:700;white-space:nowrap}
+  td{padding:9px 12px;border-top:1px solid var(--bdr);white-space:nowrap}
+  tr:hover td{background:var(--c2)}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .mono{font-family:'SF Mono',SFMono-Regular,Consolas,Menlo,monospace;font-size:11.5px}
+  .pill{display:inline-block;border-radius:99px;padding:2px 9px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px}
+  .pill.active{background:rgba(61,204,110,.14);color:var(--grn);border:1px solid rgba(61,204,110,.35)}
+  .pill.expiring{background:rgba(235,168,48,.14);color:var(--org);border:1px solid rgba(235,168,48,.35)}
+  .pill.expired,.pill.revoked{background:rgba(232,85,78,.12);color:var(--red);border:1px solid rgba(232,85,78,.3)}
+  .pill.hosted{background:rgba(61,204,110,.12);color:var(--grn);border:1px solid rgba(61,204,110,.3)}
+  .pill.frontier{background:rgba(168,140,248,.12);color:var(--pur);border:1px solid rgba(168,140,248,.3)}
+  .empty{padding:40px 20px;text-align:center;color:var(--t2)}
+  .empty b{display:block;color:var(--t);font-size:14px;margin-bottom:6px}
+  .loading{padding:40px;text-align:center;color:var(--t2)}
+  .spinner{width:18px;height:18px;border:2px solid var(--bdr);border-top-color:var(--blu);border-radius:50%;display:inline-block;animation:spin .8s linear infinite;vertical-align:-4px;margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .btn{border:0;border-radius:8px;padding:9px 18px;font:600 12px Inter,sans-serif;cursor:pointer}
+  .btn-primary{background:var(--blu);color:#04121f}
+  .btn-primary:hover:not(:disabled){background:#6cb3ff}
+  .btn-primary:disabled{opacity:.4;cursor:not-allowed}
+  .btn-ghost{background:transparent;border:1px solid var(--bdr);color:var(--t2)}
+  .btn-ghost:hover{color:var(--t);border-color:var(--t2)}
+  .btn-danger{background:rgba(232,85,78,.1);border:1px solid rgba(232,85,78,.35);color:var(--red)}
+  .btn-danger:hover{background:rgba(232,85,78,.2)}
+  .btn-sm{padding:5px 12px;font-size:11px;border-radius:6px}
+  .keys-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+  .guide-link{font-size:12px;color:var(--blu);background:none;border:0;cursor:pointer;font-family:inherit}
+  .overlay{display:none;position:fixed;inset:0;background:rgba(1,4,9,.72);z-index:100;align-items:center;justify-content:center;padding:20px}
+  .overlay.show{display:flex}
+  .modal{background:var(--c1);border:1px solid var(--bdr);border-radius:14px;width:100%;max-width:520px;padding:24px 26px;box-shadow:0 24px 70px rgba(0,0,0,.6);position:relative;max-height:88vh;overflow:auto}
+  .modal h3{font-size:16px;margin-bottom:4px}
+  .modal .hint{color:var(--t2);font-size:12px;margin-bottom:18px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--t2);font-weight:700;margin-bottom:6px}
+  .field input,.field select{width:100%;background:var(--c2);border:1px solid var(--bdr);color:var(--t);border-radius:7px;padding:10px 12px;font:13px Inter,sans-serif;outline:none}
+  .field input:focus,.field select:focus{border-color:var(--blu)}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+  .close{position:absolute;top:14px;right:16px;background:none;border:0;color:var(--t2);font-size:20px;cursor:pointer;line-height:1}
+  .close:hover{color:var(--t)}
+  .err{color:var(--red);font-size:12px;min-height:18px;margin-top:6px}
+  .secret{background:rgba(61,204,110,.07);border:1px solid rgba(61,204,110,.35);border-radius:9px;padding:14px 16px;margin:6px 0 12px}
+  .secret .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--grn);font-weight:800;margin-bottom:6px}
+  .secret code{font-family:'SF Mono',SFMono-Regular,Consolas,Menlo,monospace;font-size:12.5px;word-break:break-all;user-select:all;line-height:1.6}
+  .warn{font-size:11px;color:var(--org);margin-top:8px}
+  .saved{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t2);margin:10px 0 2px}
+  .saved input{accent-color:var(--grn);width:16px;height:16px}
+  .setup-step{margin-bottom:16px}
+  .setup-step b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--blu);margin-bottom:6px}
+  pre{background:var(--c2);border:1px solid var(--bdr);border-radius:8px;padding:12px 14px;font-family:'SF Mono',SFMono-Regular,Consolas,Menlo,monospace;font-size:11.5px;white-space:pre-wrap;word-break:break-all;line-height:1.6;position:relative}
+  .copy{position:absolute;top:8px;right:8px;background:rgba(77,160,248,.12);border:1px solid rgba(77,160,248,.3);color:var(--blu);border-radius:5px;padding:3px 9px;font:600 10px Inter,sans-serif;cursor:pointer}
+  .toast{position:fixed;bottom:26px;right:26px;background:var(--grn);color:#06210f;padding:12px 20px;border-radius:9px;font-weight:700;font-size:12px;opacity:0;transform:translateY(14px);transition:.25s;z-index:200;pointer-events:none}
+  .toast.show{opacity:1;transform:none}
+  .toast.err{background:var(--red);color:#fff}
+  .hidden{display:none!important}
+  @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+  @media(max-width:640px){.pg{padding:18px 14px 60px}.appbar{padding:0 14px;gap:10px}.identity{display:none}.kpis{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <div class="brand"><div class="logo">E</div> EnMaaS</div>
+  <nav class="tabs">
+    <button class="tab" id="tab-usage" data-tab="usage">Usage</button>
+    <button class="tab" id="tab-keys" data-tab="keys">API Keys</button>
+  </nav>
+  <div class="right">
+    <div class="identity"><b id="who-name">…</b><span id="who-sub"></span></div>
+    <button class="logout" onclick="location.href='/logout'">Logout</button>
+  </div>
+</header>
+
+<main class="pg">
+  <div class="banner hidden" id="first-banner">
+    <div>🎉</div>
+    <div><b>Welcome to EnMaaS.</b> Your account is ready. Create your first API key below — it is shown only once, so store it in your password manager or approved secret store.</div>
+  </div>
+
+  <!-- ============================== USAGE ============================== -->
+  <section id="view-usage">
+    <div class="pg-head">
+      <div>
+        <h1>Your spend</h1>
+        <div class="sub" id="usage-sub">Month to date · updated just now</div>
+      </div>
+      <select class="range" id="range">
+        <option value="mtd" selected>Month to date</option>
+        <option value="24h">Last 24 hours</option>
+        <option value="7d">Last 7 days</option>
+        <option value="30d">Last 30 days</option>
+      </select>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-label">My spend</div><div class="kpi-value org" id="kpi-spend">—</div><div class="kpi-note" id="kpi-spend-note">Calculated by EnMaaS</div></div>
+      <div class="kpi"><div class="kpi-label">Requests</div><div class="kpi-value blu" id="kpi-requests">—</div><div class="kpi-note" id="kpi-requests-note">in this period</div></div>
+      <div class="kpi"><div class="kpi-label">Tokens</div><div class="kpi-value grn" id="kpi-tokens">—</div><div class="kpi-note" id="kpi-tokens-note">prompt + completion</div></div>
+      <div class="kpi"><div class="kpi-label">Monthly budget</div><div class="kpi-value pur" id="kpi-budget">—</div>
+        <div class="bar"><span id="kpi-budget-bar" style="width:0%"></span></div>
+        <div class="kpi-note" id="kpi-budget-note">quota usage</div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Spend by model</h2>
+        <div class="hint">Which models are consuming your budget</div>
+        <div class="donut-wrap">
+          <div class="donut" id="model-donut"><div class="donut-center"><div><b id="model-total">—</b><span>total</span></div></div></div>
+          <div class="legend" id="model-legend"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Hosted vs frontier</h2>
+        <div class="hint">Hosted runs on EnMaaS infrastructure; frontier calls external providers</div>
+        <div class="donut-wrap">
+          <div class="donut" id="split-donut"><div class="donut-center"><div><b id="split-pct">—</b><span>hosted</span></div></div></div>
+          <div class="legend" id="split-legend"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:18px">
+      <h2>Model detail</h2>
+      <div class="hint">Spend and tokens for the selected period</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Model</th><th>Type</th><th class="num">Requests</th><th class="num">Tokens</th><th class="num">Spend</th><th class="num">Share</th></tr></thead>
+          <tbody id="model-rows"><tr><td colspan="6"><div class="loading"><span class="spinner"></span>Loading usage…</div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Recent transactions</h2>
+      <div class="hint">Your last requests through the gateway</div>
+      <div class="tbl-wrap" style="max-height:380px;overflow-y:auto">
+        <table>
+          <thead><tr><th>Time</th><th>Model</th><th>Provider</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cost</th><th>Status</th></tr></thead>
+          <tbody id="recent-rows"><tr><td colspan="7"><div class="loading"><span class="spinner"></span>Loading transactions…</div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== KEYS ============================== -->
+  <section id="view-keys" class="hidden">
+    <div class="pg-head">
+      <div>
+        <h1>API keys</h1>
+        <div class="sub">Keys authenticate your tools against the EnMaaS gateway. They are shown only once.</div>
+      </div>
+      <button class="btn btn-primary" id="create-btn">+ Create key</button>
+    </div>
+
+    <div class="card">
+      <div class="keys-head">
+        <div>
+          <h2>My keys</h2>
+          <div class="hint" style="margin-bottom:0">Active, expiring, and revoked keys for your account</div>
+        </div>
+        <button class="guide-link" id="guide-btn">Read the setup guide →</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Group</th><th>Status</th><th>Created</th><th>Expires</th><th>Last used</th><th></th></tr></thead>
+          <tbody id="key-rows"><tr><td colspan="7"><div class="loading"><span class="spinner"></span>Loading keys…</div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px;background:linear-gradient(120deg,rgba(77,160,248,.07),transparent)">
+      <h2>Set up your tools</h2>
+      <div class="hint">One gateway host serves both Anthropic- and OpenAI-compatible APIs.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-ghost" id="guide-btn-2">Open setup guide</button>
+        <a class="btn btn-ghost" href="/welcome" style="display:inline-block">About EnMaaS</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Create key modal -->
+<div class="overlay" id="create-overlay">
+  <div class="modal">
+    <button class="close" data-close="create-overlay">×</button>
+    <div id="create-step">
+      <h3>Create API key</h3>
+      <div class="hint">Name it after the tool or machine that will use it.</div>
+      <div class="field"><label for="key-name">Name</label><input id="key-name" maxlength="64" placeholder="e.g. my-laptop-claude-code" autocomplete="off"></div>
+      <div class="field"><label for="key-expiry">Expires</label>
+        <select id="key-expiry">
+          <option value="2160h" selected>90 days (default)</option>
+          <option value="720h">30 days</option>
+          <option value="4320h">180 days</option>
+        </select>
+      </div>
+      <div class="warn">⚠ The key is shown once and cannot be retrieved later.</div>
+      <div class="err" id="create-err"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" data-close="create-overlay">Cancel</button>
+        <button class="btn btn-primary" id="create-submit">Create key</button>
+      </div>
+    </div>
+
+    <div id="reveal-step" class="hidden">
+      <h3>Your new API key</h3>
+      <div class="hint">Copy it now. This is the only time it will be displayed.</div>
+      <div class="secret">
+        <div class="lbl">API key</div>
+        <code id="reveal-key">—</code>
+        <div class="warn">⚠ Do not share it or commit it to a repository.</div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" id="reveal-copy">Copy</button>
+        <button class="btn btn-ghost" id="reveal-guide">Set up a tool →</button>
+      </div>
+      <div class="saved"><input type="checkbox" id="reveal-saved"><label for="reveal-saved">I've saved this key in a safe place</label></div>
+      <div class="modal-actions"><button class="btn btn-primary" id="reveal-done" disabled>Done</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- Setup guide modal -->
+<div class="overlay" id="guide-overlay">
+  <div class="modal" style="max-width:640px">
+    <button class="close" data-close="guide-overlay">×</button>
+    <h3>Set up your tools</h3>
+    <div class="hint" style="margin-bottom:18px">Use the same gateway host for Anthropic and OpenAI compatible clients.</div>
+
+    <div class="setup-step"><b>Gateway</b>
+      <pre>{{GATEWAY_URL}}<button class="copy" data-copy="{{GATEWAY_URL}}">Copy</button></pre>
+    </div>
+
+    <div class="setup-step"><b>Anthropic API (Claude Code, SDKs)</b>
+      <pre>export ANTHROPIC_BASE_URL={{GATEWAY_URL}}
+export ANTHROPIC_AUTH_TOKEN=<your-key>
+# requests go to {{GATEWAY_URL}}/v1/messages
+# the key is sent in the x-api-key header</pre>
+    </div>
+
+    <div class="setup-step"><b>OpenAI API (SDKs)</b>
+      <pre>export OPENAI_BASE_URL={{GATEWAY_URL}}/v1
+export OPENAI_API_KEY=<your-key>
+# chat: {{GATEWAY_URL}}/v1/chat/completions
+# responses: {{GATEWAY_URL}}/v1/responses</pre>
+    </div>
+
+    <div class="setup-step"><b>curl check</b>
+      <pre>curl {{GATEWAY_URL}}/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"</pre>
+    </div>
+
+    <div class="hint">Full client walkthroughs: <a href="/welcome">EnMaaS welcome page</a>.</div>
+  </div>
+</div>
+
+<!-- Revoke confirm -->
+<div class="overlay" id="revoke-overlay">
+  <div class="modal" style="max-width:440px">
+    <button class="close" data-close="revoke-overlay">×</button>
+    <h3>Revoke key?</h3>
+    <div class="hint" id="revoke-copy">This cannot be undone. Tools using this key will stop working immediately.</div>
+    <div class="err" id="revoke-err"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" data-close="revoke-overlay">Cancel</button>
+      <button class="btn btn-danger" id="revoke-confirm">Revoke key</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  var state = {tab:'usage', range:'mtd', keys:[], models:[], overview:null, revokeId:''};
+  var COLORS = ['#4da0f8','#3dcc6e','#eba830','#a88cf8','#38d4c2','#e8554e','#8090a8'];
+
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function money(v){ var n=Number(v||0); return '$'+(n>=1000?n.toLocaleString(undefined,{maximumFractionDigits:0}):n.toFixed(2)); }
+  function compact(v){ var n=Number(v||0); if(n>=1e9)return (n/1e9).toFixed(1)+'B'; if(n>=1e6)return (n/1e6).toFixed(1)+'M'; if(n>=1e3)return (n/1e3).toFixed(1)+'K'; return String(Math.round(n)); }
+  function when(iso){ if(!iso)return '—'; var d=new Date(iso); if(isNaN(d))return '—';
+    var diff=(Date.now()-d.getTime())/1000;
+    if(diff<60)return 'just now'; if(diff<3600)return Math.floor(diff/60)+'m ago';
+    if(diff<86400)return Math.floor(diff/3600)+'h ago'; if(diff<86400*7)return Math.floor(diff/86400)+'d ago';
+    return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+  function dateOnly(iso){ if(!iso)return '—'; var d=new Date(iso); if(isNaN(d))return '—';
+    return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+  function toast(msg, isErr){ var t=$('toast'); t.textContent=msg; t.className='toast show'+(isErr?' err':''); clearTimeout(t._t); t._t=setTimeout(function(){t.className='toast';},2600); }
+
+  function api(url, opts){
+    opts = opts || {};
+    opts.credentials='same-origin';
+    if(opts.body){ opts.headers={'Content-Type':'application/json'}; opts.body=JSON.stringify(opts.body); }
+    return fetch(url, opts).then(function(r){
+      if(r.status===403){ location.href='/onboarding'; throw new Error('onboarding'); }
+      if(r.status===401){ location.href='/login'; throw new Error('auth'); }
+      if(!r.ok){ return r.text().then(function(t){ throw new Error(t||('HTTP '+r.status)); }); }
+      if(r.status===204) return null;
+      return r.json();
+    });
+  }
+
+  /* ---------------- tabs ---------------- */
+  function setTab(tab, push){
+    state.tab = tab === 'keys' ? 'keys' : 'usage';
+    $('tab-usage').className = 'tab' + (state.tab==='usage'?' on':'');
+    $('tab-keys').className = 'tab' + (state.tab==='keys'?' on':'');
+    $('view-usage').className = state.tab==='usage' ? '' : 'hidden';
+    $('view-keys').className = state.tab==='keys' ? '' : 'hidden';
+    if(push !== false){
+      var url = new URL(location.href); url.searchParams.set('tab', state.tab);
+      if(state.tab!=='keys') url.searchParams.delete('first');
+      history.replaceState(null,'',url.pathname+url.search);
+    }
+    if(state.tab==='keys') loadKeys();
+    if(state.tab==='usage') loadUsage();
+  }
+  $('tab-usage').onclick=function(){ setTab('usage'); };
+  $('tab-keys').onclick=function(){ setTab('keys'); };
+
+  /* ---------------- identity ---------------- */
+  function loadWho(){
+    return api('/api/v1/whoami').then(function(d){
+      $('who-name').textContent = d.display_name || d.user || '—';
+      var parts=[]; if(d.isSuperAdmin)parts.push('super admin'); else if(d.isAdmin)parts.push('admin');
+      if(d.quota && typeof d.quota.limit_usd === 'number' && d.quota.limit_usd>0) parts.push('budget $'+Math.round(d.quota.limit_usd));
+      $('who-sub').textContent = parts.join(' · ');
+      if(d.quota) state.quota=d.quota;
+    }).catch(function(){});
+  }
+
+  /* ---------------- usage ---------------- */
+  function loadUsage(){
+    $('usage-sub').textContent = rangeLabel() + ' · updated ' + new Date().toLocaleTimeString();
+    api('/api/v1/me/usage/summary?range='+state.range).then(function(d){
+      state.overview = d.overview || {};
+      var q = d.quota || state.quota;
+      var o = state.overview;
+      $('kpi-spend').textContent = money(o.total_cost_usd);
+      $('kpi-requests').textContent = compact(o.total_requests);
+      $('kpi-tokens').textContent = compact(o.total_tokens);
+      if(q && typeof q.limit_usd === 'number' && q.limit_usd>0){
+        var pct = Math.min(100, Math.round((q.spent_usd||0)/q.limit_usd*100));
+        $('kpi-budget').textContent = pct+'%';
+        $('kpi-budget-bar').style.width = pct+'%';
+        $('kpi-budget-note').textContent = money(q.spent_usd)+' of '+money(q.limit_usd);
+      } else {
+        $('kpi-budget').textContent = '—';
+        $('kpi-budget-note').textContent = 'no dollar budget configured';
+        $('kpi-budget-bar').style.width = '0%';
+      }
+    }).catch(function(){ toast('Could not load usage', true); });
+
+    api('/api/v1/me/usage/models?range='+state.range).then(function(rows){
+      state.models = rows || [];
+      renderModels();
+    }).catch(function(){
+      $('model-rows').innerHTML='<tr><td colspan="6"><div class="empty">Could not load model usage.</div></td></tr>';
+    });
+
+    api('/api/v1/me/usage/recent?limit=20').then(function(rows){
+      renderRecent(rows || []);
+    }).catch(function(){
+      $('recent-rows').innerHTML='<tr><td colspan="7"><div class="empty">Could not load transactions.</div></td></tr>';
+    });
+  }
+
+  function rangeLabel(){
+    return {mtd:'Month to date','24h':'Last 24 hours','7d':'Last 7 days','30d':'Last 30 days'}[state.range] || 'Month to date';
+  }
+
+  function renderModels(){
+    var rows = state.models.slice().sort(function(a,b){ return (b.cost_usd||0)-(a.cost_usd||0); });
+    var total = rows.reduce(function(s,r){ return s+(r.cost_usd||0); },0);
+    $('model-total').textContent = money(total).replace('.00','');
+
+    // Spend-by-model donut
+    var top = rows.filter(function(r){ return (r.cost_usd||0)>0; }).slice(0,6);
+    var rest = rows.filter(function(r){ return (r.cost_usd||0)>0; }).slice(6);
+    if(rest.length){
+      top.push({model:'Other ('+rest.length+')', cost_usd:rest.reduce(function(s,r){return s+(r.cost_usd||0);},0), _other:true});
+    }
+    var segs=[], acc=0, legend='';
+    top.forEach(function(r,i){
+      var pct = total>0 ? (r.cost_usd/total*100) : 0;
+      var color = COLORS[i%COLORS.length];
+      segs.push(color+' '+acc.toFixed(2)+'% '+(acc+pct).toFixed(2)+'%');
+      acc += pct;
+      legend += '<div class="legend-row"><span class="sw" style="background:'+color+'"></span>'+
+        '<span class="nm" title="'+esc(r.model)+'">'+esc(r.model)+'</span><span class="val">'+money(r.cost_usd)+' · '+Math.round(pct)+'%</span></div>';
+    });
+    if(!segs.length) segs.push('var(--c3) 0 100%');
+    $('model-donut').style.background = 'conic-gradient('+segs.join(',')+')';
+    $('model-legend').innerHTML = legend || '<div class="legend-row"><span class="nm">No spend in this period.</span></div>';
+
+    // Hosted vs frontier donut
+    var hosted = rows.filter(function(r){ return r.hosted; }).reduce(function(s,r){return s+(r.cost_usd||0);},0);
+    var frontier = total-hosted;
+    var hp = total>0 ? Math.round(hosted/total*100) : 0;
+    $('split-donut').style.background = 'conic-gradient(#3dcc6e 0 '+hp+'%, #a88cf8 '+hp+'% 100%)';
+    $('split-pct').textContent = hp+'%';
+    $('split-legend').innerHTML =
+      '<div class="legend-row"><span class="sw" style="background:#3dcc6e"></span><span class="nm">Hosted (EnMaaS)</span><span class="val">'+money(hosted)+' · '+hp+'%</span></div>'+
+      '<div class="legend-row"><span class="sw" style="background:#a88cf8"></span><span class="nm">Frontier (vendor)</span><span class="val">'+money(frontier)+' · '+(100-hp)+'%</span></div>';
+
+    // Table
+    if(!rows.length){
+      $('model-rows').innerHTML='<tr><td colspan="6"><div class="empty"><b>No usage yet</b>Create a key and send a request to see your spend here.</div></td></tr>';
+      return;
+    }
+    $('model-rows').innerHTML = rows.map(function(r){
+      var share = total>0 ? Math.round((r.cost_usd||0)/total*100) : 0;
+      return '<tr><td class="mono">'+esc(r.model)+'</td>'+
+        '<td><span class="pill '+(r.hosted?'hosted':'frontier')+'">'+(r.hosted?'Hosted':'Frontier')+'</span></td>'+
+        '<td class="num">'+compact(r.requests)+'</td>'+
+        '<td class="num">'+compact(r.total_tokens)+'</td>'+
+        '<td class="num">'+money(r.cost_usd)+'</td>'+
+        '<td class="num">'+share+'%</td></tr>';
+    }).join('');
+  }
+
+  function renderRecent(rows){
+    if(!rows.length){
+      $('recent-rows').innerHTML='<tr><td colspan="7"><div class="empty"><b>No transactions yet</b>Requests appear here as soon as your tools use a key.</div></td></tr>';
+      return;
+    }
+    $('recent-rows').innerHTML = rows.map(function(e){
+      var ok = e.status_code == null || (e.status_code>=200 && e.status_code<300);
+      return '<tr>'+
+        '<td style="color:var(--t2)">'+when(e.timestamp)+'</td>'+
+        '<td class="mono">'+esc(e.model)+'</td>'+
+        '<td style="color:var(--t2)">'+esc(e.provider||'—')+'</td>'+
+        '<td class="num">'+compact(e.prompt_tokens)+'</td>'+
+        '<td class="num">'+compact(e.completion_tokens)+'</td>'+
+        '<td class="num">'+money(e.cost_usd)+'</td>'+
+        '<td><span class="pill '+(ok?'active':'revoked')+'">'+esc(e.status_code==null?'—':e.status_code)+'</span></td></tr>';
+    }).join('');
+  }
+
+  /* ---------------- keys ---------------- */
+  function loadKeys(){
+    api('/api/v1/me/keys').then(function(d){
+      state.keys = (d && (d.data || d.keys)) || [];
+      renderKeys();
+    }).catch(function(){
+      $('key-rows').innerHTML='<tr><td colspan="7"><div class="empty">Could not load your keys.</div></td></tr>';
+    });
+  }
+
+  function statusOf(k){
+    var s=(k.status||'active').toLowerCase();
+    if(s==='revoked'||s==='expired') return s;
+    var exp=k.expirationDate ? new Date(k.expirationDate) : null;
+    if(exp && !isNaN(exp)){
+      if(exp.getTime() < Date.now()) return 'expired';
+      if(exp.getTime()-Date.now() < 14*86400*1000) return 'expiring';
+    }
+    return 'active';
+  }
+
+  function renderKeys(){
+    if(!state.keys.length){
+      $('key-rows').innerHTML='<tr><td colspan="7"><div class="empty"><b>No keys yet</b>Create your first key to start using the gateway.<div style="margin-top:14px"><button class="btn btn-primary" onclick="document.getElementById(\'create-btn\').click()">Create key</button></div></div></td></tr>';
+      return;
+    }
+    state.keys.sort(function(a,b){ return new Date(b.creationDate||0)-new Date(a.creationDate||0); });
+    $('key-rows').innerHTML = state.keys.map(function(k){
+      var st=statusOf(k);
+      var label = st==='expiring'?'Expiring soon':st;
+      var action = (st==='active'||st==='expiring') && k.id
+        ? '<button class="btn btn-danger btn-sm" data-revoke="'+esc(k.id)+'" data-name="'+esc(k.name||'')+'">Revoke</button>' : '';
+      return '<tr>'+
+        '<td style="font-weight:600">'+esc(k.name||'—')+'</td>'+
+        '<td style="color:var(--t2)">'+esc(k.subscription||k.group||'—')+'</td>'+
+        '<td><span class="pill '+st+'">'+esc(label)+'</span></td>'+
+        '<td style="color:var(--t2)">'+when(k.creationDate||k.created_at)+'</td>'+
+        '<td style="color:var(--t2)">'+dateOnly(k.expirationDate)+'</td>'+
+        '<td style="color:var(--t2)">'+(k.lastUsedAt?when(k.lastUsedAt):'never')+'</td>'+
+        '<td style="text-align:right">'+action+'</td></tr>';
+    }).join('');
+    Array.prototype.forEach.call(document.querySelectorAll('[data-revoke]'), function(btn){
+      btn.onclick=function(){
+        state.revokeId=btn.getAttribute('data-revoke');
+        $('revoke-copy').textContent='Revoke “'+(btn.getAttribute('data-name')||'this key')+'”? Tools using it will stop working immediately. This cannot be undone.';
+        $('revoke-err').textContent='';
+        $('revoke-overlay').className='overlay show';
+      };
+    });
+  }
+
+  $('create-btn').onclick=function(){
+    $('create-step').className=''; $('reveal-step').className='hidden';
+    $('key-name').value=''; $('key-expiry').value='2160h'; $('create-err').textContent='';
+    $('create-overlay').className='overlay show'; $('key-name').focus();
+  };
+
+  $('create-submit').onclick=function(){
+    var name=$('key-name').value.trim();
+    if(!name){ $('create-err').textContent='Give the key a name.'; return; }
+    var btn=this; btn.disabled=true;
+    api('/api/v1/me/keys',{method:'POST',body:{name:name,expiresIn:$('key-expiry').value}}).then(function(k){
+      $('reveal-key').textContent = k.key || '';
+      $('create-step').className='hidden'; $('reveal-step').className='';
+      $('reveal-saved').checked=false; $('reveal-done').disabled=true;
+      state.lastKey = k.key||'';
+      loadKeys();
+    }).catch(function(err){
+      $('create-err').textContent = (err.message||'Could not create the key.').replace(/^maas-api[^:]*:\s*/,'').slice(0,200);
+    }).then(function(){ btn.disabled=false; });
+  };
+
+  $('reveal-saved').onchange=function(){ $('reveal-done').disabled=!this.checked; };
+  $('reveal-copy').onclick=function(){
+    var v=$('reveal-key').textContent;
+    navigator.clipboard.writeText(v).then(function(){ toast('Key copied'); }).catch(function(){
+      var ta=document.createElement('textarea'); ta.value=v; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove(); toast('Key copied');
+    });
+  };
+  $('reveal-guide').onclick=function(){ $('create-overlay').className='overlay'; openGuide(); };
+  $('reveal-done').onclick=function(){
+    $('reveal-key').textContent='—'; state.lastKey='';
+    $('create-overlay').className='overlay';
+    toast('Key created');
+  };
+
+  $('revoke-confirm').onclick=function(){
+    var btn=this; btn.disabled=true;
+    api('/api/v1/me/keys/'+encodeURIComponent(state.revokeId),{method:'DELETE'}).then(function(){
+      $('revoke-overlay').className='overlay';
+      toast('Key revoked'); loadKeys();
+    }).catch(function(){ $('revoke-err').textContent='Could not revoke the key.'; })
+      .then(function(){ btn.disabled=false; });
+  };
+
+  /* ---------------- guide / copy / close ---------------- */
+  function openGuide(){ $('guide-overlay').className='overlay show'; }
+  $('guide-btn').onclick=openGuide; $('guide-btn-2').onclick=openGuide;
+  Array.prototype.forEach.call(document.querySelectorAll('[data-close]'),function(b){
+    b.onclick=function(){ $(b.getAttribute('data-close')).className='overlay'; };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.overlay'),function(o){
+    o.addEventListener('click',function(e){ if(e.target===o) o.className='overlay'; });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-copy]'),function(b){
+    b.onclick=function(){ navigator.clipboard.writeText(b.getAttribute('data-copy')).then(function(){toast('Copied');}); };
+  });
+
+  $('range').onchange=function(){ state.range=this.value; loadUsage(); };
+
+  /* ---------------- boot ---------------- */
+  var params=new URLSearchParams(location.search);
+  if(params.get('first')==='1'){ $('first-banner').className='banner'; history.replaceState(null,'',location.pathname+'?tab=keys'); }
+  loadWho();
+  setTab(params.get('tab')==='keys'?'keys':'usage', false);
+})();
+</script>
+</body>
+</html>
