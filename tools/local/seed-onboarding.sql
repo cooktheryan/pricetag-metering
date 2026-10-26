@@ -102,18 +102,18 @@ VALUES
   ('local-onb-10', NOW() - interval '3 hours',        'returning-user@example.com', 'GE', 'qwen3-coder',       'qwen-flash',      'local-onboarding', 'opencode-nightly/1.0',  95000,  31000, 126000, 15000, 200, 0.32),
   ('local-onb-11', NOW() - interval '90 minutes',     'returning-user@example.com', 'GE', 'gpt-5',             'openai',    'local-onboarding', 'codex-tui/0.1.0',     52000,  18000,  70000,     0, 429, 0.00),
   ('local-onb-12', NOW() - interval '25 minutes',     'returning-user@example.com', 'GE', 'claude-sonnet-4-5', 'anthropic', 'local-onboarding', 'claude-code/2.1.0',   31000,  11000,  42000,  5000, 200, 1.27),
-  ('local-onb-13', NOW() - interval '22 minutes',     'returning-user@example.com', 'GE', 'claude-sonnet-4-5',             'anthropic',    'local-onboarding', 'codex-tui/0.1.0', 1500000, 13108113, 14608113, 0, 200, 201.121695),
-  ('local-onb-14', NOW() - interval '20 minutes',     'returning-user@example.com', 'GE', 'claude-sonnet-4-5',             'anthropic',    'local-onboarding', 'codex-tui/0.1.0', 1500000, 13108113, 14608113, 0, 200, 201.121695),
-  ('local-onb-15', NOW() - interval '18 minutes',     'returning-user@example.com', 'GE', 'claude-sonnet-4-5',             'anthropic',    'local-onboarding', 'codex-tui/0.1.0', 1500000, 13108113, 14608113, 0, 200, 201.121695),
-  ('local-onb-16', NOW() - interval '16 minutes',     'returning-user@example.com', 'GE', 'claude-sonnet-4-5',             'anthropic',    'local-onboarding', 'codex-tui/0.1.0', 1500000, 13108113, 14608113, 0, 200, 201.121695),
-  ('local-onb-17', NOW() - interval '14 minutes',     'returning-user@example.com', 'GE', 'claude-sonnet-4-5',             'anthropic',    'local-onboarding', 'codex-tui/0.1.0', 1500000, 13108113, 14608113, 0, 200, 201.121695),
-  ('local-onb-18', NOW() - interval '12 minutes',     'returning-user@example.com', 'GE', 'claude-sonnet-4-5',             'anthropic',    'local-onboarding', 'codex-tui/0.1.0', 1500000, 13108113, 14608113, 0, 200, 201.121695),
-  ('local-onb-19', NOW() - interval '10 minutes',     'returning-user@example.com', 'GE', 'claude-sonnet-4-5',             'anthropic',    'local-onboarding', 'codex-tui/0.1.0', 1500000, 13108113, 14608113, 0, 200, 201.121695),
-  ('local-onb-20', NOW() - interval '8 minutes',      'returning-user@example.com', 'GE', 'claude-sonnet-4-5',             'anthropic',    'local-onboarding', 'codex-tui/0.1.0', 1500000, 13108113, 14608113, 0, 200, 201.121695),
-  ('local-onb-21', NOW() - interval '7 minutes',      'returning-user@example.com', 'GE', 'claude-sonnet-4-5',             'anthropic',    'local-onboarding', 'codex-tui/0.1.0', 1500000, 13108113, 14608113, 0, 200, 201.121695),
-  ('local-onb-22', NOW() - interval '6 minutes',      'returning-user@example.com', 'GE', 'claude-sonnet-4-5',             'anthropic',    'local-onboarding', 'codex-tui/0.1.0', 1500000, 13108113, 14608113, 0, 200, 201.121695),
-  ('local-onb-23', NOW() - interval '5 minutes',      'returning-user@example.com', 'GE', 'claude-sonnet-4-5',             'anthropic',    'local-onboarding', 'codex-tui/0.1.0', 1500000, 13108113, 14608113, 0, 200, 201.121695),
-  ('local-onb-24', NOW() - interval '4 minutes',      'returning-user@example.com', 'GE', 'claude-sonnet-4-5',             'anthropic',    'local-onboarding', 'codex-tui/0.1.0', 1500000, 13108113, 14608113, 0, 200, 201.121695);
+  ('local-onb-13', NOW() - interval '22 minutes', 'returning-user@example.com', 'GE', 'claude-sonnet-4-5', 'anthropic', 'local-onboarding', 'claude-code/2.1.0', 1000000, 2466667, 3466667, 0, 200, 40.000005),
+  ('local-onb-14', NOW() - interval '20 minutes', 'returning-user@example.com', 'GE', 'claude-sonnet-4-5', 'anthropic', 'local-onboarding', 'claude-code/2.1.0', 1000000, 2466667, 3466667, 0, 200, 40.000005),
+  ('local-onb-15', NOW() - interval '18 minutes', 'returning-user@example.com', 'GE', 'claude-sonnet-4-5', 'anthropic', 'local-onboarding', 'claude-code/2.1.0', 1000000, 2466667, 3466667, 0, 200, 40.000005),
+  ('local-onb-16', NOW() - interval '16 minutes', 'returning-user@example.com', 'GE', 'gpt-5', 'openai', 'local-onboarding', 'codex-tui/0.1.0', 1000000, 3625000, 4625000, 0, 200, 30.000000),
+  ('local-onb-17', NOW() - interval '14 minutes', 'returning-user@example.com', 'GE', 'gpt-5', 'openai', 'local-onboarding', 'codex-tui/0.1.0', 1000000, 3625000, 4625000, 0, 200, 30.000000),
+  ('local-onb-18', NOW() - interval '12 minutes', 'returning-user@example.com', 'GE', 'gpt-5', 'openai', 'local-onboarding', 'codex-tui/0.1.0', 1000000, 3625000, 4625000, 0, 200, 30.000000),
+  ('local-onb-19', NOW() - interval '10 minutes', 'returning-user@example.com', 'GE', 'qwen3-coder', 'qwen-flash', 'local-onboarding', 'opencode-nightly/1.0', 5000000, 5000000, 10000000, 0, 200, 10.000000),
+  ('local-onb-20', NOW() - interval '8 minutes', 'returning-user@example.com', 'GE', 'qwen3-coder', 'qwen-flash', 'local-onboarding', 'opencode-nightly/1.0', 5000000, 5000000, 10000000, 0, 200, 10.000000),
+  ('local-onb-21', NOW() - interval '7 minutes', 'returning-user@example.com', 'GE', 'qwen3-coder', 'qwen-flash', 'local-onboarding', 'opencode-nightly/1.0', 5000000, 5000000, 10000000, 0, 200, 10.000000),
+  ('local-onb-22', NOW() - interval '6 minutes', 'returning-user@example.com', 'GE', 'llama-4-scout', 'qwen-flash', 'local-onboarding', 'pi-coding-agent/0.1', 10000000, 6666667, 16666667, 0, 200, 6.000000),
+  ('local-onb-23', NOW() - interval '5 minutes', 'returning-user@example.com', 'GE', 'llama-4-scout', 'qwen-flash', 'local-onboarding', 'pi-coding-agent/0.1', 10000000, 6666667, 16666667, 0, 200, 6.000000),
+  ('local-onb-24', NOW() - interval '4 minutes', 'returning-user@example.com', 'GE', 'claude-sonnet-4-5', 'anthropic', 'local-onboarding', 'claude-code/2.1.0', 150000, 66723, 216723, 0, 200, 1.450845);
 
 -- Rebuild derived rollups so the account page reads the seeded rows.
 TRUNCATE usage_hourly;

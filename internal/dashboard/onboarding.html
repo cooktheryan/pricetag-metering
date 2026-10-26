@@ -38,7 +38,7 @@
   .who .out:hover{color:var(--maas);border-color:var(--maas-line)}
 
   /* ---------- hero ---------- */
-  .hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line);background:radial-gradient(900px 420px at 72% 15%,rgba(88,166,255,.055),transparent 68%)}
+  .hero{position:relative;overflow:hidden;border-bottom:0;background:radial-gradient(900px 420px at 72% 15%,rgba(88,166,255,.055),transparent 68%)}
   #flow{position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:0;transition:opacity .4s ease}
   #flow.flow-ready{opacity:.55}
   .floaters{position:absolute;inset:0;overflow:hidden;pointer-events:none}
@@ -76,7 +76,7 @@
 
   /* checklist */
   .checks{display:flex;flex-direction:column;margin-top:18px}
-  .check{display:flex;align-items:flex-start;gap:14px;padding:16px 0;border-top:1px solid rgba(255,255,255,.055);transition:opacity .25s}
+  .check{display:flex;align-items:flex-start;gap:14px;height:64px;padding:16px 0;border-top:1px solid rgba(255,255,255,.055);transition:opacity .25s;overflow:hidden}
   .check:first-child{border-top:0}
   .check.queued{opacity:.72}
   .check.locked{opacity:.42}
@@ -96,7 +96,7 @@
   .check.pass .ck .glyph,.check.checking .ck .glyph{display:none}
   .check-body{flex:1;min-width:0}
   .check-label{font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .check-detail{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .check-detail{font-size:12.5px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .check-action{font-size:12px;color:var(--maas);text-decoration:none;margin-left:auto;white-space:nowrap;padding-top:3px}
   .check-action:hover{text-decoration:underline}
   .badge{display:inline-block;border-radius:99px;padding:1px 8px;font:600 9.5px "IBM Plex Mono",monospace;letter-spacing:.06em;text-transform:uppercase;background:#192128;color:var(--dim);border:1px solid var(--line2)}
@@ -189,7 +189,7 @@
     .panel h2{font-size:23px}
     .panel .lede{font-size:12.5px;margin-top:5px}
     .checks{margin-top:8px}
-    .check{padding:8px 0;gap:11px}
+    .check{height:44px;padding:8px 0;gap:11px}
     .check .ck{width:26px;height:26px;flex-basis:26px}
     .check-label{font-size:13px}
     .check-detail{font-size:11px;margin-top:1px}
