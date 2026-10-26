@@ -291,6 +291,7 @@ func main() {
 		slog.Info("OIDC dashboard login enabled", "issuer", cfg.OIDC.IssuerURL, "client_id", cfg.OIDC.ClientID)
 	}
 	authHandler.SetOrgStore(store) // managers land on /manager after login
+	authHandler.SetMaaSClient(maasClient) // dev-login persona reset only
 	keysHandler := handler.NewKeysHandler(k8sClient, cfg, store)
 	usageReportHandler := handler.NewUsageReportHandler(store)
 	partnerUsersHandler := handler.NewPartnerUsersHandler(store, maasClient, cfg.PartnerUserKeyGroup)

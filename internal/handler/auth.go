@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/redhat-et/pricetag-metering/internal/config"
 	"github.com/redhat-et/pricetag-metering/internal/dashboard"
+	"github.com/redhat-et/pricetag-metering/internal/maasapi"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
@@ -51,12 +53,20 @@ type AuthHandler struct {
 	// Optional — a nil store (or a lookup failure) keeps the old behaviour
 	// and lands everyone on /dashboard.
 	orgStore *storage.Store
+	// maasClient is only used by the temporary dev-login reset: the
+	// "first-time user" persona must not inherit keys from an earlier run.
+	// Nil is safe and disables the key reset.
+	maasClient *maasapi.Client
 }
 
 // SetOrgStore wires the directory lookup used by the login redirect. Kept a
 // setter so login stays constructible without a database (tests, lite
 // deployments).
 func (h *AuthHandler) SetOrgStore(s *storage.Store) { h.orgStore = s }
+
+// SetMaaSClient wires the key-service client used by the dev-login reset.
+// Production login never calls it.
+func (h *AuthHandler) SetMaaSClient(c *maasapi.Client) { h.maasClient = c }
 
 func NewAuthHandler(cfg config.Config) *AuthHandler {
 	secret := []byte(os.Getenv("SESSION_SECRET"))
@@ -300,6 +310,7 @@ func (h *AuthHandler) HandleDevLogin(w http.ResponseWriter, r *http.Request) {
 		if err := h.orgStore.ResetAgreement(r.Context(), pu.UserID, "terms", h.cfg.Onboarding.TermsVersion); err != nil {
 			slog.Warn("dev test persona reset failed", "username", target, "error", err)
 		}
+		h.revokeDevKeys(r.Context(), target, groups)
 	}
 	slog.Warn("dev test login used", "username", target, "remote", r.RemoteAddr)
 	h.setCookie(w, target, groups, "")
@@ -307,6 +318,70 @@ func (h *AuthHandler) HandleDevLogin(w http.ResponseWriter, r *http.Request) {
 	// country/group/terms failures are visible without flipping the whole
 	// deployment to ONBOARDING_MODE=enforce, which would affect real users.
 	http.Redirect(w, r, h.loginDestination(r, target, groups), http.StatusFound)
+}
+
+// revokeDevKeys removes the keys an earlier dev-login run created for the
+// reset persona. MaaS keeps revoked keys for its own record, so the dev-only
+// key list filter hides them from this persona to reproduce a truly new
+// account. Failures are logged and never block the login.
+func (h *AuthHandler) revokeDevKeys(ctx context.Context, username string, groups []string) {
+	if h.maasClient == nil || len(groups) == 0 {
+		return
+	}
+	revoked := 0
+	seen := make(map[string]struct{})
+	for _, group := range groups {
+		keys, err := h.maasClient.ListUserAPIKeys(ctx, username, group)
+		if err != nil {
+			slog.Warn("dev test key list failed", "username", username, "group", group, "error", err)
+			continue
+		}
+		for _, key := range keys {
+			if key.ID == "" || strings.EqualFold(strings.TrimSpace(key.Status), "revoked") {
+				continue
+			}
+			if _, ok := seen[key.ID]; ok {
+				continue
+			}
+			seen[key.ID] = struct{}{}
+			status, err := h.maasClient.RevokeUserAPIKey(ctx, key.ID, username, group)
+			if err != nil {
+				slog.Warn("dev test key revoke failed", "username", username, "key", key.ID, "error", err)
+				continue
+			}
+			if status >= http.StatusBadRequest && status != http.StatusNotFound && status != http.StatusForbidden {
+				slog.Warn("dev test key revoke rejected", "username", username, "key", key.ID, "status", status)
+				continue
+			}
+			revoked++
+		}
+	}
+	if revoked > 0 {
+		slog.Info("dev test keys revoked", "username", username, "count", revoked)
+	}
+}
+
+// devResetIdentity reports whether a caller is an allowlisted dev_test user
+// whose first-run state is reset on every dev login.
+func devResetIdentity(ctx context.Context, cfg config.Config, store *storage.Store, username string) bool {
+	if len(cfg.DevLoginUsers) == 0 || store == nil {
+		return false
+	}
+	allowed := false
+	for _, candidate := range cfg.DevLoginUsers {
+		if strings.EqualFold(strings.TrimSpace(candidate), username) {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return false
+	}
+	pu, err := store.PartnerUserByMaaSUsername(ctx, username)
+	if err != nil {
+		return false
+	}
+	return isDevTestUser(pu.Tags) && isDevResetUser(pu.Tags)
 }
 
 func isDevResetUser(tags map[string]any) bool {

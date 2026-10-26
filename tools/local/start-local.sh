@@ -75,7 +75,7 @@ echo "==> starting metering-service"
   OIDC_REDIRECT_URL=http://localhost:8080/oauth/callback \
   OIDC_SCOPES="openid profile email groups" \
   OIDC_TEST_LOGIN=true \
-  DEV_LOGIN_USERS="new-user@example.com,returning-user@example.com,manager-user@example.com,blocked-user@example.com,nogroup-user@example.com" \
+  DEV_LOGIN_USERS="new-user@example.com,returning-user@example.com,blocked-user@example.com,nogroup-user@example.com,manager-user@example.com" \
   ONBOARDING_MODE=enforce \
   ONBOARDING_TERMS_VERSION=draft-tbd \
   ONBOARDING_TERMS_URL=/legal/terms \

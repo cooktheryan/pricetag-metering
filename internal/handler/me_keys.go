@@ -82,6 +82,20 @@ func (h *AdminHandler) myKeysList(w http.ResponseWriter, r *http.Request) {
 	if keys == nil {
 		keys = []maasapi.APIKeyResponse{}
 	}
+	// The dev-login reset persona must look like a brand-new account. MaaS
+	// keeps revoked keys for its own record, so hide them for this identity
+	// only. Temporary scaffolding, removed with dev login.
+	if devResetIdentity(r.Context(), h.cfg, h.store, username) {
+		visible := make([]maasapi.APIKeyResponse, 0, len(keys))
+		for _, key := range keys {
+			switch strings.ToLower(strings.TrimSpace(key.Status)) {
+			case "revoked", "expired":
+				continue
+			}
+			visible = append(visible, key)
+		}
+		keys = visible
+	}
 	writeJSON(w, map[string]any{"data": keys})
 }
 

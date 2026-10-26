@@ -6,7 +6,8 @@ designers can exercise onboarding, manager, usage, and access-failure flows in
 a deployed development environment without real IdP accounts.
 
 This is **not** part of the product surface. It must be removed before this
-branch is merged or deployed to production.
+branch is merged or deployed to production — **removal is a merge blocker**,
+not a follow-up.
 
 ## How it is gated
 
@@ -35,11 +36,17 @@ real users, it only feeds the enforced check for the dev identities.
 
 | Persona | Tag behavior | Landing |
 | --- | --- | --- |
-| Nina New | `dev_reset_on_login: true`; terms acceptance deleted on every login | `/onboarding` |
+| Nina New | `dev_reset_on_login: true`; terms and API keys reset on every login | `/onboarding` |
 | Ravi Return | terms accepted, has usage | `/account` |
-| Maya Manager | has two seeded direct reports with team traffic | `/manager` |
 | Bea Blocked | `country: IR` | `/onboarding` (country gate) |
 | Noah Nogroup | no `dev_groups` | `/onboarding` (group gate) |
+| Maya Manager | has two seeded direct reports with team traffic | `/manager` |
+
+Nina's reset revokes every API key currently owned by that identity and hides
+revoked/expired keys from her key list, so each click starts exactly like a new
+account. MaaS retains revoked keys in its own record; the hiding is only for
+this dev persona. Maya is listed last because the manager flow is already the
+best-established path and is not what most testers need first.
 
 The same panel is used locally (`tools/local/start-local.sh` sets
 `DEV_LOGIN_USERS`) and in the dogfood deployment.
@@ -61,7 +68,10 @@ Code:
 
 - [ ] Delete the `/dev-login` route in `cmd/main.go`.
 - [ ] Delete `HandleDevLogin`, `devLoginPanel`, `devLoginGroups`,
-      `isDevTestUser`, and `isDevResetUser` in `internal/handler/auth.go`.
+      `isDevTestUser`, `isDevResetUser`, `revokeDevKeys`, `devResetIdentity`,
+      and the `SetMaaSClient` wiring in `internal/handler/auth.go` and
+      `cmd/main.go`.
+- [ ] Remove the dev-reset key filter in `internal/handler/me_keys.go`.
 - [ ] Remove `devEnforcedIdentity` and the forced-mode branch in
       `AccessGate.Evaluate`, and restore the `NeedsOnboarding` short-circuit,
       in `internal/handler/access.go`.
