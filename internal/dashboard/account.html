@@ -431,14 +431,14 @@
     btn.onclick=function(){
       state.modelMetric=this.getAttribute('data-model-metric') || 'cost';
       document.querySelectorAll('[data-model-metric]').forEach(function(b){ b.classList.toggle('on',b===btn); });
-      renderModels();
+      renderModels('model');
     };
   });
   document.querySelectorAll('[data-split-metric]').forEach(function(btn){
     btn.onclick=function(){
       state.splitMetric=this.getAttribute('data-split-metric') || 'cost';
       document.querySelectorAll('[data-split-metric]').forEach(function(b){ b.classList.toggle('on',b===btn); });
-      renderModels();
+      renderModels('split');
     };
   });
 
@@ -528,15 +528,17 @@
     return y+'-'+m+'-'+day;
   }
 
-  function renderModels(){
+  function renderModels(changed){
     var metric=state.modelMetric;
     function value(r){ return metric==='tokens' ? (r.total_tokens||0) : metric==='requests' ? (r.requests||0) : (r.cost_usd||0); }
     function display(v){ return metric==='cost' ? wholeMoney(v) : compact(v); }
     var rows = state.models.slice().sort(function(a,b){ return value(b)-value(a); });
     var total = rows.reduce(function(s,r){ return s+value(r); },0);
-    $('model-total-label').textContent=metric;
-    if(state.animateUsage) animateNumber('model-total', 0, total, 1100, display);
-    else $('model-total').textContent = display(total);
+    if(changed !== 'split'){
+      $('model-total-label').textContent=metric;
+      if(state.animateUsage) animateNumber('model-total', 0, total, 1100, display);
+      else $('model-total').textContent = display(total);
+    }
 
     // Spend-by-model donut
     var top = rows.filter(function(r){ return value(r)>0; }).slice(0,6);
@@ -554,9 +556,11 @@
         '<span class="nm" title="'+esc(r.model)+'">'+esc(r.model)+'</span><span class="val">'+display(value(r))+' · '+Math.round(pct)+'%</span></div>';
     });
     if(!segs.length) segs.push('var(--c3) 0 100%');
-    if(state.animateUsage) animateDonut('model-donut', segs, 1500);
-    else $('model-donut').style.background = 'conic-gradient('+segs.join(',')+')';
-    $('model-legend').innerHTML = legend || '<div class="legend-row"><span class="nm">No spend in this period.</span></div>';
+    if(changed !== 'split'){
+      if(state.animateUsage) animateDonut('model-donut', segs, 1500);
+      else $('model-donut').style.background = 'conic-gradient('+segs.join(',')+')';
+      $('model-legend').innerHTML = legend || '<div class="legend-row"><span class="nm">No spend in this period.</span></div>';
+    }
 
     // Hosted vs frontier donut
     var splitMetric=state.splitMetric;
@@ -567,18 +571,21 @@
     var frontier = Math.max(splitTotal-hosted,0);
     var hp = splitTotal>0 ? Math.round(hosted/splitTotal*100) : 0;
     var splitSegs = ['#3dcc6e 0 '+hp+'%', '#a88cf8 '+hp+'% 100%'];
-    if(state.animateUsage) {
-      animateDonut('split-donut', splitSegs, 1500);
-      animateNumber('split-pct', 0, hp, 1500, function(v){ return Math.round(v)+'%'; });
-    } else {
-      $('split-donut').style.background = 'conic-gradient('+splitSegs.join(',')+')';
-      $('split-pct').textContent = hp+'%';
+    if(changed !== 'model'){
+      if(state.animateUsage) {
+        animateDonut('split-donut', splitSegs, 1500);
+        animateNumber('split-pct', 0, hp, 1500, function(v){ return Math.round(v)+'%'; });
+      } else {
+        $('split-donut').style.background = 'conic-gradient('+splitSegs.join(',')+')';
+        $('split-pct').textContent = hp+'%';
+      }
+      $('split-legend').innerHTML =
+        '<div class="legend-row"><span class="sw" style="background:#3dcc6e"></span><span class="nm">Hosted (EnMaaS)</span><span class="val">'+splitDisplay(hosted)+' · '+hp+'%</span></div>'+
+        '<div class="legend-row"><span class="sw" style="background:#a88cf8"></span><span class="nm">Frontier (vendor)</span><span class="val">'+splitDisplay(frontier)+' · '+(100-hp)+'%</span></div>';
     }
-    $('split-legend').innerHTML =
-      '<div class="legend-row"><span class="sw" style="background:#3dcc6e"></span><span class="nm">Hosted (EnMaaS)</span><span class="val">'+splitDisplay(hosted)+' · '+hp+'%</span></div>'+
-      '<div class="legend-row"><span class="sw" style="background:#a88cf8"></span><span class="nm">Frontier (vendor)</span><span class="val">'+splitDisplay(frontier)+' · '+(100-hp)+'%</span></div>';
 
     // Table
+    if(changed === 'split') return;
     if(!rows.length){
       $('model-rows').innerHTML='<tr><td colspan="6"><div class="empty"><b>No usage yet</b>Create a key and send a request to see your spend here.</div></td></tr>';
       return;
