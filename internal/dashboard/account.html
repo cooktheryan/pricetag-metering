@@ -543,7 +543,10 @@
     if(reduced){ el.textContent=Math.round(to)+'%'; setBudgetColor(el,to,to); return; }
     function tick(now){
       var p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3), value=from+(to-from)*eased;
-      el.textContent=Math.round(value)+'%';
+      // Keep the displayed integer behind the bar until the animation reaches
+      // the same endpoint; rounding would show 43% while the bar is still at
+      // roughly 42.5%.
+      el.textContent=(p < 1 ? Math.floor(value) : Math.round(to))+'%';
       setBudgetColor(el,value,to);
       if(p<1) requestAnimationFrame(tick);
     }
