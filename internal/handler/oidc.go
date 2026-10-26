@@ -56,6 +56,7 @@ type oidcState struct {
 	State        string `json:"state"`
 	Nonce        string `json:"nonce"`
 	CodeVerifier string `json:"code_verifier"`
+	Persona      string `json:"persona,omitempty"`
 	Exp          int64  `json:"exp"`
 }
 
@@ -190,9 +191,16 @@ func (h *AuthHandler) HandleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	verifier := oauth2.GenerateVerifier()
+	testPersona := ""
+	if h.cfg.OIDC.TestLogin {
+		if persona := r.URL.Query().Get("persona"); validTestPersona(persona) {
+			testPersona = persona
+		}
+	}
 	if err := h.setOIDCState(w, oidcState{
 		State: stateValue, Nonce: nonce, CodeVerifier: verifier,
-		Exp: time.Now().Add(10 * time.Minute).Unix(),
+		Persona: testPersona,
+		Exp:     time.Now().Add(10 * time.Minute).Unix(),
 	}); err != nil {
 		http.Error(w, "unable to start SSO", http.StatusInternalServerError)
 		return
@@ -202,13 +210,11 @@ func (h *AuthHandler) HandleOIDCLogin(w http.ResponseWriter, r *http.Request) {
 		oauth2.SetAuthURLParam("code_challenge", pkceChallenge(verifier)),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
 	}
-	if h.cfg.OIDC.TestLogin {
-		if persona := r.URL.Query().Get("persona"); validTestPersona(persona) {
-			// The local mock IdP reads login_hint as its persona key. Real
-			// providers would simply treat it as a username hint, but this
-			// branch is only reachable with OIDC_TEST_LOGIN enabled.
-			options = append(options, oauth2.SetAuthURLParam("login_hint", persona))
-		}
+	if testPersona != "" {
+		// The local mock IdP reads login_hint as its persona key. Real
+		// providers would simply treat it as a username hint, but this
+		// branch is only reachable with OIDC_TEST_LOGIN enabled.
+		options = append(options, oauth2.SetAuthURLParam("login_hint", testPersona))
 	}
 	url := h.oidc.config.AuthCodeURL(stateValue, options...)
 	http.Redirect(w, r, url, http.StatusFound)
@@ -337,6 +343,11 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	}
 	if email, ok := user.Tags["email"].(string); ok && strings.TrimSpace(email) != "" {
 		username = email
+	}
+	if h.cfg.OIDC.TestLogin && state.Persona == "new-user" {
+		if resetErr := h.orgStore.ResetAgreement(r.Context(), user.UserID, "terms", h.cfg.Onboarding.TermsVersion); resetErr != nil {
+			slog.Warn("local test persona agreement reset failed", "username", username, "error", resetErr)
+		}
 	}
 	h.setCookie(w, username, claims.Groups, "")
 	slog.Info("user logged in with OIDC", "username", username)

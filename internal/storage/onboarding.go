@@ -149,6 +149,18 @@ func (s *Store) HasAgreement(ctx context.Context, userID, docType, version strin
 	return exists, nil
 }
 
+// ResetAgreement removes one agreement version. It is used only by the
+// explicitly enabled local demo persona reset flow.
+func (s *Store) ResetAgreement(ctx context.Context, userID, docType, version string) error {
+	_, err := s.db.ExecContext(ctx, `
+		DELETE FROM user_agreements
+		WHERE user_id = $1 AND doc_type = $2 AND version = $3`, userID, docType, version)
+	if err != nil {
+		return fmt.Errorf("reset agreement: %w", err)
+	}
+	return nil
+}
+
 // RecordAgreement stores an acceptance. It is idempotent: re-accepting the
 // same version returns inserted=false and leaves the original timestamp.
 func (s *Store) RecordAgreement(ctx context.Context, a Agreement) (bool, error) {
