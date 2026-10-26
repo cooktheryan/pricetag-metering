@@ -327,6 +327,9 @@ func main() {
 
 	// Auth endpoints — unauthenticated by definition
 	mux.HandleFunc("/login", authHandler.HandleLogin)
+	// Explicit, env-gated test identities for development deployments. The
+	// handler 404s unless DEV_LOGIN_USERS is configured.
+	mux.HandleFunc("/dev-login", authHandler.HandleDevLogin)
 	mux.HandleFunc("/oauth/login", authHandler.HandleOIDCLogin)
 	mux.HandleFunc("/oauth/callback", authHandler.HandleOIDCCallback)
 	mux.HandleFunc("/logout", authHandler.HandleLogout)

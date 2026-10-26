@@ -8,9 +8,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -150,6 +152,14 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		} else {
 			data = bytes.Replace(data, []byte("<!-- TEST_LOGIN -->"), nil, 1)
 		}
+		// Deployment-scoped test identities. Unlike the mock-IdP personas
+		// above, these issue a local session directly and are only enabled by
+		// an explicit allowlist plus a dev_test tag on the directory row.
+		if panel := h.devLoginPanel(r); len(panel) > 0 {
+			data = bytes.Replace(data, []byte("<!-- DEV_LOGIN -->"), panel, 1)
+		} else {
+			data = bytes.Replace(data, []byte("<!-- DEV_LOGIN -->"), nil, 1)
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(data)
@@ -208,6 +218,123 @@ func (h *AuthHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	slog.Info("user logged in", "username", result.Username)
 	h.setCookie(w, result.Username, result.Groups, "")
 	http.Redirect(w, r, h.loginDestination(r, result.Username, result.Groups), http.StatusFound)
+}
+
+// devLoginPanel renders the explicitly allowlisted test identities. It is
+// empty unless DEV_LOGIN_USERS is set, so the login page is unchanged in
+// every normal deployment.
+func (h *AuthHandler) devLoginPanel(r *http.Request) []byte {
+	if len(h.cfg.DevLoginUsers) == 0 {
+		return nil
+	}
+	var b strings.Builder
+	b.WriteString(`<div class="test-login">
+  <div class="divider"><span>Dev test sign-in</span></div>
+  <p>Development environment only. Seeded demo accounts with sample usage.</p>
+  <div class="persona-grid">`)
+	for _, username := range h.cfg.DevLoginUsers {
+		label := username
+		if h.orgStore != nil {
+			if pu, err := h.orgStore.PartnerUserByMaaSUsername(r.Context(), username); err == nil {
+				first, _ := pu.Tags["first_name"].(string)
+				last, _ := pu.Tags["last_name"].(string)
+				if name := strings.TrimSpace(first + " " + last); name != "" {
+					label = name
+				}
+			}
+		}
+		fmt.Fprintf(&b, `<a class="persona" href="/dev-login?as=%s"><strong>%s</strong><span>%s</span></a>`,
+			url.QueryEscape(username), html.EscapeString(label), html.EscapeString(username))
+	}
+	b.WriteString(`</div></div>`)
+	return []byte(b.String())
+}
+
+// HandleDevLogin opens a local session for an explicitly configured test
+// identity. It is disabled unless DEV_LOGIN_USERS is set, and the target must
+// both appear in that allowlist and carry dev_test=true in the partner
+// directory. It never issues a session for an admin or an untagged account.
+func (h *AuthHandler) HandleDevLogin(w http.ResponseWriter, r *http.Request) {
+	if len(h.cfg.DevLoginUsers) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	target := strings.TrimSpace(r.URL.Query().Get("as"))
+	allowed := false
+	for _, username := range h.cfg.DevLoginUsers {
+		if strings.EqualFold(username, target) {
+			allowed = true
+			break
+		}
+	}
+	if target == "" || !allowed {
+		http.Error(w, "not a dev login user", http.StatusForbidden)
+		return
+	}
+	if h.orgStore == nil {
+		http.Error(w, "dev login requires the partner directory", http.StatusServiceUnavailable)
+		return
+	}
+	pu, err := h.orgStore.PartnerUserByMaaSUsername(r.Context(), target)
+	if err != nil || !pu.Active {
+		http.Error(w, "unknown or inactive dev user", http.StatusForbidden)
+		return
+	}
+	if !isDevTestUser(pu.Tags) {
+		http.Error(w, "user is not enabled for dev login", http.StatusForbidden)
+		return
+	}
+	// A direct login has no IdP claim set. Use the groups recorded on the
+	// seeded directory row so the same access gates run as they would after
+	// SSO; an empty list deliberately exercises the no-group gate.
+	groups := devLoginGroups(pu.Tags)
+	slog.Warn("dev test login used", "username", target, "remote", r.RemoteAddr)
+	h.setCookie(w, target, groups, "")
+	http.Redirect(w, r, h.loginDestination(r, target, groups), http.StatusFound)
+}
+
+// devLoginGroups reads the optional dev_groups tag (JSON array or
+// comma-separated string) used to stand in for IdP group claims.
+func devLoginGroups(tags map[string]any) []string {
+	value, ok := tags["dev_groups"]
+	if !ok {
+		return nil
+	}
+	switch v := value.(type) {
+	case []any:
+		groups := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+				groups = append(groups, strings.TrimSpace(s))
+			}
+		}
+		return groups
+	case []string:
+		return v
+	case string:
+		var groups []string
+		for _, s := range strings.Split(v, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				groups = append(groups, s)
+			}
+		}
+		return groups
+	}
+	return nil
+}
+
+func isDevTestUser(tags map[string]any) bool {
+	value, ok := tags["dev_test"]
+	if !ok {
+		return false
+	}
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(v, "true")
+	}
+	return false
 }
 
 // loginDestination is where a successful login lands. Admins keep the Usage

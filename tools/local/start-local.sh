@@ -75,6 +75,7 @@ echo "==> starting metering-service"
   OIDC_REDIRECT_URL=http://localhost:8080/oauth/callback \
   OIDC_SCOPES="openid profile email groups" \
   OIDC_TEST_LOGIN=true \
+  DEV_LOGIN_USERS="new-user@example.com,returning-user@example.com,manager-user@example.com,blocked-user@example.com,nogroup-user@example.com" \
   ONBOARDING_MODE=enforce \
   ONBOARDING_TERMS_VERSION=draft-tbd \
   ONBOARDING_TERMS_URL=/legal/terms \
@@ -119,7 +120,7 @@ EnMaaS local demo is running.
   Admin policy      http://localhost:8080/admin/access
   API-key login     local-noy-key
 
-  Personas (Test sign-in on /login, or pick at the mock IdP):
+  Personas (Dev test sign-in on /login, Test sign-in, or pick at the mock IdP):
     new-user          first login → onboarding + Terms → keys
     returning-user    terms accepted, has keys + month-to-date usage
     manager-user      Maya Manager, two direct reports + seeded team traffic → My team

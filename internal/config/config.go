@@ -168,6 +168,13 @@ type Config struct {
 	OIDC       OIDC
 	Onboarding Onboarding
 	Access     Access
+
+	// DevLoginUsers enables an explicit, non-SSO test login on /login.
+	// Empty (the default) disables the feature entirely, including the
+	// endpoint. Every listed username must also resolve to an active
+	// partner user tagged dev_test=true, so a misconfigured list cannot
+	// expose a real account.
+	DevLoginUsers []string
 }
 
 // Onboarding modes. The feature ships disabled: shipping the code must not
@@ -420,6 +427,9 @@ func Load() Config {
 			BlockedCountries:    envListUpper("ACCESS_BLOCKED_COUNTRIES"),
 			AllowUnknownCountry: envBool("ACCESS_UNKNOWN_COUNTRY_ALLOW", false),
 		},
+		// Dev-only test identities on /login. Off unless DEV_LOGIN_USERS is
+		// explicitly set; also requires a matching dev_test=true partner tag.
+		DevLoginUsers: envList("DEV_LOGIN_USERS"),
 		Kubernetes: Kubernetes{
 			Namespace:                  envDefault("K8S_NAMESPACE", "default"),
 			ModelGroup:                 modelGroup,

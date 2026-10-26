@@ -9,25 +9,25 @@ BEGIN;
 INSERT INTO partner_users (user_id, tags, role, manager_user_id, active, created_by, updated_by)
 VALUES
   ('11111111-1111-4111-8111-111111111111',
-   '{"email":"new-user@example.com","first_name":"Nina","last_name":"New","country":"US","kerberos_id":"newuser"}',
+   '{"email":"new-user@example.com","first_name":"Nina","last_name":"New","country":"US","kerberos_id":"newuser","dev_test":"true","dev_groups":["GE"]}',
    'user', NULL, true, 'local-seed', 'local-seed'),
   ('22222222-2222-4222-8222-222222222222',
-   '{"email":"returning-user@example.com","first_name":"Ravi","last_name":"Return","country":"US","kerberos_id":"returning"}',
+   '{"email":"returning-user@example.com","first_name":"Ravi","last_name":"Return","country":"US","kerberos_id":"returning","dev_test":"true","dev_groups":["GE"]}',
    'user', NULL, true, 'local-seed', 'local-seed'),
   ('33333333-3333-4333-8333-333333333333',
-   '{"email":"blocked-user@example.com","first_name":"Bea","last_name":"Blocked","country":"IR","kerberos_id":"blocked"}',
+   '{"email":"blocked-user@example.com","first_name":"Bea","last_name":"Blocked","country":"IR","kerberos_id":"blocked","dev_test":"true","dev_groups":["GE"]}',
    'user', NULL, true, 'local-seed', 'local-seed'),
   ('44444444-4444-4444-8444-444444444444',
-   '{"email":"nogroup-user@example.com","first_name":"Noah","last_name":"Nogroup","country":"US","kerberos_id":"nogroup"}',
+   '{"email":"nogroup-user@example.com","first_name":"Noah","last_name":"Nogroup","country":"US","kerberos_id":"nogroup","dev_test":"true"}',
    'user', NULL, true, 'local-seed', 'local-seed'),
   ('55555555-5555-4555-8555-555555555555',
-   '{"email":"manager-user@example.com","first_name":"Maya","last_name":"Manager","country":"US","kerberos_id":"manager"}',
+   '{"email":"manager-user@example.com","first_name":"Maya","last_name":"Manager","country":"US","kerberos_id":"manager","dev_test":"true","dev_groups":["GE"]}',
    'user', NULL, true, 'local-seed', 'local-seed'),
   ('66666666-6666-4666-8666-666666666666',
-   '{"email":"team-alice@example.com","first_name":"Alice","last_name":"Team","country":"US","kerberos_id":"team-alice"}',
+   '{"email":"team-alice@example.com","first_name":"Alice","last_name":"Team","country":"US","kerberos_id":"team-alice","dev_test":"true","dev_groups":["GE"]}',
    'user', '55555555-5555-4555-8555-555555555555', true, 'local-seed', 'local-seed'),
   ('77777777-7777-4777-8777-777777777777',
-   '{"email":"team-bob@example.com","first_name":"Bob","last_name":"Team","country":"US","kerberos_id":"team-bob"}',
+   '{"email":"team-bob@example.com","first_name":"Bob","last_name":"Team","country":"US","kerberos_id":"team-bob","dev_test":"true","dev_groups":["GE"]}',
    'user', '55555555-5555-4555-8555-555555555555', true, 'local-seed', 'local-seed')
 ON CONFLICT (user_id) DO UPDATE
    SET tags = EXCLUDED.tags, manager_user_id = EXCLUDED.manager_user_id, active = true, updated_by = 'local-seed';
