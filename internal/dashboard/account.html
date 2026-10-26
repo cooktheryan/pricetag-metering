@@ -58,6 +58,7 @@
   .metric-toggle button{border:0;background:transparent;color:var(--t2);border-radius:5px;padding:4px 9px;font:600 10px Inter,sans-serif;cursor:pointer}
   .metric-toggle button.on{background:var(--c3);color:var(--t)}
   .donut-wrap{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+  .donut-column{display:flex;flex-direction:column;align-items:center;gap:12px;flex:0 0 auto}
   .donut{width:150px;height:150px;border-radius:50%;position:relative;flex:0 0 auto;background:conic-gradient(var(--c3) 0 100%)}
   .donut::after{content:'';position:absolute;inset:26px;border-radius:50%;background:var(--c1)}
   .donut-center{position:absolute;inset:0;display:grid;place-items:center;z-index:1;text-align:center}
@@ -194,13 +195,15 @@
       <div class="card">
         <h2>Spend by model</h2>
         <div class="hint">Which models are consuming your budget</div>
-        <div class="metric-toggle" role="group" aria-label="Model chart metric">
-          <button type="button" class="on" data-model-metric="cost">Cost</button>
-          <button type="button" data-model-metric="tokens">Tokens</button>
-          <button type="button" data-model-metric="requests">Requests</button>
-        </div>
         <div class="donut-wrap">
-          <div class="donut" id="model-donut"><div class="donut-center"><div><b id="model-total">—</b><span id="model-total-label">cost</span></div></div></div>
+          <div class="donut-column">
+            <div class="donut" id="model-donut"><div class="donut-center"><div><b id="model-total">—</b><span id="model-total-label">cost</span></div></div></div>
+            <div class="metric-toggle" role="group" aria-label="Model chart metric">
+              <button type="button" class="on" data-model-metric="cost">Cost</button>
+              <button type="button" data-model-metric="tokens">Tokens</button>
+              <button type="button" data-model-metric="requests">Requests</button>
+            </div>
+          </div>
           <div class="legend" id="model-legend"></div>
         </div>
       </div>
