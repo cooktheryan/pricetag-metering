@@ -45,6 +45,7 @@
   .kpi-label{font-size:10px;text-transform:uppercase;letter-spacing:.9px;color:var(--t2);font-weight:700}
   .kpi-value{font-size:26px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums}
   .kpi-value.blu{color:var(--blu)}.kpi-value.grn{color:var(--grn)}.kpi-value.org{color:var(--org)}.kpi-value.pur{color:var(--pur)}
+  .kpi-value.budget-ok{color:var(--grn)}.kpi-value.budget-over{color:var(--red)}
   .kpi-note{font-size:11px;color:var(--t2);margin-top:4px}
   .bar{height:7px;border-radius:99px;background:var(--c3);margin-top:10px;overflow:hidden}
   .bar span{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--grn),var(--org));transition:width .4s}
@@ -388,11 +389,18 @@
       $('kpi-tokens').textContent = compact(o.total_tokens);
       if(q && typeof q.limit_usd === 'number' && q.limit_usd>0){
         var pct = Math.round((q.spent_usd||0)/q.limit_usd*100);
-        $('kpi-budget').textContent = pct+'%';
+        $('kpi-budget').className = 'kpi-value ' + (pct > 100 ? 'budget-over' : 'budget-ok');
         $('kpi-budget-bar').className = pct > 100 ? 'over' : '';
         var budgetWidth = Math.min(100, pct);
-        if(state.animateUsage){ animateNumber('kpi-budget', 0, pct, 1100, function(v){ return Math.round(v)+'%'; }); animateWidth('kpi-budget-bar', budgetWidth, 1100); }
-        else $('kpi-budget-bar').style.width = budgetWidth+'%';
+        if(state.animateUsage){
+          $('kpi-budget').textContent = '0%';
+          $('kpi-budget-bar').style.width = '0%';
+          animateNumber('kpi-budget', 0, pct, 1100, function(v){ return Math.round(v)+'%'; });
+          animateWidth('kpi-budget-bar', budgetWidth, 1100);
+        } else {
+          $('kpi-budget').textContent = pct+'%';
+          $('kpi-budget-bar').style.width = budgetWidth+'%';
+        }
         $('kpi-budget-note').textContent = money(q.spent_usd)+' of '+money(q.limit_usd);
       } else {
         $('kpi-budget').textContent = '—';
