@@ -570,9 +570,10 @@
     var hosted = rows.filter(function(r){ return r.hosted; }).reduce(function(s,r){return s+splitValue(r);},0);
     var frontier = Math.max(splitTotal-hosted,0);
     var hp = splitTotal>0 ? Math.round(hosted/splitTotal*100) : 0;
-    var splitSegs = ['#3dcc6e 0 '+hp+'%', '#a88cf8 '+hp+'% 100%'];
+    var splitHasData = splitTotal > 0;
+    var splitSegs = splitHasData ? ['#3dcc6e 0 '+hp+'%', '#a88cf8 '+hp+'% 100%'] : ['var(--c3) 0 100%'];
     if(changed !== 'model'){
-      if(state.animateUsage) {
+      if(state.animateUsage && splitHasData) {
         animateDonut('split-donut', splitSegs, 1500);
         animateNumber('split-pct', 0, hp, 1500, function(v){ return Math.round(v)+'%'; });
       } else {
@@ -581,7 +582,7 @@
       }
       $('split-legend').innerHTML =
         '<div class="legend-row"><span class="sw" style="background:#3dcc6e"></span><span class="nm">Hosted (EnMaaS)</span><span class="val">'+splitDisplay(hosted)+' · '+hp+'%</span></div>'+
-        '<div class="legend-row"><span class="sw" style="background:#a88cf8"></span><span class="nm">Frontier (vendor)</span><span class="val">'+splitDisplay(frontier)+' · '+(100-hp)+'%</span></div>';
+        '<div class="legend-row"><span class="sw" style="background:#a88cf8"></span><span class="nm">Frontier (vendor)</span><span class="val">'+splitDisplay(frontier)+' · '+(splitHasData?100-hp:0)+'%</span></div>';
     }
 
     // Table
