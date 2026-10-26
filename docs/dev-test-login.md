@@ -20,11 +20,16 @@ Three independent conditions must all hold:
 Any other request is rejected with 403. The allowlist is checked before the
 database, so a mistyped or missing row cannot open a session.
 
-Dev logins are routed through the normal `loginDestination` logic with the
-onboarding mode forced to `enforce`, so the country, group, and terms gates can
-be demonstrated without switching the whole deployment to enforcing mode (which
-would affect real users). IdP group claims are supplied by an optional
-`"dev_groups": ["GE"]` tag.
+Dev logins are routed through the normal `loginDestination` logic, and the
+`AccessGate` applies onboarding mode `enforce` only to allowlisted `dev_test`
+identities. That demonstrates the country, group, and terms gates without
+switching the whole deployment to enforcing mode (which would affect real
+users). IdP group claims are supplied by an optional `"dev_groups": ["GE"]`
+tag.
+
+The country persona needs a blocklist in the deployment. Dogfood uses
+`ACCESS_BLOCKED_COUNTRIES=IRN`; with `ONBOARDING_MODE=off` this does not block
+real users, it only feeds the enforced check for the dev identities.
 
 ## Personas
 
