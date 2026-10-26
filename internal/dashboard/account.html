@@ -222,8 +222,8 @@
       <div class="hint">Your last requests through the gateway</div>
       <div class="tbl-wrap" style="max-height:380px;overflow-y:auto">
         <table>
-          <thead><tr><th>Time</th><th>Model</th><th>Provider</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cost</th><th>Status</th></tr></thead>
-          <tbody id="recent-rows"><tr><td colspan="7"><div class="loading"><span class="spinner"></span>Loading transactions…</div></td></tr></tbody>
+          <thead><tr><th>Time</th><th>Model</th><th>Tool</th><th>Provider</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cost</th><th>Status</th></tr></thead>
+          <tbody id="recent-rows"><tr><td colspan="8"><div class="loading"><span class="spinner"></span>Loading transactions…</div></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -423,7 +423,7 @@
     api('/api/v1/me/usage/recent?limit=20').then(function(rows){
       renderRecent(rows || []);
     }).catch(function(){
-      $('recent-rows').innerHTML='<tr><td colspan="7"><div class="empty">Could not load transactions.</div></td></tr>';
+      $('recent-rows').innerHTML='<tr><td colspan="8"><div class="empty">Could not load transactions.</div></td></tr>';
     });
   }
 
@@ -588,14 +588,15 @@
 
   function renderRecent(rows){
     if(!rows.length){
-      $('recent-rows').innerHTML='<tr><td colspan="7"><div class="empty"><b>No transactions yet</b>Requests appear here as soon as your tools use a key.</div></td></tr>';
+       $('recent-rows').innerHTML='<tr><td colspan="8"><div class="empty"><b>No transactions yet</b>Requests appear here as soon as your tools use a key.</div></td></tr>';
       return;
     }
     $('recent-rows').innerHTML = rows.map(function(e){
       var ok = e.status_code == null || (e.status_code>=200 && e.status_code<300);
       return '<tr>'+
         '<td style="color:var(--t2)">'+when(e.timestamp)+'</td>'+
-        '<td class="mono">'+esc(e.model)+'</td>'+
+         '<td class="mono">'+esc(e.model)+'</td>'+
+         '<td class="mono" style="color:var(--t2)" title="'+esc(e.user_agent||'')+'">'+esc(e.user_agent||'—')+'</td>'+
         '<td style="color:var(--t2)">'+esc(e.provider||'—')+'</td>'+
         '<td class="num">'+compact(e.prompt_tokens)+'</td>'+
         '<td class="num">'+compact(e.completion_tokens)+'</td>'+
