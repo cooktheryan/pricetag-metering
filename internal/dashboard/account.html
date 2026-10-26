@@ -395,11 +395,13 @@
         var budgetWidth = Math.min(100, pct);
         if(state.animateUsage){
           $('kpi-budget').textContent = '0%';
+          setBudgetColor($('kpi-budget'), 0, pct);
           $('kpi-budget-bar').style.width = '0%';
-          animateNumber('kpi-budget', 0, pct, 1100, function(v){ return Math.round(v)+'%'; });
+          animateBudget('kpi-budget', 0, pct, 1100);
           animateWidth('kpi-budget-bar', budgetWidth, 1100);
         } else {
           $('kpi-budget').textContent = pct+'%';
+          setBudgetColor($('kpi-budget'), pct, pct);
           $('kpi-budget-bar').style.width = budgetWidth+'%';
         }
         $('kpi-budget-note').textContent = money(q.spent_usd)+' of '+money(q.limit_usd);
@@ -524,6 +526,25 @@
     function tick(now){
       var p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3);
       el.style.width=(to*eased)+'%';
+      if(p<1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function setBudgetColor(el, value, target){
+    if(target > 100){ el.style.color='var(--red)'; return; }
+    var p=Math.max(0,Math.min(1,value/100));
+    var r=Math.round(61+(235-61)*p), g=Math.round(204+(168-204)*p), b=Math.round(110+(48-110)*p);
+    el.style.color='rgb('+r+','+g+','+b+')';
+  }
+
+  function animateBudget(id, from, to, duration){
+    var el=$(id), start=performance.now(), reduced=window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(reduced){ el.textContent=Math.round(to)+'%'; setBudgetColor(el,to,to); return; }
+    function tick(now){
+      var p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3), value=from+(to-from)*eased;
+      el.textContent=Math.round(value)+'%';
+      setBudgetColor(el,value,to);
       if(p<1) requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
