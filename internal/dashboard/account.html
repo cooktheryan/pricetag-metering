@@ -91,7 +91,6 @@
   .btn-danger:hover{background:rgba(232,85,78,.2)}
   .btn-sm{padding:5px 12px;font-size:11px;border-radius:6px}
   .keys-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
-  .guide-link{font-size:12px;color:var(--blu);background:none;border:0;cursor:pointer;font-family:inherit}
   .overlay{display:none;position:fixed;inset:0;background:rgba(1,4,9,.72);z-index:100;align-items:center;justify-content:center;padding:20px}
   .overlay.show{display:flex}
   .modal{background:var(--c1);border:1px solid var(--bdr);border-radius:14px;width:100%;max-width:520px;padding:24px 26px;box-shadow:0 24px 70px rgba(0,0,0,.6);position:relative;max-height:88vh;overflow:auto}
@@ -111,8 +110,6 @@
   .warn{font-size:11px;color:var(--org);margin-top:8px}
   .saved{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t2);margin:10px 0 2px}
   .saved input{accent-color:var(--grn);width:16px;height:16px}
-  .setup-step{margin-bottom:16px}
-  .setup-step b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--blu);margin-bottom:6px}
   pre{background:var(--c2);border:1px solid var(--bdr);border-radius:8px;padding:12px 14px;font-family:'SF Mono',SFMono-Regular,Consolas,Menlo,monospace;font-size:11.5px;white-space:pre-wrap;word-break:break-all;line-height:1.6;position:relative}
   .copy{position:absolute;top:8px;right:8px;background:rgba(77,160,248,.12);border:1px solid rgba(77,160,248,.3);color:var(--blu);border-radius:5px;padding:3px 9px;font:600 10px Inter,sans-serif;cursor:pointer}
   .toast{position:fixed;bottom:26px;right:26px;background:var(--grn);color:#06210f;padding:12px 20px;border-radius:9px;font-weight:700;font-size:12px;opacity:0;transform:translateY(14px);transition:.25s;z-index:200;pointer-events:none}
@@ -237,7 +234,6 @@
           <h2>My keys</h2>
           <div class="hint" style="margin-bottom:0">Active, expiring, and revoked keys for your account</div>
         </div>
-        <button class="guide-link" id="guide-btn">Read the setup guide →</button>
       </div>
       <div class="tbl-wrap">
         <table>
@@ -247,14 +243,6 @@
       </div>
     </div>
 
-    <div class="card" style="margin-top:18px;background:linear-gradient(120deg,rgba(77,160,248,.07),transparent)">
-      <h2>Set up your tools</h2>
-      <div class="hint">One gateway host serves both Anthropic- and OpenAI-compatible APIs.</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-ghost" id="guide-btn-2">Open setup guide</button>
-        <a class="btn btn-ghost" href="/welcome" style="display:inline-block">About EnMaaS</a>
-      </div>
-    </div>
   </section>
 </main>
 
@@ -291,44 +279,11 @@
       </div>
       <div style="display:flex;gap:10px">
         <button class="btn btn-ghost" id="reveal-copy">Copy</button>
-        <button class="btn btn-ghost" id="reveal-guide">Set up a tool →</button>
+        <a class="btn btn-ghost" href="/welcome">Set up a tool →</a>
       </div>
       <div class="saved"><input type="checkbox" id="reveal-saved"><label for="reveal-saved">I've saved this key in a safe place</label></div>
       <div class="modal-actions"><button class="btn btn-primary" id="reveal-done" disabled>Done</button></div>
     </div>
-  </div>
-</div>
-
-<!-- Setup guide modal -->
-<div class="overlay" id="guide-overlay">
-  <div class="modal" style="max-width:640px">
-    <button class="close" data-close="guide-overlay">×</button>
-    <h3>Set up your tools</h3>
-    <div class="hint" style="margin-bottom:18px">Use the same gateway host for Anthropic and OpenAI compatible clients.</div>
-
-    <div class="setup-step"><b>Gateway</b>
-      <pre>{{GATEWAY_URL}}<button class="copy" data-copy="{{GATEWAY_URL}}">Copy</button></pre>
-    </div>
-
-    <div class="setup-step"><b>Anthropic API (Claude Code, SDKs)</b>
-      <pre>export ANTHROPIC_BASE_URL={{GATEWAY_URL}}
-export ANTHROPIC_AUTH_TOKEN=<your-key>
-# requests go to {{GATEWAY_URL}}/v1/messages
-# the key is sent in the x-api-key header</pre>
-    </div>
-
-    <div class="setup-step"><b>OpenAI API (SDKs)</b>
-      <pre>export OPENAI_BASE_URL={{GATEWAY_URL}}/v1
-export OPENAI_API_KEY=<your-key>
-# chat: {{GATEWAY_URL}}/v1/chat/completions
-# responses: {{GATEWAY_URL}}/v1/responses</pre>
-    </div>
-
-    <div class="setup-step"><b>curl check</b>
-      <pre>curl {{GATEWAY_URL}}/v1/models -H "Authorization: Bearer $OPENAI_API_KEY"</pre>
-    </div>
-
-    <div class="hint">Full client walkthroughs: <a href="/welcome">EnMaaS welcome page</a>.</div>
   </div>
 </div>
 
@@ -619,7 +574,6 @@ export OPENAI_API_KEY=<your-key>
       document.execCommand('copy'); ta.remove(); toast('Key copied');
     });
   };
-  $('reveal-guide').onclick=function(){ $('create-overlay').className='overlay'; openGuide(); };
   $('reveal-done').onclick=function(){
     $('reveal-key').textContent='—'; state.lastKey='';
     $('create-overlay').className='overlay';
@@ -635,9 +589,7 @@ export OPENAI_API_KEY=<your-key>
       .then(function(){ btn.disabled=false; });
   };
 
-  /* ---------------- guide / copy / close ---------------- */
-  function openGuide(){ $('guide-overlay').className='overlay show'; }
-  $('guide-btn').onclick=openGuide; $('guide-btn-2').onclick=openGuide;
+  /* ---------------- copy / close ---------------- */
   Array.prototype.forEach.call(document.querySelectorAll('[data-close]'),function(b){
     b.onclick=function(){ $(b.getAttribute('data-close')).className='overlay'; };
   });

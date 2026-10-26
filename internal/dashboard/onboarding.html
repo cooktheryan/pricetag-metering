@@ -323,13 +323,7 @@
   function firstName(name){ return String(name || '').trim().split(/\s+/)[0] || 'there'; }
 
   function setSubtitle() {
-    if (state.state === 'blocked') {
-      $('subtitle').textContent = "EnMaaS gives you one key to access hosted and frontier models from any tool. One access check needs attention before we can open the gateway.";
-    } else if (state.state === 'needs_terms') {
-      $('subtitle').textContent = "EnMaaS gives you one key to access hosted and frontier models from any tool. Your identity, group, and region are verified — accept the terms to get started.";
-    } else {
-      $('subtitle').textContent = "EnMaaS gives you one key to access hosted and frontier models from any tool. Your access is approved — create a key to get started.";
-    }
+    $('subtitle').textContent = "EnMaaS gives you one key to access hosted and frontier models from any tool, through one governed gateway.";
   }
 
   function buildRows(order, results) {
