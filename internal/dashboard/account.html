@@ -523,10 +523,15 @@
 
   function animateWidth(id, to, duration){
     var el=$(id), start=performance.now();
+    // Width is driven frame-by-frame below; the CSS transition would add a
+    // second, lagging animation and make the bar trail the percentage.
+    el.style.transition='none';
+    el.style.width='0%';
     function tick(now){
       var p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3);
       el.style.width=(to*eased)+'%';
       if(p<1) requestAnimationFrame(tick);
+      else el.style.width=to+'%';
     }
     requestAnimationFrame(tick);
   }
@@ -560,6 +565,8 @@
       el.style.background='conic-gradient('+segments.join(',')+')';
       return;
     }
+    // Always begin empty, including when one of the values is exactly zero.
+    el.style.background='conic-gradient(var(--c3) 0 100%)';
     function tick(now){
       var p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3), parts=[];
       segments.forEach(function(segment){
