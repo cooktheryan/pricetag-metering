@@ -104,9 +104,11 @@
   .close{position:absolute;top:14px;right:16px;background:none;border:0;color:var(--t2);font-size:20px;cursor:pointer;line-height:1}
   .close:hover{color:var(--t)}
   .err{color:var(--red);font-size:12px;min-height:18px;margin-top:6px}
-  .secret{background:rgba(61,204,110,.07);border:1px solid rgba(61,204,110,.35);border-radius:9px;padding:14px 16px;margin:6px 0 12px}
+  .secret{position:relative;background:rgba(61,204,110,.07);border:1px solid rgba(61,204,110,.35);border-radius:9px;padding:14px 16px;margin:6px 0 12px}
   .secret .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--grn);font-weight:800;margin-bottom:6px}
   .secret code{font-family:'SF Mono',SFMono-Regular,Consolas,Menlo,monospace;font-size:12.5px;word-break:break-all;user-select:all;line-height:1.6}
+  .secret-copy{position:absolute;top:13px;right:14px;background:none;border:0;color:var(--blu);font:600 11px Inter,sans-serif;cursor:pointer;padding:2px 0}
+  .secret-copy:hover{text-decoration:underline}
   .key-success{color:var(--t2);font-size:12px;line-height:1.55;margin:12px 0 14px}
   .key-success strong{display:block;color:var(--grn);font-size:14px;margin-bottom:3px}
   .key-success a{color:var(--blu);text-decoration:none}
@@ -279,15 +281,12 @@
       <div class="secret">
         <div class="lbl">API key</div>
         <code id="reveal-key">—</code>
+        <button class="secret-copy" id="reveal-copy" type="button">Copy</button>
         <div class="warn">⚠ Do not share it or commit it to a repository.</div>
       </div>
       <div class="key-success">
         <strong>Congratulations — you’re ready to use EnMaaS.</strong>
         Start using your key with your local tools. Come back anytime to review your usage in the <a href="/account?tab=usage">Usage tab</a>, or <a href="/welcome" target="_blank" rel="noopener">see how to set up your tools ↗</a>.
-      </div>
-      <div style="display:flex;gap:10px">
-        <button class="btn btn-ghost" id="reveal-copy">Copy</button>
-        <a class="btn btn-ghost" href="/welcome" target="_blank" rel="noopener">Set up a tool →</a>
       </div>
       <div class="saved"><input type="checkbox" id="reveal-saved"><label for="reveal-saved">I've saved this key in a safe place</label></div>
       <div class="modal-actions"><button class="btn btn-primary" id="reveal-done" disabled>Done</button></div>
