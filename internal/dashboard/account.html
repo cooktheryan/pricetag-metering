@@ -107,6 +107,10 @@
   .secret{background:rgba(61,204,110,.07);border:1px solid rgba(61,204,110,.35);border-radius:9px;padding:14px 16px;margin:6px 0 12px}
   .secret .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--grn);font-weight:800;margin-bottom:6px}
   .secret code{font-family:'SF Mono',SFMono-Regular,Consolas,Menlo,monospace;font-size:12.5px;word-break:break-all;user-select:all;line-height:1.6}
+  .key-success{color:var(--t2);font-size:12px;line-height:1.55;margin:12px 0 14px}
+  .key-success strong{display:block;color:var(--grn);font-size:14px;margin-bottom:3px}
+  .key-success a{color:var(--blu);text-decoration:none}
+  .key-success a:hover{text-decoration:underline}
   .warn{font-size:11px;color:var(--org);margin-top:8px}
   .saved{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t2);margin:10px 0 2px}
   .saved input{accent-color:var(--grn);width:16px;height:16px}
@@ -276,6 +280,10 @@
         <div class="lbl">API key</div>
         <code id="reveal-key">—</code>
         <div class="warn">⚠ Do not share it or commit it to a repository.</div>
+      </div>
+      <div class="key-success">
+        <strong>Congratulations — you’re ready to use EnMaaS.</strong>
+        Start using your key with your local tools. Come back anytime to review your usage in the <a href="/account?tab=usage">Usage tab</a>, or <a href="/welcome" target="_blank" rel="noopener">see how to set up your tools ↗</a>.
       </div>
       <div style="display:flex;gap:10px">
         <button class="btn btn-ghost" id="reveal-copy">Copy</button>
