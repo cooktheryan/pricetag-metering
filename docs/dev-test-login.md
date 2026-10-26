@@ -37,8 +37,7 @@ real users, it only feeds the enforced check for the dev identities.
 | --- | --- | --- |
 | Nina New | `dev_reset_on_login: true`; terms acceptance deleted on every login | `/onboarding` |
 | Ravi Return | terms accepted, has usage | `/account` |
-| Maya Manager | has two reports and team traffic | `/manager` |
-| Alice / Bob Team | direct reports with personal traffic | `/account` |
+| Maya Manager | has two seeded direct reports with team traffic | `/manager` |
 | Bea Blocked | `country: IR` | `/onboarding` (country gate) |
 | Noah Nogroup | no `dev_groups` | `/onboarding` (group gate) |
 

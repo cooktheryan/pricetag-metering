@@ -24,10 +24,10 @@ VALUES
    '{"email":"manager-user@example.com","first_name":"Maya","last_name":"Manager","country":"US","kerberos_id":"manager","dev_test":"true","dev_groups":["GE"],"dev_label":"Team manager"}',
    'user', NULL, true, 'local-seed', 'local-seed'),
   ('66666666-6666-4666-8666-666666666666',
-   '{"email":"team-alice@example.com","first_name":"Alice","last_name":"Team","country":"US","kerberos_id":"team-alice","dev_test":"true","dev_groups":["GE"],"dev_label":"Direct report"}',
+   '{"email":"team-alice@example.com","first_name":"Alice","last_name":"Team","country":"US","kerberos_id":"team-alice"}',
    'user', '55555555-5555-4555-8555-555555555555', true, 'local-seed', 'local-seed'),
   ('77777777-7777-4777-8777-777777777777',
-   '{"email":"team-bob@example.com","first_name":"Bob","last_name":"Team","country":"US","kerberos_id":"team-bob","dev_test":"true","dev_groups":["GE"],"dev_label":"Direct report"}',
+   '{"email":"team-bob@example.com","first_name":"Bob","last_name":"Team","country":"US","kerberos_id":"team-bob"}',
    'user', '55555555-5555-4555-8555-555555555555', true, 'local-seed', 'local-seed')
 ON CONFLICT (user_id) DO UPDATE
    SET tags = EXCLUDED.tags, manager_user_id = EXCLUDED.manager_user_id, active = true, updated_by = 'local-seed';
