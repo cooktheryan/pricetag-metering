@@ -73,6 +73,7 @@
   .tbl-wrap{overflow-x:auto}
   table{width:100%;border-collapse:collapse;font-size:12px}
   th{background:var(--c2);color:var(--t2);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:9px 12px;text-align:left;font-weight:700;white-space:nowrap}
+  th.sortable{cursor:pointer}th.sortable:hover{color:var(--t)}
   td{padding:9px 12px;border-top:1px solid var(--bdr);white-space:nowrap}
   tr:hover td{background:var(--c2)}
   .num{text-align:right;font-variant-numeric:tabular-nums}
@@ -237,7 +238,7 @@
       <div class="hint">Spend and tokens for the selected period</div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Model</th><th>Type</th><th class="num">Requests</th><th class="num">Tokens</th><th class="num">Spend</th><th class="num">Share</th></tr></thead>
+          <thead><tr><th data-table-sort="model">Model</th><th>Type</th><th class="num" data-table-sort="requests">Requests</th><th class="num" data-table-sort="tokens">Tokens</th><th class="num" data-table-sort="cost">Spend</th><th class="num" data-table-sort="share">Share</th></tr></thead>
           <tbody id="model-rows"><tr><td colspan="6"><div class="loading"><span class="spinner"></span>Loading usage…</div></td></tr></tbody>
         </table>
       </div>
@@ -353,7 +354,7 @@
 
 <script>
 (function () {
-  var state = {tab:'usage', range:'mtd', from:'', to:'', keys:[], models:[], overview:null, revokeId:'', animateUsage:true, modelMetric:'cost', splitMetric:'cost'};
+  var state = {tab:'usage', range:'mtd', from:'', to:'', keys:[], models:[], overview:null, revokeId:'', animateUsage:true, modelMetric:'cost', splitMetric:'cost', tableSort:{key:'cost',dir:'desc'}};
   var COLORS = ['#4da0f8','#3dcc6e','#eba830','#a88cf8','#38d4c2','#e8554e','#8090a8'];
 
   function $(id){ return document.getElementById(id); }
@@ -439,6 +440,15 @@
       state.splitMetric=this.getAttribute('data-split-metric') || 'cost';
       document.querySelectorAll('[data-split-metric]').forEach(function(b){ b.classList.toggle('on',b===btn); });
       renderModels('split');
+    };
+  });
+  document.querySelectorAll('[data-table-sort]').forEach(function(th){
+    th.classList.add('sortable');
+    th.onclick=function(){
+      var key=this.getAttribute('data-table-sort');
+      if(state.tableSort.key===key) state.tableSort.dir=state.tableSort.dir==='desc'?'asc':'desc';
+      else { state.tableSort.key=key; state.tableSort.dir='desc'; }
+      renderModelTable();
     };
   });
 
@@ -585,19 +595,31 @@
         '<div class="legend-row"><span class="sw" style="background:#a88cf8"></span><span class="nm">Frontier (vendor)</span><span class="val">'+splitDisplay(frontier)+' · '+(splitHasData?100-hp:0)+'%</span></div>';
     }
 
-    // Table
-    if(changed === 'split') return;
+    // Model detail has its own sort state, independent from either pie.
+    if(changed !== 'split') renderModelTable();
+  }
+
+  function renderModelTable(){
+    var rows=state.models.slice(), sort=state.tableSort;
     if(!rows.length){
       $('model-rows').innerHTML='<tr><td colspan="6"><div class="empty"><b>No usage yet</b>Create a key and send a request to see your spend here.</div></td></tr>';
       return;
     }
-    $('model-rows').innerHTML = rows.map(function(r){
-       var share = total>0 ? Math.round(value(r)/total*100) : 0;
-      return '<tr><td class="mono">'+esc(r.model)+'</td>'+
+    var metric=function(r){
+      if(sort.key==='requests') return r.requests||0;
+      if(sort.key==='tokens') return r.total_tokens||0;
+      if(sort.key==='share'||sort.key==='cost') return r.cost_usd||0;
+      return String(r.model||'').toLowerCase();
+    };
+    rows.sort(function(a,b){ var av=metric(a),bv=metric(b); var c=typeof av==='string'?av.localeCompare(bv):av-bv; return sort.dir==='asc'?c:-c; });
+    var total=rows.reduce(function(s,r){return s+(r.cost_usd||0);},0);
+    $('model-rows').innerHTML=rows.map(function(r){
+      var share=total>0?Math.round((r.cost_usd||0)/total*100):0;
+      return '<tr><td class="mono">'+esc(r.model)+'</td>'+ 
         '<td><span class="pill '+(r.hosted?'hosted':'frontier')+'">'+(r.hosted?'Hosted':'Frontier')+'</span></td>'+
-        '<td class="num">'+compact(r.requests)+'</td>'+
-        '<td class="num">'+compact(r.total_tokens)+'</td>'+
-        '<td class="num">'+money(r.cost_usd)+'</td>'+
+        '<td class="num">'+compact(r.requests)+'</td>'+ 
+        '<td class="num">'+compact(r.total_tokens)+'</td>'+ 
+        '<td class="num">'+money(r.cost_usd)+'</td>'+ 
         '<td class="num">'+share+'%</td></tr>';
     }).join('');
   }
@@ -654,6 +676,8 @@
 
   function animateDonut(id, segments, duration){
     var el=$(id), start=performance.now();
+    var version=(el._animationVersion||0)+1;
+    el._animationVersion=version;
     if(el._animationFrame) cancelAnimationFrame(el._animationFrame);
     var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if(reduced){
@@ -663,9 +687,9 @@
     // Always begin empty, including when one of the values is exactly zero.
     el.style.background='conic-gradient(var(--c3) 0 100%)';
     function tick(now){
-      // Keep slice growth proportional to elapsed time. Ease-out reaches
-      // nearly the final green slice too early and makes the split look full
-      // before the purple slice has visibly grown.
+      if(el._animationVersion!==version) return;
+      // Keep slice growth proportional to elapsed time so no slice jumps to
+      // its final percentage before the other slice has visibly grown.
       var p=Math.min(1,(now-start)/duration), eased=p, parts=[];
       segments.forEach(function(segment){
         var m=segment.match(/^(.*?)\s+([0-9.]+)%\s+([0-9.]+)%$/);
