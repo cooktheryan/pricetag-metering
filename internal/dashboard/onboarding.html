@@ -10,195 +10,165 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#fff;--soft:#f5f8f6;--card:#fff;--ink:#15231d;--muted:#52655b;--dim:#788a80;
-    --line:#dce7df;--en:#087f50;--en-soft:#e3f4e9;--en-line:#b9e2c8;
-    --maas:#2f65c8;--maas-soft:#eef4ff;--maas-line:#c9daf5;
-    --amber:#d39218;--amber-soft:#fff8e8;--red:#c84d4d;--red-soft:#fff5f5;
-    --shadow:0 12px 30px rgba(21,35,29,.09);
+    --bg:#080b0e;--panel:#11161b;--panel2:#151b21;--ink:#e6edf3;--muted:#94a3b1;--dim:#66727e;
+    --line:#242c34;--line2:#2d3741;
+    --en:#3fb950;--en-soft:rgba(63,185,80,.12);--en-line:rgba(63,185,80,.34);
+    --maas:#58a6ff;--maas-soft:rgba(88,166,255,.1);--maas-line:rgba(88,166,255,.3);
+    --amber:#d29922;--amber-soft:rgba(210,153,34,.1);
+    --red:#f85149;--red-soft:rgba(248,81,73,.1);
+    --shadow:0 22px 55px rgba(0,0,0,.4);
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
-  body{margin:0;color:var(--ink);background:var(--bg);font:16px/1.65 "IBM Plex Sans",sans-serif;-webkit-font-smoothing:antialiased}
+  body{margin:0;color:var(--ink);background:radial-gradient(1100px 520px at 50% -240px,rgba(63,185,80,.07),transparent 70%),var(--bg);font:16px/1.65 "IBM Plex Sans",sans-serif;-webkit-font-smoothing:antialiased}
   a{color:var(--maas)}
-  code,.mono{font-family:"IBM Plex Mono",monospace}
-  .shell{max-width:1120px;margin:auto;padding:0 28px}
+  .shell{max-width:1000px;margin:auto;padding:0 28px}
 
   /* ---------- top bar ---------- */
-  .top{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
-  .top .shell{height:66px;display:flex;align-items:center;gap:20px}
+  .top{position:sticky;top:0;z-index:20;background:rgba(8,11,14,.88);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  .top .shell{height:64px;display:flex;align-items:center;gap:20px}
   .brand{color:var(--ink);text-decoration:none;font:800 24px "Bricolage Grotesque",sans-serif;letter-spacing:-.04em}
   .brand .en{color:var(--en)}
   .brand .maas{color:var(--maas)}
   .who{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--muted);font-size:13px;white-space:nowrap}
   .who b{color:var(--ink);font-weight:600}
-  .who .out{color:var(--muted);text-decoration:none;border:1px solid var(--line);border-radius:7px;padding:5px 11px;font-size:12px}
+  .who .out{color:var(--muted);text-decoration:none;border:1px solid var(--line2);border-radius:7px;padding:5px 11px;font-size:12px}
   .who .out:hover{color:var(--maas);border-color:var(--maas-line)}
 
   /* ---------- hero ---------- */
-  .hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line);background:linear-gradient(125deg,#eef8f1 0%,#f7f9ff 62%,#fff 100%)}
-  #flow{position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity .3s ease}
-  #flow.flow-ready{opacity:.4}
+  .hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line);background:radial-gradient(900px 420px at 72% 15%,rgba(88,166,255,.055),transparent 68%)}
+  #flow{position:absolute;inset:0;width:100%;height:100%;opacity:0;transition:opacity .4s ease}
+  #flow.flow-ready{opacity:.55}
   .floaters{position:absolute;inset:0;overflow:hidden;pointer-events:none}
-  .floater{position:absolute;color:rgba(8,127,80,.3);font:500 16px "IBM Plex Mono",monospace;animation:float 10s ease-in-out infinite;white-space:nowrap}
-  .floater:nth-child(3n){color:rgba(47,101,200,.24);animation-duration:13s}
-  .floater:nth-child(3n+1){color:rgba(211,146,24,.3);animation-duration:11s}
-  @keyframes float{0%,100%{transform:translate3d(0,10px,0) rotate(-2deg);opacity:.3}50%{transform:translate3d(10px,-16px,0) rotate(3deg);opacity:.8}}
-  .hero .shell{position:relative;padding:54px 28px 58px}
-  .hero-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(300px,.75fr);gap:44px;align-items:center}
+  .floater{position:absolute;color:rgba(63,185,80,.3);font:500 15px "IBM Plex Mono",monospace;animation:float 11s ease-in-out infinite;white-space:nowrap}
+  .floater:nth-child(3n){color:rgba(88,166,255,.22);animation-duration:14s}
+  .floater:nth-child(3n+1){color:rgba(210,153,34,.22);animation-duration:12s}
+  @keyframes float{0%,100%{transform:translate3d(0,8px,0) rotate(-2deg);opacity:.25}50%{transform:translate3d(10px,-14px,0) rotate(2deg);opacity:.7}}
+  .hero .shell{position:relative;padding:56px 28px 58px}
+  .hero-inner{max-width:780px}
   .eyebrow{display:inline-flex;align-items:center;gap:8px;color:var(--en);background:var(--en-soft);border:1px solid var(--en-line);border-radius:99px;padding:5px 12px;text-transform:uppercase;letter-spacing:.13em;font:600 10.5px "IBM Plex Mono",monospace}
-  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--en);box-shadow:0 0 0 3px rgba(8,127,80,.12)}
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--en);box-shadow:0 0 0 3px rgba(63,185,80,.14)}
   h1,h2,h3{font-family:"Bricolage Grotesque",sans-serif;line-height:1.06;margin:0}
-  h1{max-width:760px;margin-top:18px;font-size:clamp(42px,6vw,68px);letter-spacing:-.05em}
+  h1{max-width:760px;margin-top:18px;font-size:clamp(40px,5.6vw,60px);letter-spacing:-.05em}
   h1 .name{color:var(--en)}
-  h1 .accent{color:var(--maas)}
-  .hero p{max-width:600px;color:var(--muted);font-size:17px;margin:18px 0 0}
+  .hero p{max-width:620px;color:var(--muted);font-size:16.5px;margin:17px 0 0}
   .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
-  .chip{padding:4px 10px;border:1px solid var(--line);border-radius:99px;color:var(--muted);background:rgba(255,255,255,.78);font:500 11px "IBM Plex Mono",monospace;backdrop-filter:blur(4px)}
+  .chip{padding:4px 10px;border:1px solid var(--line2);border-radius:99px;color:var(--muted);background:rgba(17,22,27,.72);font:500 11px "IBM Plex Mono",monospace;backdrop-filter:blur(4px)}
   .chip b{color:var(--en);font-weight:600}
 
-  /* hero “at a glance” card */
-  .glance{position:relative;padding:22px;border:1px solid var(--en-line);border-radius:16px;background:rgba(255,255,255,.82);backdrop-filter:blur(10px);box-shadow:0 18px 44px rgba(21,35,29,.1)}
-  .glance:before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(145deg,rgba(8,127,80,.06),transparent 55%)}
-  .glance .tag{position:relative;color:var(--en);font:600 10px "IBM Plex Mono",monospace;letter-spacing:.12em;text-transform:uppercase}
-  .glance h3{position:relative;font-size:19px;margin:7px 0 14px}
-  .glance-row{position:relative;display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
-  .glance-row:first-of-type{border-top:0}
-  .glance-row .ic{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:var(--en-soft);color:var(--en);font:700 13px "Bricolage Grotesque",sans-serif;flex:0 0 auto}
-  .glance-row:nth-of-type(3) .ic{background:var(--maas-soft);color:var(--maas)}
-  .glance-row:nth-of-type(4) .ic{background:var(--amber-soft);color:var(--amber)}
-  .glance-row b{display:block;color:var(--ink);font-weight:600;font-size:13px}
-  .glance-row span{font-size:11.5px}
-  .glance .fine{position:relative;margin-top:12px;color:var(--dim);font:11px "IBM Plex Mono",monospace}
-
-  /* ---------- main layout ---------- */
-  main.shell{padding-top:34px;padding-bottom:10px}
-  .layout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(310px,.8fr);gap:20px;align-items:start}
-  .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:26px 28px}
-  .panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:6px}
+  /* ---------- main ---------- */
+  main.shell{padding-top:30px;padding-bottom:6px;max-width:860px}
+  .panel{background:linear-gradient(180deg,var(--panel),#0f1418);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:28px 30px}
+  .panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:4px}
   .kicker{display:block;color:var(--en);font:600 10px "IBM Plex Mono",monospace;letter-spacing:.13em;text-transform:uppercase;margin-bottom:7px}
-  .panel h2{font-size:clamp(23px,3vw,30px);letter-spacing:-.035em}
-  .panel .lede{color:var(--muted);font-size:14px;margin:8px 0 0;max-width:52ch}
+  .panel h2{font-size:clamp(22px,3vw,28px);letter-spacing:-.035em}
+  .panel .lede{color:var(--muted);font-size:14px;margin:8px 0 0;max-width:54ch}
 
   /* progress */
-  .progress{flex:0 0 auto;text-align:right;min-width:120px}
+  .progress{flex:0 0 auto;text-align:right;min-width:122px}
   .progress b{display:block;font:800 24px "Bricolage Grotesque",sans-serif;letter-spacing:-.03em;color:var(--ink)}
   .progress b i{font-style:normal;color:var(--dim);font-size:15px;font-weight:600}
   .progress span{font:600 10px "IBM Plex Mono",monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-  .progress .track{height:7px;border-radius:99px;background:#edf3ef;overflow:hidden;margin-top:9px;width:150px}
-  .progress .fill{height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,var(--en),#65d997);transition:width .7s cubic-bezier(.2,.8,.2,1)}
+  .progress .track{height:6px;border-radius:99px;background:#1b2229;overflow:hidden;margin-top:9px;width:150px}
+  .progress .fill{height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,var(--en),#7ee787);transition:width .55s cubic-bezier(.2,.8,.2,1)}
 
   /* checklist */
   .checks{display:flex;flex-direction:column;margin-top:18px}
-  .check{display:flex;align-items:flex-start;gap:13px;padding:15px 0;border-top:1px solid var(--line)}
+  .check{display:flex;align-items:flex-start;gap:14px;padding:16px 0;border-top:1px solid rgba(255,255,255,.055);transition:opacity .25s}
   .check:first-child{border-top:0}
-  .check .dot{flex:0 0 28px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font:800 12px "IBM Plex Sans",sans-serif;margin-top:1px}
-  .check .dot.pass{background:var(--en-soft);color:var(--en);border:1px solid var(--en-line)}
-  .check .dot.pending{background:var(--amber-soft);color:var(--amber);border:1px solid #f1d99e}
-  .check .dot.fail{background:var(--red-soft);color:var(--red);border:1px solid #e9bcbc}
-  .check .dot.skipped{background:var(--soft);color:var(--dim);border:1px solid var(--line)}
-  .check .dot.queued{background:var(--soft);color:#b3c1b8;border:1px solid var(--line);font-size:14px}
-  .check .dot.checking{background:var(--maas-soft);border:1px solid var(--maas-line)}
-  .check .dot.checking:after{content:"";width:10px;height:10px;border:2px solid rgba(47,101,200,.22);border-top-color:var(--maas);border-radius:50%;animation:spin .7s linear infinite}
-  .check.resolved{animation:checkIn .5s ease both}
+  .check.queued{opacity:.72}
+  .check.locked{opacity:.42}
+  .check.pass{animation:rowIn .45s ease both}
+  .ck{position:relative;flex:0 0 30px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:#0d1216;border:1px solid var(--line2);margin-top:1px;transition:background .25s,border-color .25s,box-shadow .25s}
+  .ck svg{width:17px;height:17px;fill:none;stroke:#06130a;stroke-width:2.7;stroke-linecap:round;stroke-linejoin:round;opacity:0}
+  .ck svg path{stroke-dasharray:1;stroke-dashoffset:1}
+  .check.pass .ck{background:var(--en);border-color:var(--en);box-shadow:0 0 0 5px rgba(63,185,80,.11)}
+  .check.pass .ck svg{opacity:1}
+  .check.pass .ck svg path{animation:draw .42s ease .03s forwards}
+  .check.checking .ck{border-color:var(--maas-line);background:var(--maas-soft)}
+  .check.checking .ck:after{content:"";width:12px;height:12px;border:2px solid rgba(88,166,255,.2);border-top-color:var(--maas);border-radius:50%;animation:spin .65s linear infinite}
+  .check.pending .ck{border-color:rgba(210,153,34,.45);background:var(--amber-soft);color:var(--amber)}
+  .check.fail .ck{border-color:rgba(248,81,73,.45);background:var(--red-soft);color:var(--red)}
+  .check.locked .ck{border-color:var(--line);background:#0c1014;color:var(--dim)}
+  .ck .glyph{font:800 12px "IBM Plex Sans",sans-serif;line-height:1}
+  .check.pass .ck .glyph,.check.checking .ck .glyph{display:none}
   .check-body{flex:1;min-width:0}
   .check-label{font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .check-detail{font-size:12.5px;color:var(--muted);margin-top:3px}
   .check-action{font-size:12px;color:var(--maas);text-decoration:none;margin-left:auto;white-space:nowrap;padding-top:3px}
   .check-action:hover{text-decoration:underline}
-  .badge{display:inline-block;border-radius:99px;padding:1px 8px;font:600 9.5px "IBM Plex Mono",monospace;letter-spacing:.06em;text-transform:uppercase}
-  .badge.pass{background:var(--en-soft);color:var(--en);border:1px solid var(--en-line)}
-  .badge.pending{background:var(--amber-soft);color:#94620d;border:1px solid #f1d99e}
-  .badge.fail{background:var(--red-soft);color:var(--red);border:1px solid #e9bcbc}
-  .badge.skipped{background:var(--soft);color:var(--dim);border:1px solid var(--line)}
-  .badge.queued{background:var(--soft);color:var(--dim);border:1px solid var(--line)}
-  .badge.checking{background:var(--maas-soft);color:var(--maas);border:1px solid var(--maas-line)}
-  .check-skel{display:flex;gap:13px;padding:14px 0;align-items:center}
-  .skel-dot{width:28px;height:28px;border-radius:50%;background:#eef3ef;animation:pulse 1.4s infinite}
+  .badge{display:inline-block;border-radius:99px;padding:1px 8px;font:600 9.5px "IBM Plex Mono",monospace;letter-spacing:.06em;text-transform:uppercase;background:#192128;color:var(--dim);border:1px solid var(--line2)}
+  .badge:empty{display:none}
+  .badge.checking{background:var(--maas-soft);color:var(--maas);border-color:var(--maas-line)}
+  .badge.pending{background:var(--amber-soft);color:var(--amber);border-color:rgba(210,153,34,.35)}
+  .badge.fail{background:var(--red-soft);color:var(--red);border-color:rgba(248,81,73,.35)}
+  .badge.locked{background:#151a1f;color:var(--dim);border-color:var(--line)}
+  .check-skel{display:flex;gap:14px;padding:15px 0;align-items:center}
+  .skel-dot{width:30px;height:30px;border-radius:50%;background:#171e24;animation:pulse 1.4s infinite}
   .skel-lines{flex:1}
-  .skel-line{height:10px;border-radius:5px;background:#eef3ef;animation:pulse 1.4s infinite}
+  .skel-line{height:10px;border-radius:5px;background:#171e24;animation:pulse 1.4s infinite}
   .skel-line.short{width:38%;margin-top:7px}
   @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
   @keyframes spin{to{transform:rotate(360deg)}}
-  @keyframes checkIn{0%{background:rgba(8,127,80,.09)}100%{background:transparent}}
-
-  /* benefits */
-  .unlock{background:linear-gradient(150deg,#f6fbf8,#fff 62%);border-top:4px solid var(--en)}
-  .unlock h2{font-size:22px}
-  .benefits{list-style:none;margin:17px 0 0;padding:0;display:flex;flex-direction:column;gap:14px}
-  .benefit{display:flex;gap:12px;align-items:flex-start}
-  .benefit .ic{flex:0 0 34px;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--en-soft);color:var(--en);font:700 14px "Bricolage Grotesque",sans-serif}
-  .benefit:nth-child(2) .ic{background:var(--maas-soft);color:var(--maas)}
-  .benefit:nth-child(3) .ic{background:var(--amber-soft);color:var(--amber)}
-  .benefit b{display:block;font-size:13.5px;font-weight:600;line-height:1.35}
-  .benefit span{display:block;color:var(--muted);font-size:12px;line-height:1.5;margin-top:1px}
-  .unlock .fine{margin-top:18px;padding-top:14px;border-top:1px solid var(--line);color:var(--dim);font:11px "IBM Plex Mono",monospace}
+  @keyframes draw{to{stroke-dashoffset:0}}
+  @keyframes rowIn{0%{background:rgba(63,185,80,.06)}100%{background:transparent}}
 
   /* terms / status panels */
-  .terms-panel{border-color:var(--en-line);border-top:4px solid var(--en);background:linear-gradient(150deg,#f7fcf9,#fff 60%)}
-  .terms-panel .kicker{color:var(--en)}
+  .terms-panel{border-color:var(--en-line);border-top:3px solid var(--en)}
   .terms-copy{color:var(--muted);font-size:13.5px;margin:9px 0 16px}
-  .consent{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:11px;background:#fff;padding:14px 15px;cursor:pointer;transition:border-color .18s,box-shadow .18s}
-  .consent:hover{border-color:var(--en-line);box-shadow:0 6px 18px rgba(21,35,29,.05)}
+  .consent{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line2);border-radius:11px;background:#0d1216;padding:14px 15px;cursor:pointer;transition:border-color .18s,background .18s}
+  .consent:hover{border-color:var(--en-line);background:#0f1519}
   .consent input{position:absolute;opacity:0;pointer-events:none}
-  .box{flex:0 0 20px;width:20px;height:20px;border-radius:6px;border:1.5px solid #b9c9bf;background:#fff;display:grid;place-items:center;margin-top:1px;transition:.18s}
-  .box svg{width:12px;height:12px;fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;opacity:0;transform:scale(.6);transition:.18s}
+  .box{flex:0 0 20px;width:20px;height:20px;border-radius:6px;border:1.5px solid #3b4753;background:#0b0f13;display:grid;place-items:center;margin-top:1px;transition:.18s}
+  .box svg{width:12px;height:12px;fill:none;stroke:#06130a;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;opacity:0;transform:scale(.6);transition:.18s}
   .consent input:checked + .box{background:var(--en);border-color:var(--en)}
   .consent input:checked + .box svg{opacity:1;transform:none}
-  .consent input:focus-visible + .box{outline:3px solid rgba(8,127,80,.2);outline-offset:2px}
+  .consent input:focus-visible + .box{outline:3px solid rgba(63,185,80,.22);outline-offset:2px}
   .consent-text{font-size:13px;line-height:1.55}
   .consent-text a{font-weight:600}
-  .version{display:inline-block;margin-left:5px;font:600 10px "IBM Plex Mono",monospace;color:var(--muted);background:var(--soft);border:1px solid var(--line);border-radius:99px;padding:1px 7px;vertical-align:1px}
+  .version{display:inline-block;margin-left:5px;font:600 10px "IBM Plex Mono",monospace;color:var(--muted);background:#192128;border:1px solid var(--line2);border-radius:99px;padding:1px 7px;vertical-align:1px}
   .cta-row{display:flex;align-items:center;gap:12px;margin-top:18px;flex-wrap:wrap}
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:8px;padding:11px 18px;background:var(--maas);color:#fff;font:600 14px "IBM Plex Sans",sans-serif;text-decoration:none;cursor:pointer;transition:filter .16s,transform .16s,box-shadow .16s}
-  .btn:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px);box-shadow:0 8px 20px rgba(47,101,200,.2)}
-  .btn:disabled{opacity:.38;cursor:not-allowed;box-shadow:none;transform:none}
-  .btn.green{background:var(--en);color:#fff}
-  .btn.green:hover:not(:disabled){box-shadow:0 8px 20px rgba(8,127,80,.2)}
-  .btn.ghost{background:#fff;border:1px solid var(--line);color:var(--maas)}
-  .btn.ghost:hover{box-shadow:0 6px 16px rgba(21,35,29,.06)}
-  .btn.small{padding:8px 13px;font-size:12.5px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:8px;padding:11px 18px;background:var(--maas);color:#04121f;font:600 14px "IBM Plex Sans",sans-serif;text-decoration:none;cursor:pointer;transition:filter .16s,transform .16s,box-shadow .16s}
+  .btn:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px);box-shadow:0 8px 20px rgba(88,166,255,.18)}
+  .btn:disabled{opacity:.34;cursor:not-allowed;box-shadow:none;transform:none}
+  .btn.green{background:var(--en);color:#04140a}
+  .btn.green:hover:not(:disabled){box-shadow:0 8px 20px rgba(63,185,80,.2)}
+  .btn.ghost{background:#11171c;border:1px solid var(--line2);color:var(--maas)}
+  .btn.ghost:hover{box-shadow:0 6px 16px rgba(0,0,0,.22)}
   .err{color:var(--red);font-size:12.5px;min-height:19px;margin-top:9px}
   .hint{color:var(--dim);font-size:11.5px;margin-top:10px}
 
-  .status-panel{border-top:4px solid var(--amber);background:linear-gradient(150deg,#fffdf7,#fff 65%)}
-  .status-panel.bad{border-top-color:var(--red);background:linear-gradient(150deg,#fff9f9,#fff 65%)}
+  .status-panel{border-top:3px solid var(--amber)}
+  .status-panel.bad{border-top-color:var(--red)}
   .status-ic{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:var(--amber-soft);color:var(--amber);font:800 20px "Bricolage Grotesque",sans-serif;margin-bottom:12px}
   .status-panel.bad .status-ic{background:var(--red-soft);color:var(--red)}
   .status-panel p{color:var(--muted);font-size:13.5px;margin:8px 0 0}
   .status-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:17px}
-  .next-steps{margin:16px 0 0;padding:14px 16px;border-radius:10px;background:#fff;border:1px solid var(--line);font-size:12px;color:var(--muted)}
-  .next-steps b{display:block;color:var(--ink);font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-family:"IBM Plex Mono",monospace;margin-bottom:6px}
+  .next-steps{margin:16px 0 0;padding:14px 16px;border-radius:10px;background:#0d1216;border:1px solid var(--line2);font-size:12px;color:var(--muted)}
+  .next-steps b{display:block;color:var(--ink);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-family:"IBM Plex Mono",monospace;margin-bottom:6px}
   .next-steps ul{margin:0;padding-left:16px}
   .next-steps li{margin:3px 0}
 
-  .ready-panel{border-color:var(--en-line);border-top:4px solid var(--en);background:linear-gradient(150deg,#f4fbf7,#fff 65%)}
+  .ready-panel{border-color:var(--en-line);border-top:3px solid var(--en)}
   .ready-panel .status-ic{background:var(--en-soft);color:var(--en)}
   .ready-panel .cta-row{margin-top:18px}
 
-  footer{margin:38px 0 32px;padding-top:17px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;display:flex;gap:14px;flex-wrap:wrap}
+  footer{margin:34px 0 30px;padding-top:17px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;display:flex;gap:14px;flex-wrap:wrap}
   footer a{color:var(--dim);text-decoration:none}
   footer a:hover{color:var(--maas)}
   footer .sp{margin-left:auto}
 
   .hidden{display:none!important}
-  .reveal{animation:rise .65s cubic-bezier(.2,.8,.2,1) both}
-  .reveal.d1{animation-delay:.06s}
-  .reveal.d2{animation-delay:.12s}
+  .reveal{animation:rise .6s cubic-bezier(.2,.8,.2,1) both}
   @keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
 
-  @media(max-width:900px){
-    .hero-grid{grid-template-columns:1fr;gap:26px}
-    .glance{max-width:520px}
-    .layout{grid-template-columns:1fr}
-    .progress .track{width:120px}
-  }
-  @media(max-width:640px){
+  @media(max-width:720px){
     .shell{padding:0 18px}
     .top .shell{height:60px}
     .who{gap:8px}
     .who span.w{display:none}
-    .hero .shell{padding:38px 18px 42px}
-    h1{font-size:clamp(36px,10vw,48px)}
+    .hero .shell{padding:42px 18px 46px}
+    h1{font-size:clamp(36px,10vw,46px)}
     .panel{padding:22px 20px}
     .panel-head{flex-direction:column;gap:10px}
     .progress{text-align:left}
@@ -237,65 +207,42 @@
     <span class="floater" style="left:70%;top:86%">$0.016</span>
   </div>
   <div class="shell">
-    <div class="hero-grid">
-      <div class="reveal">
-        <span class="eyebrow"><span class="dot"></span> Welcome to EnMaaS</span>
-        <h1 id="title">Welcome, <span class="name" id="hero-name">there</span>.</h1>
-        <p id="subtitle">One key unlocks frontier and hosted models through a single gateway — with your spend and usage in plain sight.</p>
-        <div class="chips">
-          <span class="chip"><b>1</b> API key</span>
-          <span class="chip"><b>2</b> API dialects</span>
-          <span class="chip"><b>0</b> extra accounts</span>
-          <span class="chip">Usage included</span>
-        </div>
+    <div class="hero-inner reveal">
+      <span class="eyebrow"><span class="dot"></span> Welcome to EnMaaS</span>
+      <h1 id="title">Welcome, <span class="name" id="hero-name">there</span>.</h1>
+      <p id="subtitle">One key unlocks frontier and hosted models through a single gateway — with your spend and usage in plain sight.</p>
+      <div class="chips">
+        <span class="chip"><b>1</b> API key</span>
+        <span class="chip"><b>2</b> API dialects</span>
+        <span class="chip"><b>0</b> extra accounts</span>
+        <span class="chip">Usage included</span>
       </div>
-      <aside class="glance reveal d2" aria-label="What you get">
-        <span class="tag">At a glance</span>
-        <h3>Everything in one place.</h3>
-        <div class="glance-row"><span class="ic">⌘</span><span><b>One governed gateway</b><span>Anthropic &amp; OpenAI compatible endpoints</span></span></div>
-        <div class="glance-row"><span class="ic">◎</span><span><b>Frontier + hosted models</b><span>Claude, GPT, DeepSeek, GLM and more</span></span></div>
-        <div class="glance-row"><span class="ic">$</span><span><b>Clear usage, no surprises</b><span>Spend by model and monthly budget</span></span></div>
-        <div class="fine">No separate vendor accounts. No key sharing.</div>
-      </aside>
     </div>
   </div>
 </header>
 
 <main class="shell">
-  <div class="layout">
-    <section class="panel reveal d1" aria-labelledby="setup-title">
-      <div class="panel-head">
-        <div>
-          <span class="kicker">Your access</span>
-          <h2 id="setup-title">A few quick checks</h2>
-          <p class="lede" id="setup-lede">We verify your identity, group, and region automatically. You only need to accept the terms.</p>
-        </div>
-        <div class="progress" aria-live="polite">
-          <b><span id="progress-count">0</span><i>/ 4</i></b>
-          <span>checks complete</span>
-          <div class="track"><div class="fill" id="progress-fill"></div></div>
-        </div>
+  <section class="panel reveal" aria-labelledby="setup-title">
+    <div class="panel-head">
+      <div>
+        <span class="kicker">Your access</span>
+        <h2 id="setup-title">A few quick checks</h2>
+        <p class="lede" id="setup-lede">We verify your identity, group, and region automatically. You only need to accept the terms.</p>
       </div>
-      <div class="checks" id="checks">
-        <div class="check-skel"><div class="skel-dot"></div><div class="skel-lines"><div class="skel-line"></div><div class="skel-line short"></div></div></div>
-        <div class="check-skel"><div class="skel-dot"></div><div class="skel-lines"><div class="skel-line"></div><div class="skel-line short"></div></div></div>
-        <div class="check-skel"><div class="skel-dot"></div><div class="skel-lines"><div class="skel-line"></div><div class="skel-line short"></div></div></div>
+      <div class="progress" id="progress" aria-live="polite">
+        <b><span id="progress-count">0</span><i>/ <span id="progress-total">4</span></i></b>
+        <span>checks complete</span>
+        <div class="track"><div class="fill" id="progress-fill"></div></div>
       </div>
-    </section>
+    </div>
+    <div class="checks" id="checks">
+      <div class="check-skel"><div class="skel-dot"></div><div class="skel-lines"><div class="skel-line"></div><div class="skel-line short"></div></div></div>
+      <div class="check-skel"><div class="skel-dot"></div><div class="skel-lines"><div class="skel-line"></div><div class="skel-line short"></div></div></div>
+      <div class="check-skel"><div class="skel-dot"></div><div class="skel-lines"><div class="skel-line"></div><div class="skel-line short"></div></div></div>
+    </div>
+  </section>
 
-    <aside class="panel unlock reveal d2" aria-labelledby="unlock-title">
-      <span class="kicker">What you get</span>
-      <h2 id="unlock-title">Built for the way you work.</h2>
-      <ul class="benefits">
-        <li class="benefit"><span class="ic">⌘</span><span><b>One key, every tool</b><span>Claude Code, Codex, OpenCode, Pi and plain curl.</span></span></li>
-        <li class="benefit"><span class="ic">◎</span><span><b>Frontier and hosted</b><span>Choose the right model per task, not per vendor.</span></span></li>
-        <li class="benefit"><span class="ic">$</span><span><b>See where it goes</b><span>Spend by model, hosted-vs-frontier split, recent requests.</span></span></li>
-      </ul>
-      <div class="fine">90-day keys by default · revoke anytime</div>
-    </aside>
-  </div>
-
-  <section class="panel terms-panel hidden" id="terms-card" aria-labelledby="terms-title" style="margin-top:20px">
+  <section class="panel terms-panel hidden" id="terms-card" aria-labelledby="terms-title" style="margin-top:18px">
     <span class="kicker">One last step</span>
     <h2 id="terms-title">Terms &amp; Conditions</h2>
     <p class="terms-copy">Please read and accept the EnMaaS terms. We keep them short: acceptable use, keeping keys safe, how usage is metered, and what data is appropriate for each model.</p>
@@ -311,7 +258,7 @@
     </div>
   </section>
 
-  <section class="panel status-panel hidden" id="blocked-card" aria-labelledby="blocked-title" style="margin-top:20px">
+  <section class="panel status-panel hidden" id="blocked-card" aria-labelledby="blocked-title" style="margin-top:18px">
     <div class="status-ic">!</div>
     <span class="kicker">Access status</span>
     <h2 id="blocked-title">You're signed in, but not enabled yet.</h2>
@@ -329,7 +276,7 @@
     </div>
   </section>
 
-  <section class="panel ready-panel hidden" id="ready-card" aria-labelledby="ready-title" style="margin-top:20px">
+  <section class="panel ready-panel hidden" id="ready-card" aria-labelledby="ready-title" style="margin-top:18px">
     <div class="status-ic">✓</div>
     <span class="kicker">All set</span>
     <h2 id="ready-title">You're in.</h2>
@@ -352,8 +299,14 @@
 (function () {
   var state = null;
   var labels = {identity:'Red Hat identity', group:'EnMaaS access group', country:'Region eligibility', terms:'Terms & Conditions'};
-  var icons = {pass:'✓', fail:'✕', pending:'●', skipped:'–', queued:'·', checking:''};
-  var badgeText = {pass:'done', pending:'action needed', fail:'blocked', skipped:'skipped', queued:'queued', checking:'checking'};
+  var badgeText = {pass:'', queued:'queued', checking:'checking', pending:'action needed', fail:'blocked', locked:'locked', skipped:'skipped'};
+  var CHECK_DETAILS = {
+    identity: 'Verifying your Red Hat identity…',
+    group: 'Looking up your EnMaaS groups…',
+    country: 'Checking your region against the access policy…',
+    terms: 'Checking your current acceptance…'
+  };
+  var GATE_IDS = ['identity', 'group', 'country'];
 
   function $(id){ return document.getElementById(id); }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -370,44 +323,49 @@
     }
   }
 
-  var CHECK_DETAILS = {
-    identity: 'Verifying your Red Hat identity…',
-    group: 'Looking up your EnMaaS groups…',
-    country: 'Checking your region against the access policy…',
-    terms: 'Checking your current acceptance…'
-  };
-
-  function checkRow(c, flash) {
-    var action = c.id === 'terms' ? '<a class="check-action" href="/legal/terms" target="_blank" rel="noopener">Read terms ↗</a>' : '';
-    var detail = c.detail ? '<div class="check-detail">' + esc(c.detail) + '</div>' : '';
-    var badge = c.status === 'pass' ? '' : '<span class="badge ' + esc(c.status) + '">' + esc(badgeText[c.status] || c.status) + '</span>';
-    var icon = icons[c.status];
-    if (icon === undefined) icon = '?';
-    return '<div class="check' + (flash ? ' resolved' : '') + '"><div class="dot ' + esc(c.status) + '">' + icon + '</div>' +
-      '<div class="check-body"><div class="check-label">' + esc(c.label || labels[c.id] || c.id) + badge + '</div>' + detail + '</div>' + action + '</div>';
+  function buildRows(order, results) {
+    $('checks').innerHTML = order.map(function (id) {
+      var action = id === 'terms' ? '<a class="check-action" href="/legal/terms" target="_blank" rel="noopener">Read terms ↗</a>' : '';
+      return '<div class="check queued" data-id="' + esc(id) + '">' +
+        '<span class="ck" aria-hidden="true"><svg viewBox="0 0 24 24"><path pathLength="1" d="M5.4 12.5l4.3 4.3L18.7 7.4"/></svg><span class="glyph"></span></span>' +
+        '<div class="check-body"><div class="check-label">' + esc(results[id].label || labels[id] || id) + ' <span class="badge"></span></div><div class="check-detail"></div></div>' +
+        action + '</div>';
+    }).join('');
+    $('progress-total').textContent = order.length || 4;
   }
 
-  function paintChecks(items, flashId) {
-    $('checks').innerHTML = items.map(function (c) { return checkRow(c, c.id === flashId); }).join('');
+  function row(id) { return $('checks').querySelector('[data-id="' + id + '"]'); }
+
+  function setCheck(id, status, detail) {
+    var el = row(id);
+    if (!el) return;
+    el.className = 'check ' + status;
+    var glyph = el.querySelector('.glyph');
+    glyph.textContent = status === 'fail' ? '✕' : status === 'pending' ? '!' : (status === 'queued' || status === 'locked' || status === 'skipped') ? '·' : '';
+    var badge = el.querySelector('.badge');
+    badge.className = 'badge ' + status;
+    badge.textContent = badgeText[status] || '';
+    el.querySelector('.check-detail').textContent = detail || '';
   }
 
-  function updateProgress(items) {
-    var passed = items.filter(function (c) { return c.status === 'pass'; }).length;
-    var total = items.length || 4;
+  function syncProgress() {
+    var rows = $('checks').querySelectorAll('.check');
+    var passed = $('checks').querySelectorAll('.check.pass').length;
+    var total = rows.length || 4;
     $('progress-count').textContent = passed;
+    $('progress-total').textContent = total;
     $('progress-fill').style.width = Math.round(passed / total * 100) + '%';
     $('progress').setAttribute('aria-label', passed + ' of ' + total + ' checks complete');
   }
 
-  function showStatus() {
-    var terms = $('terms-card');
-    var blocked = $('blocked-card');
-    var ready = $('ready-card');
-    terms.classList.add('hidden');
-    blocked.classList.add('hidden');
-    ready.classList.add('hidden');
+  function hidePanels() {
+    ['terms-card', 'blocked-card', 'ready-card'].forEach(function (id) { $(id).classList.add('hidden'); });
+  }
 
+  function showStatus() {
+    hidePanels();
     if (state.state === 'blocked') {
+      var blocked = $('blocked-card');
       blocked.classList.remove('hidden');
       blocked.classList.toggle('bad', state.blocked_reason !== 'directory_unavailable');
       $('blocked-copy').textContent = blockedCopy(state.blocked_reason);
@@ -420,12 +378,12 @@
         steps.innerHTML = '<li>Confirm you are signed in with your Red Hat identity.</li><li>Contact the EnMaaS team if this persists.</li>';
       }
     } else if (state.state === 'needs_terms') {
-      terms.classList.remove('hidden');
+      $('terms-card').classList.remove('hidden');
       $('terms-version').textContent = state.terms.version;
       $('start').disabled = !$('accept').checked;
       $('err').textContent = '';
     } else {
-      ready.classList.remove('hidden');
+      $('ready-card').classList.remove('hidden');
     }
   }
 
@@ -440,46 +398,61 @@
     var order = ['identity', 'group', 'country', 'terms'].filter(function (id) { return results[id]; });
     if (!order.length) order = (state.checks || []).map(function (c) { return c.id; });
 
-    var items = order.map(function (id) {
-      return {id: id, label: results[id].label, status: 'queued', detail: ''};
-    });
-
-    // Hide the verdict until the checks have visibly run.
-    ['terms-card', 'blocked-card', 'ready-card'].forEach(function (id) { $(id).classList.add('hidden'); });
-    paintChecks(items);
-    updateProgress(items);
-    $('setup-lede').textContent = 'Hang on — we are verifying your identity, group, and region now.';
+    buildRows(order, results);
+    hidePanels();
+    syncProgress();
+    $('setup-lede').textContent = 'We verify your identity, group, and region automatically.';
+    if (results.terms) setCheck('terms', 'locked', 'Unlocks after the checks above pass.');
 
     var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduced) {
-      items = order.map(function (id) { return results[id]; });
-      paintChecks(items);
-      updateProgress(items);
-      $('setup-lede').textContent = 'We verify your identity, group, and region automatically. You only need to accept the terms.';
-      showStatus();
-      return;
-    }
+    var gates = GATE_IDS.filter(function (id) { return results[id]; });
 
-    var idx = 0;
-    function next() {
-      if (idx >= order.length) {
-        $('setup-lede').textContent = 'We verify your identity, group, and region automatically. You only need to accept the terms.';
+    function afterGates() {
+      var allPass = gates.length > 0 && gates.every(function (id) { return results[id].status === 'pass'; });
+      if (!allPass) {
+        if (results.terms) setCheck('terms', 'locked', 'Locked until the checks above pass.');
+        $('setup-lede').textContent = 'One of the checks above needs attention.';
         showStatus();
         return;
       }
-      var id = order[idx];
-      items[idx] = {id: id, label: results[id].label, status: 'checking', detail: CHECK_DETAILS[id] || 'Checking…'};
-      paintChecks(items);
-      var wait = 560 + (idx * 90);
-      setTimeout(function () {
-        items[idx] = {id: id, label: results[id].label, status: results[id].status, detail: results[id].detail || ''};
-        paintChecks(items, id);
-        updateProgress(items);
-        idx++;
-        setTimeout(next, 150);
-      }, wait);
+
+      var terms = results.terms;
+      if (!terms) { showStatus(); return; }
+
+      if (terms.status === 'pass') {
+        setCheck('terms', 'checking', CHECK_DETAILS.terms);
+        var finish = function () {
+          setCheck('terms', 'pass', terms.detail || 'Accepted');
+          syncProgress();
+          setTimeout(showStatus, 220);
+        };
+        if (reduced) finish(); else setTimeout(finish, 520);
+        return;
+      }
+
+      setCheck('terms', 'pending', terms.detail || 'Accept the terms below to finish.');
+      $('setup-lede').textContent = 'Three checks passed. Accept the terms to open your account.';
+      showStatus();
     }
-    next();
+
+    function nextGate(i) {
+      if (i >= gates.length) { afterGates(); return; }
+      var id = gates[i];
+      var result = results[id];
+      if (reduced) {
+        setCheck(id, result.status, result.detail);
+        syncProgress();
+        nextGate(i + 1);
+        return;
+      }
+      setCheck(id, 'checking', CHECK_DETAILS[id] || 'Checking…');
+      setTimeout(function () {
+        setCheck(id, result.status, result.detail);
+        syncProgress();
+        setTimeout(function () { nextGate(i + 1); }, 170);
+      }, 640);
+    }
+    nextGate(0);
   }
 
   function blockedCopy(reason) {
@@ -529,7 +502,11 @@
         btn.disabled = false;
         return;
       }
-      location.href = (res.body && res.body.redirect) || '/account?tab=keys&first=1';
+      setCheck('terms', 'pass', 'Accepted. Opening your account…');
+      syncProgress();
+      setTimeout(function () {
+        location.href = (res.body && res.body.redirect) || '/account?tab=keys&first=1';
+      }, 620);
     }).catch(function () {
       $('err').textContent = 'Network error. Try again.';
       btn.disabled = false;
@@ -539,8 +516,9 @@
   $('retry').addEventListener('click', load);
   load();
 
-  // Same animated "cost flow" as the public welcome page: tokens drift toward
-  // the gateway and pick up a price as they cross it.
+  // Animated "cost flow" borrowed from the public welcome page, tuned for a
+  // dark surface: tokens drift toward the gateway and pick up a price as they
+  // cross it.
   var cv = document.getElementById('flow');
   if (!cv || !cv.getContext) return;
   var ctx = cv.getContext('2d'), dpr = Math.min(window.devicePixelRatio || 1, 2), W = 0, H = 0, cx = 0, tokens = [], running = true;
@@ -552,7 +530,7 @@
     W = r.width; H = r.height;
     cv.width = W * dpr; cv.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    cx = Math.min(W - 24, Math.max(24, W * .62));
+    cx = Math.min(W - 24, Math.max(24, W * .68));
   }
   function spawn(){
     return {x:-30, y:16 + Math.random() * Math.max(30, H - 32), vx:.4 + Math.random() * .8,
@@ -567,11 +545,11 @@
   function frame(ts){
     ctx.clearRect(0, 0, W, H);
     var grad = ctx.createLinearGradient(cx - 42, 0, cx + 42, 0);
-    grad.addColorStop(0, 'rgba(8,127,80,0)');
-    grad.addColorStop(.5, 'rgba(8,127,80,.12)');
-    grad.addColorStop(1, 'rgba(8,127,80,0)');
+    grad.addColorStop(0, 'rgba(63,185,80,0)');
+    grad.addColorStop(.5, 'rgba(63,185,80,.13)');
+    grad.addColorStop(1, 'rgba(63,185,80,0)');
     ctx.fillStyle = grad; ctx.fillRect(cx - 42, 0, 84, H);
-    ctx.strokeStyle = 'rgba(8,127,80,.38)';
+    ctx.strokeStyle = 'rgba(63,185,80,.34)';
     ctx.setLineDash([3, 5]); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
     ctx.setLineDash([]); ctx.textBaseline = 'middle';
@@ -582,13 +560,13 @@
       t.alpha = Math.min(t.alpha + .03, 1);
       if (!t.priced) {
         ctx.font = '500 12px "IBM Plex Mono",monospace';
-        ctx.fillStyle = 'rgba(82,101,91,.7)';
+        ctx.fillStyle = 'rgba(148,163,177,.62)';
         ctx.globalAlpha = t.alpha;
         ctx.fillText(t.g, t.x, t.y);
       } else {
         var age = ts - t.born, fade = age > 2400 ? Math.max(0, 1 - (age - 2400) / 1600) : 1, pop = age < 180 ? 1 + .35 * (1 - age / 180) : 1;
         ctx.globalAlpha = t.alpha * fade;
-        ctx.fillStyle = '#087f50';
+        ctx.fillStyle = '#3fb950';
         ctx.font = '600 ' + (12 * pop).toFixed(1) + 'px "IBM Plex Mono",monospace';
         ctx.fillText(t.stamp, t.x, t.y);
       }
