@@ -50,11 +50,11 @@
   <div class="card">
     <label for="groups">Authorized groups (OIDC groups claim)</label>
     <textarea id="groups" placeholder="GE&#10;enmaas-users"></textarea>
-    <div class="hint">One group per line or comma-separated. Matching is case-insensitive. Leave empty to accept any non-technical group.</div>
+    <div class="hint">One group per line or comma-separated. A user needs <strong>any one</strong> of these groups (not all of them). Matching is case-insensitive. Leave empty to accept any non-technical group.</div>
 
     <label for="countries" style="margin-top:18px">Blocked countries — ISO 3166-1 alpha-3</label>
     <textarea id="countries" placeholder="IRN&#10;PRK&#10;RUS"></textarea>
-    <div class="hint">Three-letter codes only (e.g. <code>IRN</code>, not <code>IR</code>). The directory's alpha-2 values are converted automatically.</div>
+    <div class="hint">This is a deny list, not an allow list: users in these countries are blocked. Three-letter codes only (e.g. <code>IRN</code>, not <code>IR</code>). The directory's alpha-2 values are converted automatically.</div>
 
     <div class="row"><input type="checkbox" id="unknown"><label for="unknown" style="margin:0;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--t);font-weight:400">Allow users whose country cannot be determined</label></div>
 
