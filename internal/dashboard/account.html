@@ -606,7 +606,7 @@
     var el=$(id), start=performance.now();
     if(el._animationFrame) cancelAnimationFrame(el._animationFrame);
     function tick(now){
-      var p=Math.min(1,(now-start)/duration), eased=1-Math.pow(1-p,3);
+      var p=Math.min(1,(now-start)/duration), eased=p;
       el.textContent=format(from+(to-from)*eased);
       if(p<1) el._animationFrame=requestAnimationFrame(tick); else el._animationFrame=null;
     }
