@@ -140,6 +140,36 @@
   .err{color:var(--red);font-size:12.5px;min-height:19px;margin-top:9px}
   .hint{color:var(--dim);font-size:11.5px;margin-top:10px}
 
+  /* full terms overlay */
+  .terms-link{background:none;border:0;padding:0;color:var(--maas);font:inherit;font-weight:600;cursor:pointer;text-decoration:none}
+  .terms-link:hover{text-decoration:underline}
+  .terms-overlay{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(2,5,8,.78);backdrop-filter:blur(6px)}
+  .terms-overlay.show{display:flex}
+  .terms-modal{position:relative;display:flex;flex-direction:column;width:100%;max-width:780px;max-height:90vh;overflow:hidden;background:linear-gradient(180deg,var(--panel),#0d1216);border:1px solid var(--line2);border-radius:16px;box-shadow:0 28px 80px rgba(0,0,0,.65)}
+  .terms-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:22px 26px 18px;border-bottom:1px solid var(--line)}
+  .terms-modal-head h2{font-size:22px;letter-spacing:-.03em}
+  .terms-modal-head .kicker{margin-bottom:5px}
+  .terms-close{flex:0 0 auto;width:34px;height:34px;border:1px solid var(--line2);border-radius:8px;background:#11171c;color:var(--muted);font-size:20px;line-height:1;cursor:pointer}
+  .terms-close:hover{color:var(--ink);border-color:var(--line2);background:#171e24}
+  .terms-modal-body{padding:20px 26px 8px;overflow:auto;color:var(--muted);font-size:14px;line-height:1.7}
+  .terms-modal-body h1{font-size:22px;margin:0 0 4px;color:var(--ink)}
+  .terms-modal-body h2{font-size:15px;margin:24px 0 6px;color:var(--maas)}
+  .terms-modal-body p,.terms-modal-body li{color:#c3cbd8}
+  .terms-modal-body .draft{margin:16px 0;border:1px solid rgba(210,153,34,.35);background:var(--amber-soft);color:var(--amber);border-radius:9px;padding:11px 14px;font-size:12.5px;line-height:1.55}
+  .terms-modal-body .meta{color:var(--dim);font-size:11.5px}
+  .terms-modal-body .back{display:none}
+  .terms-loading{padding:22px 0;color:var(--muted);font-size:13px}
+  .terms-modal-foot{display:flex;justify-content:flex-end;padding:14px 26px 18px;border-top:1px solid var(--line)}
+  body.modal-open{overflow:hidden}
+  @media(max-width:720px){
+    .terms-overlay{padding:10px}
+    .terms-modal{max-height:94vh;border-radius:13px}
+    .terms-modal-head{padding:18px 18px 14px}
+    .terms-modal-head h2{font-size:19px}
+    .terms-modal-body{padding:16px 18px 6px;font-size:13px}
+    .terms-modal-foot{padding:12px 18px 14px}
+  }
+
   .status-panel{border-top:3px solid var(--amber)}
   .status-panel.bad{border-top-color:var(--red)}
   .status-ic{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:var(--amber-soft);color:var(--amber);font:800 20px "Bricolage Grotesque",sans-serif;margin-bottom:12px}
@@ -271,7 +301,7 @@
     <label class="consent" for="accept">
       <input type="checkbox" id="accept">
       <span class="box" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M2.5 8.5 6 12l7.5-8"/></svg></span>
-      <span class="consent-text">I have read and accept the EnMaaS Terms &amp; Conditions <span class="version" id="terms-version">draft-tbd</span>.<br><a href="/legal/terms" target="_blank" rel="noopener">Read the full terms ↗</a></span>
+      <span class="consent-text">I have read and accept the EnMaaS Terms &amp; Conditions <span class="version" id="terms-version">draft-tbd</span>.<br><a href="/legal/terms" class="terms-link" id="terms-open" aria-haspopup="dialog" aria-controls="terms-overlay">Read the full terms</a></span>
     </label>
     <div class="err" id="err"></div>
     <div class="cta-row">
@@ -312,10 +342,28 @@
   <footer>
     <span>EnMaaS · Engineering AI access</span>
     <a href="/welcome">About the service</a>
-    <a href="/legal/terms">Terms</a>
+    <a href="/legal/terms" class="terms-link" data-terms-open>Terms</a>
     <a class="sp" href="/logout">Sign out</a>
   </footer>
 </main>
+</div>
+
+<div class="terms-overlay" id="terms-overlay" role="dialog" aria-modal="true" aria-labelledby="terms-modal-title" aria-hidden="true">
+  <div class="terms-modal">
+    <div class="terms-modal-head">
+      <div>
+        <span class="kicker">Legal</span>
+        <h2 id="terms-modal-title">Terms &amp; Conditions <span class="version" id="terms-modal-version"></span></h2>
+      </div>
+      <button class="terms-close" id="terms-close" type="button" aria-label="Close terms">×</button>
+    </div>
+    <div class="terms-modal-body" id="terms-modal-body">
+      <div class="terms-loading">Loading terms…</div>
+    </div>
+    <div class="terms-modal-foot">
+      <button class="btn ghost" id="terms-close-btn" type="button">Close</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -335,6 +383,60 @@
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function firstName(name){ return String(name || '').trim().split(/\s+/)[0] || 'there'; }
+
+  var termsHtmlLoaded = false;
+  var termsFetching = false;
+  var termsReturnFocus = null;
+
+  function syncTermsVersion() {
+    if (state && state.terms && state.terms.version) {
+      $('terms-modal-version').textContent = state.terms.version;
+    }
+  }
+
+  function openTerms(e) {
+    if (e) e.preventDefault();
+    termsReturnFocus = document.activeElement;
+    syncTermsVersion();
+    var overlay = $('terms-overlay');
+    overlay.classList.add('show');
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+    $('terms-close').focus();
+    if (termsHtmlLoaded || termsFetching) return;
+
+    termsFetching = true;
+    var body = $('terms-modal-body');
+    body.innerHTML = '<div class="terms-loading">Loading terms…</div>';
+    fetch('/legal/terms', {credentials:'same-origin'}).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    }).then(function (html) {
+      var doc = new DOMParser().parseFromString(html, 'text/html');
+      var main = doc.querySelector('main');
+      if (!main) throw new Error('Terms content unavailable');
+      var back = main.querySelector('.back');
+      if (back) back.remove();
+      var heading = main.querySelector('h1');
+      if (heading) heading.remove();
+      var meta = main.querySelector('.meta');
+      if (meta) meta.remove();
+      body.innerHTML = main.innerHTML;
+      termsHtmlLoaded = true;
+    }).catch(function () {
+      body.innerHTML = '<p>Could not load the terms here. <a href="/legal/terms">Open the terms page</a>.</p>';
+    }).then(function () {
+      termsFetching = false;
+    });
+  }
+
+  function closeTerms() {
+    var overlay = $('terms-overlay');
+    overlay.classList.remove('show');
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+    if (termsReturnFocus && termsReturnFocus.focus) termsReturnFocus.focus();
+  }
 
   function setSubtitle() {
     $('subtitle').textContent = "EnMaaS gives you one key to access hosted and frontier models from any tool, through one governed gateway — with consistent APIs, centralized access, and clear usage visibility.";
@@ -406,6 +508,7 @@
 
   function render() {
     var name = state.display_name || state.username || 'there';
+    syncTermsVersion();
     $('who').textContent = name;
     $('hero-name').textContent = firstName(name);
     setSubtitle();
@@ -495,6 +598,18 @@
       .then(function (j) { state = j; render(); })
       .catch(function () {});
   }
+
+  document.querySelectorAll('#terms-open, [data-terms-open]').forEach(function (link) {
+    link.addEventListener('click', openTerms);
+  });
+  $('terms-close').addEventListener('click', closeTerms);
+  $('terms-close-btn').addEventListener('click', closeTerms);
+  $('terms-overlay').addEventListener('click', function (e) {
+    if (e.target === this) closeTerms();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && $('terms-overlay').classList.contains('show')) closeTerms();
+  });
 
   $('accept').addEventListener('change', function () {
     $('start').disabled = !this.checked;

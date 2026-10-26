@@ -4,6 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>My account — EnMaaS</title>
+<script>
+  (function () {
+    try {
+      var params = new URLSearchParams(location.search);
+      if (params.get('tab') === 'keys' || params.get('first') === '1') {
+        document.documentElement.classList.add('preload-keys');
+      }
+    } catch (e) {}
+  })();
+</script>
 <style>
   :root{
     --bg:#0b0e11;--c1:#141820;--c2:#1a2030;--c3:#232d40;--bdr:#2e3848;
@@ -139,6 +149,10 @@
   .toast.show{opacity:1;transform:none}
   .toast.err{background:var(--red);color:#fff}
   .hidden{display:none!important}
+  html.preload-keys #view-usage{display:none!important}
+  html.preload-keys #view-keys{display:block!important}
+  html.preload-keys #tab-usage{color:var(--t2);background:none}
+  html.preload-keys #tab-keys{color:var(--t);background:var(--c3)}
   @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
   @media(max-width:640px){.pg{padding:18px 14px 60px}.appbar{padding:0 14px;gap:10px}.identity{display:none}.kpis{grid-template-columns:1fr}}
 </style>
@@ -884,7 +898,8 @@
     }
   }
   loadWho();
-  setTab(params.get('tab')==='keys'?'keys':'usage', false);
+  setTab((params.get('tab')==='keys'||params.get('first')==='1')?'keys':'usage', false);
+  document.documentElement.classList.remove('preload-keys');
 })();
 </script>
 </body>
