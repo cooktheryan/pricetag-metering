@@ -56,7 +56,12 @@ func (h *PricingRefreshHandler) HandleList(w http.ResponseWriter, r *http.Reques
 	}
 
 	models := make([]pricingCatalogEntry, 0, len(prices))
-	policy, policyErr := h.store.GetPricingDiscountPolicy(r.Context())
+	public := r.URL.Query().Get("public") == "1"
+	var policy pricing.DiscountPolicy
+	var policyErr error
+	if !public {
+		policy, policyErr = h.store.GetPricingDiscountPolicy(r.Context())
+	}
 	for _, p := range prices {
 		modelPrice := pricing.ModelPrice{Model: p.Model, Provider: p.Provider}
 		var discount *float64

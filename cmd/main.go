@@ -422,7 +422,7 @@ func main() {
 
 	// Pricing modal rate card — readable by any logged-in user: the rates
 	// are the same numbers every request is billed at, no user data.
-	mux.HandleFunc("/api/v1/pricing", dashboardAPI(handler.NewPricingRefreshHandler(store).HandleList))
+  mux.HandleFunc("/api/v1/pricing", auth(handler.NewPricingRefreshHandler(store).HandleList))
 
 	// Operator pages (admin console, routing) are SUPER-ADMIN
 	// only. Regular admins get the org-wide Usage view on /dashboard and
