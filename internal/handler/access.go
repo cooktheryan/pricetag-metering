@@ -137,8 +137,9 @@ func (g *AccessGate) EffectivePolicy(ctx context.Context) storage.AccessPolicy {
 // Evaluate resolves every gate for the given identity. It returns an error
 // only for infrastructure failures; a denied person is a normal state.
 func (g *AccessGate) Evaluate(ctx context.Context, username string, groups []string) (OnboardingState, error) {
+	mode := g.cfg.Onboarding.Mode
 	state := OnboardingState{
-		Mode:     g.cfg.Onboarding.Mode,
+		Mode:     mode,
 		Username: username,
 		Groups:   NormalizeGroups(groups),
 		Terms: TermsInfo{
@@ -195,6 +196,14 @@ func (g *AccessGate) Evaluate(ctx context.Context, username string, groups []str
 	identity.Detail = ""
 	state.GroupState = GatePass
 	state.CountryState = GatePass
+
+	// Temporary dev-login scaffolding: explicitly allowlisted dev_test
+	// identities exercise the enforced gates even when this deployment ships
+	// with onboarding off. Real users keep the deployment's mode.
+	if g.devEnforcedIdentity(username, user.Tags) {
+		mode = config.OnboardingEnforce
+		state.Mode = mode
+	}
 
 	// --- Group gate -------------------------------------------------------
 	// Source of truth is the OIDC groups claim carried in the signed session.
@@ -298,7 +307,7 @@ func (g *AccessGate) Evaluate(ctx context.Context, username string, groups []str
 
 	// Off/observe never block traffic. Observe still reports the real state
 	// so operators can see the would-be decision in the UI and logs.
-	switch g.cfg.Onboarding.Mode {
+	switch mode {
 	case config.OnboardingOff:
 		state.State = OnboardingReady
 		for i := range state.Checks {
@@ -370,7 +379,9 @@ func (g *AccessGate) RequireOnboardedAPI(next http.HandlerFunc) http.HandlerFunc
 // NeedsOnboarding reports whether a just-authenticated user must be sent to
 // the wizard instead of their normal landing page.
 func (g *AccessGate) NeedsOnboarding(ctx context.Context, username string, groups []string) bool {
-	if g.cfg.Onboarding.Mode != config.OnboardingEnforce {
+	// Without dev identities there is nothing to override, so avoid the
+	// directory lookup entirely when onboarding is disabled.
+	if g.cfg.Onboarding.Mode != config.OnboardingEnforce && len(g.cfg.DevLoginUsers) == 0 {
 		return false
 	}
 	state, err := g.Evaluate(ctx, username, groups)
@@ -378,5 +389,24 @@ func (g *AccessGate) NeedsOnboarding(ctx context.Context, username string, group
 		slog.Error("onboarding evaluation failed at login", "error", err)
 		return false
 	}
+	if state.Mode != config.OnboardingEnforce {
+		return false
+	}
 	return !state.Allowed || state.State != OnboardingReady
+}
+
+// devEnforcedIdentity reports whether the temporary dev-login scaffolding
+// should apply the enforced onboarding gates to this identity. It requires the
+// deployment to have dev identities configured, the username to be explicitly
+// allowlisted, and the directory row to carry dev_test=true.
+func (g *AccessGate) devEnforcedIdentity(username string, tags map[string]any) bool {
+	if len(g.cfg.DevLoginUsers) == 0 || !isDevTestUser(tags) {
+		return false
+	}
+	for _, allowed := range g.cfg.DevLoginUsers {
+		if strings.EqualFold(strings.TrimSpace(allowed), username) {
+			return true
+		}
+	}
+	return false
 }

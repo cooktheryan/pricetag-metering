@@ -303,10 +303,10 @@ func (h *AuthHandler) HandleDevLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Warn("dev test login used", "username", target, "remote", r.RemoteAddr)
 	h.setCookie(w, target, groups, "")
-	// Always exercise the enforced gates for dev identities. This lets a
-	// tester see the country/group/terms failures without flipping the whole
+	// The access gate forces "enforce" for these dev identities, so the
+	// country/group/terms failures are visible without flipping the whole
 	// deployment to ONBOARDING_MODE=enforce, which would affect real users.
-	http.Redirect(w, r, h.loginDestinationWithMode(r, target, groups, config.OnboardingEnforce), http.StatusFound)
+	http.Redirect(w, r, h.loginDestination(r, target, groups), http.StatusFound)
 }
 
 func isDevResetUser(tags map[string]any) bool {
@@ -373,14 +373,6 @@ func isDevTestUser(tags map[string]any) bool {
 // partner_users is the single identity source. Users without a partner role
 // land on /account. Fails closed to /dashboard.
 func (h *AuthHandler) loginDestination(r *http.Request, username string, groups []string) string {
-	return h.loginDestinationWithMode(r, username, groups, "")
-}
-
-// loginDestinationWithMode is loginDestination with an optional onboarding
-// mode override. Dev test identities use "enforce" so the country/group/terms
-// failures can be exercised even when the deployment itself ships onboarding
-// disabled (which is the safe production default).
-func (h *AuthHandler) loginDestinationWithMode(r *http.Request, username string, groups []string, mode string) string {
 	if h.orgStore == nil {
 		return "/dashboard"
 	}
@@ -389,11 +381,7 @@ func (h *AuthHandler) loginDestinationWithMode(r *http.Request, username string,
 	}
 	// Incomplete onboarding always wins over the role-based landing page:
 	// nothing else is usable until the three gates pass.
-	gateCfg := h.cfg
-	if mode != "" {
-		gateCfg.Onboarding.Mode = mode
-	}
-	if NewAccessGate(gateCfg, h.orgStore).NeedsOnboarding(r.Context(), username, groups) {
+	if NewAccessGate(h.cfg, h.orgStore).NeedsOnboarding(r.Context(), username, groups) {
 		return "/onboarding"
 	}
 	// Manager routing is derived from the partner hierarchy only.

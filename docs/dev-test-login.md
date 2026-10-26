@@ -58,8 +58,9 @@ Code:
 - [ ] Delete the `/dev-login` route in `cmd/main.go`.
 - [ ] Delete `HandleDevLogin`, `devLoginPanel`, `devLoginGroups`,
       `isDevTestUser`, and `isDevResetUser` in `internal/handler/auth.go`.
-- [ ] Collapse `loginDestinationWithMode` back into `loginDestination` (remove
-      the forced `enforce` override).
+- [ ] Remove `devEnforcedIdentity` and the forced-mode branch in
+      `AccessGate.Evaluate`, and restore the `NeedsOnboarding` short-circuit,
+      in `internal/handler/access.go`.
 - [ ] Remove the `<!-- DEV_LOGIN -->` injection block from `HandleLogin` and
       the placeholder from `internal/dashboard/login.html`.
 - [ ] Remove `DevLoginUsers` and its `DEV_LOGIN_USERS` parsing from
