@@ -34,7 +34,7 @@ a{color:inherit;text-decoration:none}
 .ab-out:hover{border-color:var(--warn)}
 .imp-banner{display:none;align-items:center;gap:12px;padding:8px 18px;background:#3a2c10;border-bottom:1px solid var(--warn);color:var(--warn);font-size:13px}
 .imp-banner a{margin-left:auto;border:1px solid var(--warn);border-radius:6px;padding:2px 10px}
-main{max-width:1080px;margin:0 auto;padding:22px 18px 48px}
+main{max-width:1400px;margin:0 auto;padding:22px 18px 48px}
 .head-row{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
 h1{margin:0;font-size:21px}
 .sub{color:var(--muted);margin:4px 0 18px}
@@ -79,7 +79,7 @@ h1{margin:0;font-size:21px}
 .panel{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:15px 16px;margin-bottom:18px}
 .panel h2{margin:0 0 10px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}
 /* Usage-style pie row (Hosted vs Vendor / By Model / By User) */
-.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0 14px}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:0 14px}
 .charts .panel{min-width:0}
 .chart-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .tlt{display:inline-flex;gap:2px;margin-left:auto}
@@ -716,7 +716,7 @@ async function load(){
 function setKBudget(spent,limit,overCount){
   const v=document.getElementById('kBudget'),s=document.getElementById('kBudgetS');
   const bar=document.getElementById('kBudgetBar'),wrap=bar.parentElement;
-  if(!limit){v.textContent='–';v.style.color='';s.textContent='';s.style.color='';wrap.style.display='none';return;}
+  if(!limit){v.textContent='No limit';v.style.color='';s.textContent='No monthly budget configured';s.style.color='';wrap.style.display='none';return;}
   wrap.style.display='';
   const pct=100*spent/limit;
   const teamOver=pct>100;
@@ -951,7 +951,7 @@ function donutOpts(nameAt,vals,metric,titleAt){
   }};
   if(titleAt)callbacks.title=items=>items.length?titleAt(items[0]):'';
   return {responsive:true,plugins:{
-    legend:{position:'right',labels:{color:'#8090a8',font:{size:11},padding:8}},
+    legend:{position:'bottom',labels:{color:'#8090a8',font:{size:11},padding:6,boxWidth:12,boxHeight:12}},
     tooltip:{callbacks}
   }};
 }
@@ -984,7 +984,7 @@ function renderPies(){
   const pieM=topM.concat(tail.length?[{name:'Other — '+tail.length+' models',val:tail.reduce((s,d)=>s+d.val,0),other:true}]:[]);
   const mv=pieM.map(d=>d.val);
   const mColors=pieM.map((d,i)=>d.other?'#5b6b82':(d.hosted?'#3fb950':PIE_COLORS[i%PIE_COLORS.length]));
-  const mLabel=d=>{const n=d.name.length>26?d.name.slice(0,25)+'…':d.name;return n+' — '+pieFmt(d.val,modelMetric);};
+  const mLabel=d=>d.name+' — '+pieFmt(d.val,modelMetric);
   if(modelChart)modelChart.destroy();
   modelChart=new Chart(document.getElementById('modelChart'),{
     type:'doughnut',
@@ -1004,10 +1004,7 @@ function renderPies(){
   const pieU=topU.concat(tailU.length?[{name:'Other — '+tailU.length+' users',val:tailU.reduce((s,d)=>s+d.val,0),other:true}]:[]);
   const uv=pieU.map(d=>d.val);
   const uColors=pieU.map((d,i)=>d.other?'#5b6b82':PIE_COLORS[i%PIE_COLORS.length]);
-  const uLabelParts=pieU.map(d=>{
-    const n=d.name.length>26?d.name.slice(0,25)+'…':d.name;
-    return {name:n,rest:' — '+pieFmt(d.val,userPieMetric)};
-  });
+  const uLabelParts=pieU.map(d=>({name:d.name,rest:' — '+pieFmt(d.val,userPieMetric)}));
   const uLabels=uLabelParts.map(p=>p.name+p.rest);
   if(userChart)userChart.destroy();
   userChart=new Chart(document.getElementById('userChart'),{
