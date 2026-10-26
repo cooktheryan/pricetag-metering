@@ -109,7 +109,8 @@
   .secret code{display:block;padding-right:82px;font-family:'SF Mono',SFMono-Regular,Consolas,Menlo,monospace;font-size:12.5px;word-break:break-all;user-select:all;line-height:1.6}
   .secret-show,.secret-copy{position:absolute;top:13px;background:none;border:0;color:var(--blu);font:600 11px Inter,sans-serif;cursor:pointer;padding:2px 0}
   .secret-show{right:50px}
-  .secret-copy{right:14px}
+  .secret-copy{right:14px;width:18px;height:18px;padding:0}
+  .secret-copy svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   .secret-show:hover,.secret-copy:hover{text-decoration:underline}
   .key-success{color:var(--t2);font-size:12px;line-height:1.55;margin:12px 0 14px}
   .key-success strong{display:block;color:var(--grn);font-size:14px;margin-bottom:3px}
@@ -284,7 +285,7 @@
         <div class="lbl">API key</div>
         <code id="reveal-key">••••••••••••••••••••</code>
         <button class="secret-show" id="reveal-show" type="button" aria-pressed="false">Show</button>
-        <button class="secret-copy" id="reveal-copy" type="button">Copy</button>
+        <button class="secret-copy" id="reveal-copy" type="button" aria-label="Copy API key" title="Copy"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"></rect><path d="M16 8V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h2"></path></svg></button>
         <div class="warn">⚠ Do not share it or commit it to a repository.</div>
       </div>
       <div class="key-success">
