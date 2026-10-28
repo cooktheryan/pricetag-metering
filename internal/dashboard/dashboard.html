@@ -1202,6 +1202,17 @@ function renderCostCenterChart(){
 // mapping turns them into the ISO2 codes the directory stores.
 var ISO2_BY_NUM={"10":"AQ","100":"BG","104":"MM","108":"BI","112":"BY","116":"KH","12":"DZ","120":"CM","124":"CA","132":"CV","136":"KY","140":"CF","144":"LK","148":"TD","152":"CL","156":"CN","158":"TW","16":"AS","162":"CX","166":"CC","170":"CO","174":"KM","175":"YT","178":"CG","180":"CD","184":"CK","188":"CR","191":"HR","192":"CU","196":"CY","20":"AD","203":"CZ","204":"BJ","208":"DK","212":"DM","214":"DO","218":"EC","222":"SV","226":"GQ","231":"ET","232":"ER","233":"EE","234":"FO","238":"FK","239":"GS","24":"AO","242":"FJ","246":"FI","248":"AX","250":"FR","254":"GF","258":"PF","260":"TF","262":"DJ","266":"GA","268":"GE","270":"GM","275":"PS","276":"DE","28":"AG","288":"GH","292":"GI","296":"KI","300":"GR","304":"GL","308":"GD","31":"AZ","312":"GP","316":"GU","32":"AR","320":"GT","324":"GN","328":"GY","332":"HT","334":"HM","336":"VA","340":"HN","344":"HK","348":"HU","352":"IS","356":"IN","36":"AU","360":"ID","364":"IR","368":"IQ","372":"IE","376":"IL","380":"IT","384":"CI","388":"JM","392":"JP","398":"KZ","4":"AF","40":"AT","400":"JO","404":"KE","408":"KP","410":"KR","414":"KW","417":"KG","418":"LA","422":"LB","426":"LS","428":"LV","430":"LR","434":"LY","438":"LI","44":"BS","440":"LT","442":"LU","446":"MO","450":"MG","454":"MW","458":"MY","462":"MV","466":"ML","470":"MT","474":"MQ","478":"MR","48":"BH","480":"MU","484":"MX","492":"MC","496":"MN","498":"MD","499":"ME","50":"BD","500":"MS","504":"MA","508":"MZ","51":"AM","512":"OM","516":"NA","52":"BB","520":"NR","524":"NP","528":"NL","531":"CW","533":"AW","534":"SX","535":"BQ","540":"NC","548":"VU","554":"NZ","558":"NI","56":"BE","562":"NE","566":"NG","570":"NU","574":"NF","578":"NO","580":"MP","581":"UM","583":"FM","584":"MH","585":"PW","586":"PK","591":"PA","598":"PG","60":"BM","600":"PY","604":"PE","608":"PH","612":"PN","616":"PL","620":"PT","624":"GW","626":"TL","630":"PR","634":"QA","638":"RE","64":"BT","642":"RO","643":"RU","646":"RW","652":"BL","654":"SH","659":"KN","660":"AI","662":"LC","663":"MF","666":"PM","670":"VC","674":"SM","678":"ST","68":"BO","682":"SA","686":"SN","688":"RS","690":"SC","694":"SL","70":"BA","702":"SG","703":"SK","704":"VN","705":"SI","706":"SO","710":"ZA","716":"ZW","72":"BW","724":"ES","728":"SS","729":"SD","732":"EH","74":"BV","740":"SR","744":"SJ","748":"SZ","752":"SE","756":"CH","76":"BR","760":"SY","762":"TJ","764":"TH","768":"TG","772":"TK","776":"TO","780":"TT","784":"AE","788":"TN","792":"TR","795":"TM","796":"TC","798":"TV","8":"AL","800":"UG","804":"UA","807":"MK","818":"EG","826":"GB","831":"GG","832":"JE","833":"IM","834":"TZ","84":"BZ","840":"US","850":"VI","854":"BF","858":"UY","86":"IO","860":"UZ","862":"VE","876":"WF","882":"WS","887":"YE","894":"ZM","90":"SB","92":"VG","96":"BN","983":"XK"};
 var US_STATE_CODES={"Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA","Colorado":"CO","Connecticut":"CT","Delaware":"DE","District of Columbia":"DC","Florida":"FL","Georgia":"GA","Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA","Kansas":"KS","Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD","Massachusetts":"MA","Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO","Montana":"MT","Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ","New Mexico":"NM","New York":"NY","North Carolina":"NC","North Dakota":"ND","Ohio":"OH","Oklahoma":"OK","Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI","South Carolina":"SC","South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT","Vermont":"VT","Virginia":"VA","Washington":"WA","West Virginia":"WV","Wisconsin":"WI","Wyoming":"WY","Puerto Rico":"PR","Guam":"GU","American Samoa":"AS","United States Virgin Islands":"VI","Commonwealth of the Northern Mariana Islands":"MP"};
+var EUROPE_FOCUS=new Set(['AL','AT','BE','BA','BG','CH','CY','CZ','DE','DK','EE','ES','FI','FR','GB','GR','HR','HU','IE','IS','IT','LT','LU','LV','MC','MD','ME','MK','MT','NL','NO','PL','PT','RO','RS','SE','SI','SK','UA']);
+function geoFocusScale(country){
+  country=String(country||'').toUpperCase();
+  if(country==='US')return 1.32;
+  if(EUROPE_FOCUS.has(country))return 1.28;
+  return 1;
+}
+function geoScaleTransform(center,scale){
+  if(!center||scale===1)return null;
+  return 'translate('+center[0]+','+center[1]+') scale('+scale+') translate('+(-center[0])+','+(-center[1])+')';
+}
 var GEO_BASE='#161b22';
 var geoMapReady=false,geoMapLoading=false,geoCountryPaths=null,geoStatePaths=null,geoAnimFrame=null,geoMaxValue=0;
 var geoMapInView=false,geoPaintPending=false,geoObserverStarted=false;
@@ -1270,6 +1281,8 @@ async function initGeoMap(){
       // otherwise consume valuable map area at the bottom of the projection.
       if(code==='AQ'||String(f.properties&&f.properties.name||'').toLowerCase()==='antarctica')return;
       const p=svg.append('path').datum(f).attr('d',path).attr('class','geo-country').attr('fill',GEO_BASE).attr('data-country',code);
+      const countryScale=geoFocusScale(code);
+      if(countryScale>1)p.attr('class','geo-country geo-focus').attr('transform',geoScaleTransform(path.centroid(f),countryScale));
       if(code)geoCountryPaths.set(code,p);
       p.on('mousemove',function(evt){const v=(geoValueByCountry.get(code)||0);if(!code)return;geoMapTooltip(evt,geoRegionName(code),v);}).on('mouseleave',hideGeoMapTooltip);
     });
@@ -1277,6 +1290,7 @@ async function initGeoMap(){
     topojson.feature(us,us.objects.states).features.forEach(function(f){
       const code=US_STATE_CODES[f.properties.name]||'';
       const p=svg.append('path').datum(f).attr('d',path).attr('class','geo-state').attr('fill',GEO_BASE).attr('data-state',code);
+      p.attr('class','geo-state geo-focus').attr('transform',geoScaleTransform(path.centroid(f),1.18));
       if(code)geoStatePaths.set(code,p);
       p.on('mousemove',function(evt){const v=(geoValueByState.get('US|'+code)||0);geoMapTooltip(evt,geoFullName('US',code),v,'US state');}).on('mouseleave',hideGeoMapTooltip);
     });
