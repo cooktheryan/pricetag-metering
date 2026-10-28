@@ -148,10 +148,12 @@ tr.clickable{cursor:pointer}
 .user-map-row .user-wide-card .user-rank{width:100%;display:flex;gap:4px}
 .user-map-row .geo-section{margin-bottom:0;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;min-width:0}
 .user-map-row .geo-section .chart-head{margin-bottom:8px}
-.user-map-row .geo-card{max-width:none;margin:0;padding:0;border:0;grid-template-columns:minmax(0,1fr) 150px;gap:10px}
-.user-map-row .geo-wrap,#geo-map{height:270px}
-.user-map-row #geo-map{max-width:100%}
-.user-map-row .geo-side{font-size:10px}
+.user-map-row .geo-card{max-width:none;margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:10px}
+.user-map-row .geo-wrap{height:230px;width:100%}
+.user-map-row #geo-map{height:230px;width:100%;max-width:none}
+.user-map-row .geo-side{font-size:10px;display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;align-items:start}
+.user-map-row .geo-top{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));column-gap:12px;row-gap:4px}
+.user-map-row .geo-top .gt-title{grid-column:1/-1}
 
 .tl-toggle{display:flex;gap:4px;margin-bottom:12px}
 .tl-toggle button{background:var(--bg-card);color:var(--text2);border:1px solid var(--border);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px}
@@ -172,7 +174,7 @@ tr.clickable{cursor:pointer}
 .recent-scroll::-webkit-scrollbar-track{background:var(--bg-card)}
 .recent-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
-@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}.charts-row.three-col{grid-template-columns:1fr 1fr}.geo-card{grid-template-columns:minmax(0,1fr) 200px}.user-map-row .geo-card{grid-template-columns:minmax(0,1fr) 150px}}
+@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}.charts-row.three-col{grid-template-columns:1fr 1fr}.geo-card{grid-template-columns:minmax(0,1fr) 200px}.user-map-row .geo-card{grid-template-columns:1fr}.user-map-row .geo-top{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row,.charts-row.three-col,.charts-row.user-map-row{grid-template-columns:1fr}.geo-card,.user-map-row .geo-card{grid-template-columns:1fr}.geo-wrap,#geo-map,.user-map-row .geo-wrap{height:260px}.pie-split{flex-wrap:wrap}.pie-canvas{flex-basis:220px;margin:0 auto}.pie-side{width:100%}.user-wide-card .pie-split{gap:20px}.user-wide-card .pie-column,.user-map-row .user-wide-card .pie-column{flex-basis:300px;width:300px}.user-wide-card .pie-canvas,.user-map-row .user-wide-card .pie-canvas{width:300px!important;height:300px!important;max-width:300px!important;max-height:300px!important}.user-wide-card .user-rank{grid-template-columns:1fr}}
 .user-name{font-weight:600;line-height:1.2}
 .user-mail{font-size:10px;color:var(--text2);margin-top:1px}
@@ -1249,13 +1251,13 @@ async function initGeoMap(){
       fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(r=>r.json()),
       fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json').then(r=>r.json())
     ]);
-    const width=1000,height=500;
+    const width=1000,height=400;
     const svg=d3.select('#geo-map').attr('viewBox','0 0 '+width+' '+height).attr('preserveAspectRatio','xMidYMid meet');
     svg.selectAll('*').remove();
     // Focus on the populated operating regions rather than fitting the
     // entire globe. This removes most of Antarctica and open ocean while
     // retaining the Americas, Europe, Africa and Asia for the usage view.
-    const focusArea={type:'Polygon',coordinates:[[[-135,-55],[165,-55],[165,78],[-135,78],[-135,-55]]]};
+    const focusArea={type:'Polygon',coordinates:[[[-130,-48],[158,-48],[158,74],[-130,74],[-130,-48]]]};
     const projection=d3.geoNaturalEarth1().fitExtent([[12,12],[width-12,height-12]],focusArea);
     const path=d3.geoPath(projection);
     svg.append('path').datum({type:'Sphere'}).attr('d',path).attr('fill','#0d1117').attr('stroke','#2c3138').attr('stroke-width','.8');
