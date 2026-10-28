@@ -85,6 +85,7 @@ tr.clickable{cursor:pointer}
 .charts-row.three-col{grid-template-columns:repeat(3,minmax(0,1fr))}
 .charts-row.two-col{grid-template-columns:repeat(2,minmax(0,1fr))}
 .charts-row.user-wide{grid-template-columns:1fr}
+.charts-row.user-map-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:stretch}
 .charts-row.four-col{grid-template-columns:repeat(4,minmax(0,1fr))}
 .chart-box{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px}
 .chart-box canvas{max-height:280px}
@@ -139,6 +140,18 @@ tr.clickable{cursor:pointer}
 .user-wide-card .pie-side{max-width:720px}
 .user-wide-card .user-rank{width:min(720px,100%);display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));column-gap:28px;align-content:center}
 .user-wide-card .user-rank .gt-title{grid-column:1/-1}
+.user-map-row .user-wide-card{min-width:0}
+.user-map-row .user-wide-card .pie-split{min-height:300px;gap:12px}
+.user-map-row .user-wide-card .pie-column{flex:0 0 270px;width:270px}
+.user-map-row .user-wide-card .pie-canvas{width:270px!important;height:270px!important;max-width:270px!important;max-height:270px!important}
+.user-map-row .user-wide-card .pie-side{min-width:0}
+.user-map-row .user-wide-card .user-rank{width:100%;display:flex;gap:4px}
+.user-map-row .geo-section{margin-bottom:0;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;min-width:0}
+.user-map-row .geo-section .chart-head{margin-bottom:8px}
+.user-map-row .geo-card{max-width:none;margin:0;padding:0;border:0;grid-template-columns:minmax(0,1fr) 150px;gap:10px}
+.user-map-row .geo-wrap,#geo-map{height:270px}
+.user-map-row #geo-map{max-width:100%}
+.user-map-row .geo-side{font-size:10px}
 
 .tl-toggle{display:flex;gap:4px;margin-bottom:12px}
 .tl-toggle button{background:var(--bg-card);color:var(--text2);border:1px solid var(--border);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px}
@@ -159,8 +172,8 @@ tr.clickable{cursor:pointer}
 .recent-scroll::-webkit-scrollbar-track{background:var(--bg-card)}
 .recent-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
-@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}.charts-row.three-col{grid-template-columns:1fr 1fr}.geo-card{grid-template-columns:minmax(0,1fr) 200px}}
-@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row,.charts-row.three-col{grid-template-columns:1fr}.geo-card{grid-template-columns:1fr}.geo-wrap,#geo-map{height:260px}.pie-split{flex-wrap:wrap}.pie-canvas{flex-basis:220px;margin:0 auto}.pie-side{width:100%}.user-wide-card .pie-split{gap:20px}.user-wide-card .pie-column{flex-basis:300px;width:300px}.user-wide-card .pie-canvas{width:300px!important;height:300px!important;max-width:300px!important;max-height:300px!important}.user-wide-card .user-rank{grid-template-columns:1fr}}
+@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}.charts-row.three-col{grid-template-columns:1fr 1fr}.geo-card{grid-template-columns:minmax(0,1fr) 200px}.user-map-row .geo-card{grid-template-columns:minmax(0,1fr) 150px}}
+@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row,.charts-row.three-col,.charts-row.user-map-row{grid-template-columns:1fr}.geo-card,.user-map-row .geo-card{grid-template-columns:1fr}.geo-wrap,#geo-map,.user-map-row .geo-wrap{height:260px}.pie-split{flex-wrap:wrap}.pie-canvas{flex-basis:220px;margin:0 auto}.pie-side{width:100%}.user-wide-card .pie-split{gap:20px}.user-wide-card .pie-column,.user-map-row .user-wide-card .pie-column{flex-basis:300px;width:300px}.user-wide-card .pie-canvas,.user-map-row .user-wide-card .pie-canvas{width:300px!important;height:300px!important;max-width:300px!important;max-height:300px!important}.user-wide-card .user-rank{grid-template-columns:1fr}}
 .user-name{font-weight:600;line-height:1.2}
 .user-mail{font-size:10px;color:var(--text2);margin-top:1px}
 .country-flag{display:inline-block;margin-right:6px;font-size:15px;line-height:1;vertical-align:-1px}
@@ -433,7 +446,7 @@ tr.clickable{cursor:pointer}
   </div>
 </div>
 
-<div class="charts-row user-wide" id="bottom-analytics">
+<div class="charts-row two-col user-map-row" id="bottom-analytics">
   <div class="chart-box user-wide-card">
     <div class="chart-head">
       <h2>By User <span style="font-size:11px;color:var(--text2);font-weight:400">(top 10)</span></h2>
@@ -448,25 +461,24 @@ tr.clickable{cursor:pointer}
       <div class="pie-side"><div id="user-rank" class="user-rank"></div></div>
     </div>
   </div>
-</div>
-
-<div class="section geo-section">
-  <div class="chart-head">
-    <h2>Usage Geography <span style="font-size:12px;color:var(--text2);font-weight:400">(by country &amp; US state)</span></h2>
-    <span class="geo-note" id="geo-note">Loading map…</span>
-  </div>
-  <div class="geo-card">
-    <div class="geo-wrap">
-      <svg id="geo-map" role="img" aria-label="World map colored by usage"></svg>
-      <div class="geo-tooltip" id="geo-tooltip"></div>
+  <div class="section geo-section">
+    <div class="chart-head">
+      <h2>Usage Geography <span style="font-size:12px;color:var(--text2);font-weight:400">(by country &amp; US state)</span></h2>
+      <span class="geo-note" id="geo-note">Loading map…</span>
     </div>
-    <div class="geo-side">
-      <div class="geo-scale">
-        <span>Usage intensity</span>
-        <div class="gs-bar"></div>
-        <div class="gs-labels"><span>low</span><span>high</span></div>
+    <div class="geo-card">
+      <div class="geo-wrap">
+        <svg id="geo-map" role="img" aria-label="World map colored by usage"></svg>
+        <div class="geo-tooltip" id="geo-tooltip"></div>
       </div>
-      <div class="geo-top" id="geo-top"></div>
+      <div class="geo-side">
+        <div class="geo-scale">
+          <span>Usage intensity</span>
+          <div class="gs-bar"></div>
+          <div class="gs-labels"><span>low</span><span>high</span></div>
+        </div>
+        <div class="geo-top" id="geo-top"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -572,6 +584,13 @@ const COLORS=['#58a6ff','#3fb950','#d29922','#f85149','#bc8cff','#39d2c0','#f778
 
 function fmtN(n){if(n>=1e9)return(n/1e9).toFixed(1)+'B';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n.toString()}
 function fmtC(n){if(n==null)return'$0.00';if(n!==0&&Math.abs(n)<0.01)return'$'+n.toFixed(4);return'$'+n.toFixed(2)}
+function fmtCostLabel(n){
+  n=Number(n)||0;
+  var sign=n<0?'-':''; n=Math.abs(n);
+  if(n>=1000000)return sign+'$'+(n/1000000).toFixed(1)+'M';
+  if(n>=1000)return sign+'$'+(n/1000).toFixed(1)+'K';
+  return sign+'$'+Math.round(n);
+}
 function fmtGroup(g){if(!g)return'';try{var a=JSON.parse(g);return Array.isArray(a)?a.join(', '):g;}catch(e){return g.replace(/^\["|"\]$/g,'').replace(/","/g,', ');}}
 function countryFlag(code){
   const normalized=String(code||'').trim().toUpperCase();
@@ -1153,13 +1172,13 @@ function renderToolChart(){
 function renderCostCenterChart(){
   const data=topFiveItems(cachedCostCenters||[],function(d){return d.cost_usd||0;},function(d){return d.cost_center_description||'Unknown';},9);
   const vals=data.map(d=>d.value);
-  const labels=data.map(d=>`${d.label} — ${fmtC(d.value)}`);
+  const labels=data.map(d=>`${fmtCostLabel(d.value)} — ${d.label}`);
   const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
   if(costCenterChart){
     costCenterChart.data.labels=labels;
     costCenterChart.data.datasets[0].data=vals;
     costCenterChart.data.datasets[0].backgroundColor=colors;
-    costCenterChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].label+': '+fmtC(ctx.raw)+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
+    costCenterChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return fmtCostLabel(ctx.raw)+' — '+data[ctx.dataIndex].label+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
     costCenterChart.update();
     renderPieLegend('cost-center-legend',labels,colors);
     return;
@@ -1167,7 +1186,7 @@ function renderCostCenterChart(){
   costCenterChart=new Chart(document.getElementById('cost-center-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
     options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
-      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].label+': '+fmtC(ctx.raw)+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
+      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return fmtCostLabel(ctx.raw)+' — '+data[ctx.dataIndex].label+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
   renderPieLegend('cost-center-legend',labels,colors);
@@ -1232,7 +1251,11 @@ async function initGeoMap(){
     const width=1000,height=500;
     const svg=d3.select('#geo-map').attr('viewBox','0 0 '+width+' '+height).attr('preserveAspectRatio','xMidYMid meet');
     svg.selectAll('*').remove();
-    const projection=d3.geoNaturalEarth1().fitExtent([[12,12],[width-12,height-12]],{type:'Sphere'});
+    // Focus on the populated operating regions rather than fitting the
+    // entire globe. This removes most of Antarctica and open ocean while
+    // retaining the Americas, Europe, Africa and Asia for the usage view.
+    const focusArea={type:'Polygon',coordinates:[[[-135,-55],[165,-55],[165,78],[-135,78],[-135,-55]]]};
+    const projection=d3.geoNaturalEarth1().fitExtent([[12,12],[width-12,height-12]],focusArea);
     const path=d3.geoPath(projection);
     svg.append('path').datum({type:'Sphere'}).attr('d',path).attr('fill','#0d1117').attr('stroke','#2c3138').attr('stroke-width','.8');
     geoCountryPaths=new Map();
