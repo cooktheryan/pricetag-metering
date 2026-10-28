@@ -45,7 +45,7 @@ header h1 span{color:var(--text2);font-weight:400;font-size:14px;margin-left:8px
 h2{font-size:16px;font-weight:600;margin-bottom:12px;color:var(--text)}
 h2 .filter-tag{font-size:12px;color:var(--blue);background:rgba(88,166,255,.15);padding:2px 8px;border-radius:4px;margin-left:8px;cursor:pointer}
 
-.three-col{grid-template-columns:1fr 1fr 1fr!important}
+.three-col{grid-template-columns:repeat(3,minmax(0,1fr))}
 .three-col .chart-box canvas{max-height:220px}
 .four-col{grid-template-columns:repeat(4,minmax(0,1fr));align-items:start}
 .four-col .chart-box{min-width:0;padding:12px;display:flex;flex-direction:column}
@@ -82,12 +82,15 @@ tr.clickable{cursor:pointer}
 .users-pager button:disabled{opacity:.4;cursor:not-allowed}
 
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.charts-row.three-col{grid-template-columns:repeat(3,minmax(0,1fr))}
 .charts-row.two-col{grid-template-columns:repeat(2,minmax(0,1fr))}
+.charts-row.user-wide{grid-template-columns:1fr}
 .charts-row.four-col{grid-template-columns:repeat(4,minmax(0,1fr))}
 .chart-box{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px}
 .chart-box canvas{max-height:280px}
 .pie-split{display:flex;align-items:center;gap:18px;min-height:240px}
 .pie-canvas{flex:0 0 220px;width:220px;height:220px;display:block}
+.pie-column{flex:0 0 220px;width:220px;display:flex;flex-direction:column;align-items:stretch}
 .pie-side{flex:1;min-width:0;align-self:stretch;display:flex;flex-direction:column;justify-content:center}
 .pie-legend.vertical{display:flex;flex-direction:column;gap:5px;margin:0;padding:0;min-width:0}
 .pie-legend.vertical .pie-legend-item{display:flex;align-items:center;gap:8px;min-width:0;font-size:12px;line-height:16px}
@@ -96,13 +99,17 @@ tr.clickable{cursor:pointer}
 .hosted-split{margin:0 0 12px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.015)}
 .hosted-split .hs-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:11px;color:var(--text2)}
 .hosted-split .hs-head b{font-size:13px;color:var(--green)}
-.hosted-split .hs-head .vendor{color:var(--orange);font-weight:700}
+.hosted-split .hs-head .frontier{color:var(--orange);font-weight:700}
 .hosted-split .hs-track{height:6px;border-radius:3px;background:var(--bg-hover);overflow:hidden;margin-top:7px;display:flex}
 .hosted-split .hs-hosted{height:100%;background:var(--green);transition:width .7s ease}
 .hosted-split .hs-vendor{height:100%;background:var(--orange);transition:width .7s ease}
-.geo-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px;display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:14px;align-items:stretch}
-.geo-wrap{position:relative;min-width:0;background:radial-gradient(circle at 50% 45%,rgba(88,166,255,.055),transparent 62%);border-radius:8px;overflow:hidden}
-#geo-map{width:100%;height:auto;display:block;min-height:300px}
+.model-hosted-split{margin:10px 0 0;padding:7px 8px}
+.model-hosted-split .hs-head{font-size:9px;gap:5px}
+.model-hosted-split .hs-head b,.model-hosted-split .hs-head .frontier{font-size:10px}
+.model-hosted-split .hs-track{height:4px;margin-top:5px}
+.geo-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px;display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:14px;align-items:stretch;max-width:1120px;margin:0 auto}
+.geo-wrap{position:relative;min-width:0;height:300px;background:radial-gradient(circle at 50% 45%,rgba(88,166,255,.055),transparent 62%);border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+#geo-map{width:100%;max-width:820px;height:300px;display:block}
 #geo-map .geo-country{stroke:#0b0e11;stroke-width:.5;vector-effect:non-scaling-stroke}
 #geo-map .geo-state{stroke:#0b0e11;stroke-width:.4;vector-effect:non-scaling-stroke;pointer-events:all}
 #geo-map .geo-country:hover{stroke:#e0e3e8;stroke-width:.9}
@@ -126,6 +133,12 @@ tr.clickable{cursor:pointer}
 .user-rank .ur-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .user-rank .ur-sub{font-size:10px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .user-rank .ur-val{font-variant-numeric:tabular-nums;color:var(--text2);white-space:nowrap}
+.user-wide-card .pie-split{min-height:390px;justify-content:center;gap:56px}
+.user-wide-card .pie-column{flex:0 0 360px;width:360px}
+.user-wide-card .pie-canvas{width:360px!important;height:360px!important;max-width:360px!important;max-height:360px!important}
+.user-wide-card .pie-side{max-width:720px}
+.user-wide-card .user-rank{width:min(720px,100%);display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));column-gap:28px;align-content:center}
+.user-wide-card .user-rank .gt-title{grid-column:1/-1}
 
 .tl-toggle{display:flex;gap:4px;margin-bottom:12px}
 .tl-toggle button{background:var(--bg-card);color:var(--text2);border:1px solid var(--border);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px}
@@ -146,8 +159,8 @@ tr.clickable{cursor:pointer}
 .recent-scroll::-webkit-scrollbar-track{background:var(--bg-card)}
 .recent-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
-@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}.geo-card{grid-template-columns:minmax(0,1fr) 200px}}
-@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row{grid-template-columns:1fr}.geo-card{grid-template-columns:1fr}.pie-split{flex-wrap:wrap}.pie-canvas{flex-basis:220px;margin:0 auto}.pie-side{width:100%}}
+@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}.charts-row.three-col{grid-template-columns:1fr 1fr}.geo-card{grid-template-columns:minmax(0,1fr) 200px}}
+@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row,.charts-row.three-col{grid-template-columns:1fr}.geo-card{grid-template-columns:1fr}.geo-wrap,#geo-map{height:260px}.pie-split{flex-wrap:wrap}.pie-canvas{flex-basis:220px;margin:0 auto}.pie-side{width:100%}.user-wide-card .pie-split{gap:20px}.user-wide-card .pie-column{flex-basis:300px;width:300px}.user-wide-card .pie-canvas{width:300px!important;height:300px!important;max-width:300px!important;max-height:300px!important}.user-wide-card .user-rank{grid-template-columns:1fr}}
 .user-name{font-weight:600;line-height:1.2}
 .user-mail{font-size:10px;color:var(--text2);margin-top:1px}
 .country-flag{display:inline-block;margin-right:6px;font-size:15px;line-height:1;vertical-align:-1px}
@@ -359,7 +372,7 @@ tr.clickable{cursor:pointer}
   <div class="kpi"><span class="kpi-label">Active Users</span><span id="kpi-users" class="kpi-value purple">--</span></div>
 </div>
 
-<div class="charts-row two-col">
+<div class="charts-row three-col">
   <div class="chart-box">
     <div class="chart-head">
       <h2>By Model</h2>
@@ -369,9 +382,11 @@ tr.clickable{cursor:pointer}
         <button data-mm="requests">Requests</button>
       </div>
     </div>
-    <div class="hosted-split" id="model-hosted-split"></div>
     <div class="pie-split">
-      <canvas id="token-chart" class="pie-canvas" width="220" height="220"></canvas>
+      <div class="pie-column">
+        <canvas id="token-chart" class="pie-canvas" width="220" height="220"></canvas>
+        <div class="hosted-split model-hosted-split" id="model-hosted-split"></div>
+      </div>
       <div class="pie-side"><div id="model-legend" class="pie-legend vertical"></div></div>
     </div>
   </div>
@@ -379,31 +394,18 @@ tr.clickable{cursor:pointer}
     <div class="chart-head">
       <h2>By Tool <span style="font-size:11px;color:var(--text2);font-weight:400">(tokens)</span></h2>
     </div>
-    <div class="hosted-split" id="tool-hosted-split"></div>
     <div class="pie-split">
       <canvas id="tool-chart" class="pie-canvas" width="220" height="220"></canvas>
       <div class="pie-side"><div id="tool-legend" class="pie-legend vertical"></div></div>
     </div>
   </div>
-</div>
-
-<div class="section geo-section">
-  <div class="chart-head">
-    <h2>Usage Geography <span style="font-size:12px;color:var(--text2);font-weight:400">(by country &amp; US state)</span></h2>
-    <span class="geo-note" id="geo-note">Loading map…</span>
-  </div>
-  <div class="geo-card">
-    <div class="geo-wrap">
-      <svg id="geo-map" role="img" aria-label="World map colored by usage"></svg>
-      <div class="geo-tooltip" id="geo-tooltip"></div>
+  <div class="chart-box">
+    <div class="chart-head">
+      <h2>By Cost Center <span style="font-size:11px;color:var(--text2);font-weight:400">(cost)</span></h2>
     </div>
-    <div class="geo-side">
-      <div class="geo-scale">
-        <span>Usage intensity</span>
-        <div class="gs-bar"></div>
-        <div class="gs-labels"><span>low</span><span>high</span></div>
-      </div>
-      <div class="geo-top" id="geo-top"></div>
+    <div class="pie-split">
+      <canvas id="cost-center-chart" class="pie-canvas" width="220" height="220"></canvas>
+      <div class="pie-side"><div id="cost-center-legend" class="pie-legend vertical"></div></div>
     </div>
   </div>
 </div>
@@ -431,8 +433,8 @@ tr.clickable{cursor:pointer}
   </div>
 </div>
 
-<div class="charts-row two-col" id="bottom-analytics">
-  <div class="chart-box">
+<div class="charts-row user-wide" id="bottom-analytics">
+  <div class="chart-box user-wide-card">
     <div class="chart-head">
       <h2>By User <span style="font-size:11px;color:var(--text2);font-weight:400">(top 10)</span></h2>
       <div class="tl-toggle" id="user-metric-toggle" style="margin-bottom:0">
@@ -442,17 +444,29 @@ tr.clickable{cursor:pointer}
       </div>
     </div>
     <div class="pie-split">
-      <canvas id="user-cost-chart" class="pie-canvas" width="220" height="220"></canvas>
+      <div class="pie-column"><canvas id="user-cost-chart" class="pie-canvas user-big-canvas" width="360" height="360"></canvas></div>
       <div class="pie-side"><div id="user-rank" class="user-rank"></div></div>
     </div>
   </div>
-  <div class="chart-box">
-    <div class="chart-head">
-      <h2>By Cost Center <span style="font-size:11px;color:var(--text2);font-weight:400">(cost)</span></h2>
+</div>
+
+<div class="section geo-section">
+  <div class="chart-head">
+    <h2>Usage Geography <span style="font-size:12px;color:var(--text2);font-weight:400">(by country &amp; US state)</span></h2>
+    <span class="geo-note" id="geo-note">Loading map…</span>
+  </div>
+  <div class="geo-card">
+    <div class="geo-wrap">
+      <svg id="geo-map" role="img" aria-label="World map colored by usage"></svg>
+      <div class="geo-tooltip" id="geo-tooltip"></div>
     </div>
-    <div class="pie-split">
-      <canvas id="cost-center-chart" class="pie-canvas" width="220" height="220"></canvas>
-      <div class="pie-side"><div id="cost-center-legend" class="pie-legend vertical"></div></div>
+    <div class="geo-side">
+      <div class="geo-scale">
+        <span>Usage intensity</span>
+        <div class="gs-bar"></div>
+        <div class="gs-labels"><span>low</span><span>high</span></div>
+      </div>
+      <div class="geo-top" id="geo-top"></div>
     </div>
   </div>
 </div>
@@ -895,12 +909,10 @@ function hostedSplitData(){
 }
 function renderHostedSplit(){
   var d=hostedSplitData();
-  var html='<div class="hs-head"><span>Hosted model usage <b>'+d.pct+'%</b></span><span class="vendor">Vendor '+(d.total>0?100-d.pct:0)+'%</span></div>'+
-    '<div class="hs-track" title="Hosted '+fmtN(d.hosted)+' tokens · Vendor '+fmtN(d.vendor)+' tokens"><div class="hs-hosted" style="width:'+d.pct+'%"></div><div class="hs-vendor" style="width:'+(d.total>0?100-d.pct:0)+'%"></div></div>';
-  ['model-hosted-split','tool-hosted-split'].forEach(function(id){
-    var el=document.getElementById(id);
-    if(el)el.innerHTML=html;
-  });
+  var html='<div class="hs-head"><span>Hosted <b>'+d.pct+'%</b></span><span class="frontier">Frontier '+(d.total>0?100-d.pct:0)+'%</span></div>'+
+    '<div class="hs-track" title="Hosted '+fmtN(d.hosted)+' tokens · Frontier '+fmtN(d.vendor)+' tokens"><div class="hs-hosted" style="width:'+d.pct+'%"></div><div class="hs-vendor" style="width:'+(d.total>0?100-d.pct:0)+'%"></div></div>';
+  var el=document.getElementById('model-hosted-split');
+  if(el)el.innerHTML=html;
 }
 function renderSavings(){
   populateSavingsRef();
@@ -1098,8 +1110,8 @@ function renderUserCostChart(){
     return;
   }
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
-    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
-    options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
+    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:160}]},
+    options:{responsive:false,width:360,height:360,radius:160,plugins:{legend:{display:false},
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
