@@ -345,6 +345,17 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 	if email, ok := user.Tags["email"].(string); ok && strings.TrimSpace(email) != "" {
 		username = email
 	}
+	// The directory is the authorization source, but the IdP is the freshest
+	// source for profile attributes. Persist every returned claim as a merged
+	// tag so group membership, state, cost center and the rest are available
+	// to the dashboard without waiting for the next LDAP sync. Omitted claims
+	// leave the existing tag untouched; login still never provisions or
+	// elevates a user from claims alone.
+	if err := h.persistOIDCProfile(r.Context(), user.UserID, claims); err != nil {
+		slog.Error("persist OIDC profile failed", "username", username, "user_id", user.UserID, "error", err)
+		http.Error(w, "SSO profile could not be saved", http.StatusInternalServerError)
+		return
+	}
 	if h.cfg.OIDC.TestLogin && state.Persona == "new-user" {
 		if resetErr := h.orgStore.ResetAgreement(r.Context(), user.UserID, "terms", h.cfg.Onboarding.TermsVersion); resetErr != nil {
 			slog.Warn("local test persona agreement reset failed", "username", username, "error", resetErr)
@@ -357,6 +368,66 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	http.Redirect(w, r, h.loginDestination(r, username, claims.Groups), http.StatusFound)
+}
+
+// persistOIDCProfile merges the IdP's profile claims into partner-user tags.
+// The stable identity fields are still validated before this is called; this
+// only enriches the directory record. Tag keys use the directory's snake_case
+// convention (the raw camelCase rhatUUID claim maps to rhat_uuid).
+func (h *AuthHandler) persistOIDCProfile(ctx context.Context, userID string, claims oidcClaims) error {
+	tags := oidcProfileTags(claims)
+	if len(tags) == 0 {
+		return nil
+	}
+	_, err := h.orgStore.PatchPartnerUser(ctx, "oidc", userID, tags)
+	return err
+}
+
+func oidcProfileTags(claims oidcClaims) map[string]any {
+	tags := make(map[string]any, 20)
+	add := func(key, value string) {
+		if value = strings.TrimSpace(value); value != "" {
+			tags[key] = value
+		}
+	}
+	add("email", claims.Email)
+	add("first_name", claims.GivenName)
+	add("last_name", claims.FamilyName)
+	add("preferred_username", claims.Username)
+	add("oidc_sub", claims.Subject)
+	add("rhat_uuid", claims.RhatUUID)
+	// Country and state are rendered on the usage map, so normalize their
+	// casing here rather than at every read site.
+	add("country", strings.ToUpper(strings.TrimSpace(claims.Country)))
+	add("state", strings.ToUpper(strings.TrimSpace(claims.State)))
+	add("region", claims.Region)
+	add("manager_rhat_uuid", claims.Manager)
+	add("cost_center", claims.CostCenter)
+	add("cost_center_description", claims.CostCenterDescription)
+	add("employee_type", claims.EmployeeType)
+	add("organization", claims.Organization)
+	add("termination_date", claims.TerminationDate)
+	switch active := claims.Active.(type) {
+	case nil:
+	case string:
+		add("oidc_active", active)
+	default:
+		add("oidc_active", fmt.Sprint(active))
+	}
+	groups := make([]string, 0, len(claims.Groups))
+	seen := make(map[string]bool, len(claims.Groups))
+	for _, group := range claims.Groups {
+		group = strings.TrimSpace(group)
+		if group == "" || seen[group] {
+			continue
+		}
+		seen[group] = true
+		groups = append(groups, group)
+	}
+	if len(groups) > 0 {
+		tags["groups"] = groups
+	}
+	return tags
 }
 
 func mergeOIDCClaims(dst, src *oidcClaims) {

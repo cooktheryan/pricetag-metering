@@ -644,6 +644,29 @@ type ToolSummary struct {
 	CostUSD     float64 `json:"cost_usd"`
 }
 
+// GeoSummary is one country/state bucket for the usage map. State is empty
+// when the directory has no state on file; country is "UNKNOWN" when neither
+// the directory nor the event can resolve an ISO country.
+type GeoSummary struct {
+	Country     string  `json:"country"`
+	State       string  `json:"state,omitempty"`
+	Requests    int     `json:"requests"`
+	TotalTokens int64   `json:"total_tokens"`
+	UserCount   int     `json:"user_count"`
+	CostUSD     float64 `json:"cost_usd"`
+}
+
+// CostCenterSummary is one cost-center bucket. CostCenterDescription is the
+// human label from the directory (cost_center_description) and falls back to
+// the raw cost_center code, then "Unknown".
+type CostCenterSummary struct {
+	CostCenterDescription string  `json:"cost_center_description"`
+	Requests              int     `json:"requests"`
+	TotalTokens           int64   `json:"total_tokens"`
+	UserCount             int     `json:"user_count"`
+	CostUSD               float64 `json:"cost_usd"`
+}
+
 type TimelineBucket struct {
 	Bucket      time.Time `json:"bucket"`
 	Series      string    `json:"series"`
@@ -1207,6 +1230,96 @@ func (s *Store) GetDashboardTools(ctx context.Context, since, until time.Time, g
 	return result, nil
 }
 
+// GetDashboardGeo aggregates usage by directory country and state. It joins
+// the small hourly rollup when available; the raw fallback is the same shape.
+// The directory join is a primary-key lookup per usage username, so this adds
+// no full partner_users scan to the dashboard refresh.
+func (s *Store) GetDashboardGeo(ctx context.Context, since, until time.Time, group, user, model string) ([]GeoSummary, error) {
+	rollup := s.rollupsLive()
+	countryExpr := `COALESCE(NULLIF(UPPER(BTRIM(pu.tags->>'country')), ''), 'UNKNOWN')`
+	stateExpr := `COALESCE(NULLIF(UPPER(BTRIM(pu.tags->>'state')), ''), '')`
+	from := `usage_events e
+		LEFT JOIN model_pricing p ON e.model = p.model
+		LEFT JOIN partner_user_logins pul ON pul.username = e.username AND pul.is_current
+		LEFT JOIN partner_users pu ON pu.user_id = pul.user_id`
+	window := `e.timestamp >= $1 AND e.timestamp < $2`
+	requests, cost := `COUNT(*)`, fmt.Sprintf(`COALESCE(ROUND(SUM(%s)::numeric, 2), 0)`, costUSDExpr)
+	if rollup {
+		from = `usage_hourly e
+			LEFT JOIN partner_user_logins pul ON pul.username = e.username AND pul.is_current
+			LEFT JOIN partner_users pu ON pu.user_id = pul.user_id`
+		window = `e.hour >= $1 AND e.hour < $2`
+		requests, cost = `COALESCE(SUM(e.requests), 0)`, `COALESCE(ROUND(SUM(e.cost_usd)::numeric, 2), 0)`
+	}
+	query := fmt.Sprintf(`
+		SELECT %s AS country, %s AS state, %s,
+			COALESCE(SUM(e.total_tokens), 0), COUNT(DISTINCT e.username), %s
+		FROM %s
+		WHERE %s AND ($3 = '' OR e.group_name = $3)
+			AND ($4 = '' OR e.username = ANY(string_to_array($4, ',')))
+			AND ($5 = '' OR e.model = $5)
+		GROUP BY country, state
+		ORDER BY SUM(e.total_tokens) DESC`, countryExpr, stateExpr, requests, cost, from, window)
+	rows, err := s.reader().QueryContext(ctx, query, since, until, group, user, model)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []GeoSummary
+	for rows.Next() {
+		var item GeoSummary
+		if err := rows.Scan(&item.Country, &item.State, &item.Requests, &item.TotalTokens, &item.UserCount, &item.CostUSD); err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
+// GetDashboardCostCenters aggregates usage by the directory cost-center
+// description, using the same rollup/raw gate as the other dashboard charts.
+func (s *Store) GetDashboardCostCenters(ctx context.Context, since, until time.Time, group, user, model string) ([]CostCenterSummary, error) {
+	rollup := s.rollupsLive()
+	centerExpr := `COALESCE(NULLIF(BTRIM(pu.tags->>'cost_center_description'), ''),
+		NULLIF(BTRIM(pu.tags->>'cost_center'), ''), 'Unknown')`
+	from := `usage_events e
+		LEFT JOIN model_pricing p ON e.model = p.model
+		LEFT JOIN partner_user_logins pul ON pul.username = e.username AND pul.is_current
+		LEFT JOIN partner_users pu ON pu.user_id = pul.user_id`
+	window := `e.timestamp >= $1 AND e.timestamp < $2`
+	requests, cost := `COUNT(*)`, fmt.Sprintf(`COALESCE(ROUND(SUM(%s)::numeric, 2), 0)`, costUSDExpr)
+	if rollup {
+		from = `usage_hourly e
+			LEFT JOIN partner_user_logins pul ON pul.username = e.username AND pul.is_current
+			LEFT JOIN partner_users pu ON pu.user_id = pul.user_id`
+		window = `e.hour >= $1 AND e.hour < $2`
+		requests, cost = `COALESCE(SUM(e.requests), 0)`, `COALESCE(ROUND(SUM(e.cost_usd)::numeric, 2), 0)`
+	}
+	query := fmt.Sprintf(`
+		SELECT %s AS cost_center, %s,
+			COALESCE(SUM(e.total_tokens), 0), COUNT(DISTINCT e.username), %s
+		FROM %s
+		WHERE %s AND ($3 = '' OR e.group_name = $3)
+			AND ($4 = '' OR e.username = ANY(string_to_array($4, ',')))
+			AND ($5 = '' OR e.model = $5)
+		GROUP BY cost_center
+		ORDER BY %s DESC`, centerExpr, requests, cost, from, window, cost)
+	rows, err := s.reader().QueryContext(ctx, query, since, until, group, user, model)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []CostCenterSummary
+	for rows.Next() {
+		var item CostCenterSummary
+		if err := rows.Scan(&item.CostCenterDescription, &item.Requests, &item.TotalTokens, &item.UserCount, &item.CostUSD); err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
 func dashboardTool(userAgent string) string {
 	ua := strings.ToLower(strings.TrimSpace(userAgent))
 	switch {
@@ -1222,6 +1335,10 @@ func dashboardTool(userAgent string) string {
 		return "Charm-Crush"
 	case strings.HasPrefix(ua, "openai/"):
 		return "OpenAI"
+	case strings.HasPrefix(ua, "gemini-cli/"):
+		return "Gemini CLI"
+	case strings.HasPrefix(ua, "aider/"):
+		return "Aider"
 	case strings.HasPrefix(ua, "omp/"):
 		return "omp"
 	case strings.HasPrefix(ua, "curl/"):
@@ -1284,6 +1401,7 @@ type RecentEvent struct {
 	// DisplayName is "First Last" from the partner directory; empty when unknown.
 	DisplayName         string  `json:"display_name,omitempty"`
 	Country             string  `json:"country,omitempty"`
+	State               string  `json:"state,omitempty"`
 	GroupName           string  `json:"group_name"`
 	Model               string  `json:"model"`
 	Provider            string  `json:"provider"`
@@ -1306,7 +1424,7 @@ func (s *Store) GetRecentEvents(ctx context.Context, limit int, group, user, mod
 		limit = 20
 	}
 	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
-		SELECT e.timestamp, e.username, %s, COALESCE(pu.tags->>'country',''), COALESCE(e.group_name,''), e.model, COALESCE(e.provider,''),
+		SELECT e.timestamp, e.username, %s, COALESCE(pu.tags->>'country',''), COALESCE(pu.tags->>'state',''), COALESCE(e.group_name,''), e.model, COALESCE(e.provider,''),
 			e.prompt_tokens, e.completion_tokens, e.total_tokens,
 			COALESCE(e.cached_input_tokens, 0), COALESCE(e.cache_creation_tokens, 0),
 			COALESCE(ROUND((%s)::numeric, 4), 0),
@@ -1329,7 +1447,7 @@ func (s *Store) GetRecentEvents(ctx context.Context, limit int, group, user, mod
 	for rows.Next() {
 		var r RecentEvent
 		var displayName sql.NullString
-		if err := rows.Scan(&r.Timestamp, &r.Username, &displayName, &r.Country, &r.GroupName, &r.Model, &r.Provider, &r.PromptTokens, &r.CompletionTokens, &r.TotalTokens, &r.CachedInputTokens, &r.CacheCreationTokens, &r.CostUSD, &r.UserAgent, &r.StatusCode); err != nil {
+		if err := rows.Scan(&r.Timestamp, &r.Username, &displayName, &r.Country, &r.State, &r.GroupName, &r.Model, &r.Provider, &r.PromptTokens, &r.CompletionTokens, &r.TotalTokens, &r.CachedInputTokens, &r.CacheCreationTokens, &r.CostUSD, &r.UserAgent, &r.StatusCode); err != nil {
 			return nil, err
 		}
 		r.DisplayName = displayName.String

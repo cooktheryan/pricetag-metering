@@ -18,7 +18,7 @@ DB_URL="postgres://metering:metering-oidc-local@localhost:15432/metering?sslmode
 mkdir -p "$STATE"
 
 stop_all() {
-  for name in metering oidc-mock; do
+  for name in metering oidc-mock live-traffic; do
     pid_file="$STATE/${name}.pid"
     if [[ -f "$pid_file" ]]; then
       pid="$(cat "$pid_file")"
@@ -109,6 +109,12 @@ echo "==> seeding local personas"
 COMPOSE_PROJECT_NAME="$PROJECT" COMPOSE_FILE="$COMPOSE_FILE" bash "$ROOT/tools/local/bootstrap.sh" >/dev/null
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T postgres \
   psql -q -U metering -d metering < "$ROOT/tools/local/seed-onboarding.sql"
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T postgres \
+  psql -q -U metering -d metering < "$ROOT/tools/local/seed-dashboard-demo.sql"
+
+echo "==> starting synthetic live traffic"
+nohup bash "$ROOT/tools/local/live-demo-traffic.sh" >"$STATE/live-traffic.log" 2>&1 &
+echo $! >"$STATE/live-traffic.pid"
 
 cat <<EOF
 
@@ -128,6 +134,6 @@ EnMaaS local demo is running.
     no-group          only technical realm roles → group block
     admin             super-admin (existing /dashboard)
 
-  Logs: $STATE/metering.log · $STATE/oidc-mock.log
+  Logs: $STATE/metering.log · $STATE/oidc-mock.log · $STATE/live-traffic.log
   Stop: $ROOT/tools/local/start-local.sh stop
 EOF

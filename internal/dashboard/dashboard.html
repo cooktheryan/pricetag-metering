@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>EnMaaS</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -80,9 +82,50 @@ tr.clickable{cursor:pointer}
 .users-pager button:disabled{opacity:.4;cursor:not-allowed}
 
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.charts-row.two-col{grid-template-columns:repeat(2,minmax(0,1fr))}
 .charts-row.four-col{grid-template-columns:repeat(4,minmax(0,1fr))}
 .chart-box{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px}
 .chart-box canvas{max-height:280px}
+.pie-split{display:flex;align-items:center;gap:18px;min-height:240px}
+.pie-canvas{flex:0 0 220px;width:220px;height:220px;display:block}
+.pie-side{flex:1;min-width:0;align-self:stretch;display:flex;flex-direction:column;justify-content:center}
+.pie-legend.vertical{display:flex;flex-direction:column;gap:5px;margin:0;padding:0;min-width:0}
+.pie-legend.vertical .pie-legend-item{display:flex;align-items:center;gap:8px;min-width:0;font-size:12px;line-height:16px}
+.pie-legend.vertical .pie-legend-swatch{width:12px;height:12px;border-radius:3px;flex:0 0 12px}
+.pie-legend.vertical .pie-legend-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hosted-split{margin:0 0 12px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.015)}
+.hosted-split .hs-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:11px;color:var(--text2)}
+.hosted-split .hs-head b{font-size:13px;color:var(--green)}
+.hosted-split .hs-head .vendor{color:var(--orange);font-weight:700}
+.hosted-split .hs-track{height:6px;border-radius:3px;background:var(--bg-hover);overflow:hidden;margin-top:7px;display:flex}
+.hosted-split .hs-hosted{height:100%;background:var(--green);transition:width .7s ease}
+.hosted-split .hs-vendor{height:100%;background:var(--orange);transition:width .7s ease}
+.geo-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px;display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:14px;align-items:stretch}
+.geo-wrap{position:relative;min-width:0;background:radial-gradient(circle at 50% 45%,rgba(88,166,255,.055),transparent 62%);border-radius:8px;overflow:hidden}
+#geo-map{width:100%;height:auto;display:block;min-height:300px}
+#geo-map .geo-country{stroke:#0b0e11;stroke-width:.5;vector-effect:non-scaling-stroke}
+#geo-map .geo-state{stroke:#0b0e11;stroke-width:.4;vector-effect:non-scaling-stroke;pointer-events:all}
+#geo-map .geo-country:hover{stroke:#e0e3e8;stroke-width:.9}
+.geo-tooltip{position:absolute;pointer-events:none;display:none;background:#0d1117;border:1px solid var(--border);border-radius:6px;padding:6px 9px;font-size:11px;line-height:1.45;box-shadow:0 6px 20px rgba(0,0,0,.55);z-index:5;white-space:nowrap;color:var(--text)}
+.geo-side{display:flex;flex-direction:column;gap:10px;min-width:0}
+.geo-scale{font-size:11px;color:var(--text2)}
+.geo-scale .gs-bar{height:8px;border-radius:4px;margin:5px 0 3px;background:linear-gradient(90deg,#0e4429,#26a641,#d29922,#f85149)}
+.geo-scale .gs-labels{display:flex;justify-content:space-between;font-size:10px}
+.geo-top{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden}
+.geo-top .gt-title{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text2);font-weight:700}
+.geo-top .gt-row{display:flex;align-items:center;gap:7px;font-size:11px;min-width:0}
+.geo-top .gt-swatch{width:9px;height:9px;border-radius:50%;flex:0 0 9px}
+.geo-top .gt-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.geo-top .gt-val{color:var(--text2);font-variant-numeric:tabular-nums}
+.geo-note{font-size:11px;color:var(--text2)}
+.geo-flash{animation:geoFlash 1.9s ease-out}
+@keyframes geoFlash{0%{filter:brightness(2.8) drop-shadow(0 0 7px var(--geo-flash-color,#fff));stroke:var(--geo-flash-color,#fff);stroke-width:1.6}45%{filter:brightness(1.5) drop-shadow(0 0 4px var(--geo-flash-color,#fff));stroke:var(--geo-flash-color,#fff);stroke-width:1}100%{filter:none;stroke:#0b0e11;stroke-width:.5}}
+.user-rank{display:flex;flex-direction:column;gap:5px;min-width:0}
+.user-rank .ur-row{display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:8px;font-size:12px;line-height:17px}
+.user-rank .ur-rank{color:var(--text2);font-size:10px;font-variant-numeric:tabular-nums;text-align:right}
+.user-rank .ur-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-rank .ur-sub{font-size:10px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user-rank .ur-val{font-variant-numeric:tabular-nums;color:var(--text2);white-space:nowrap}
 
 .tl-toggle{display:flex;gap:4px;margin-bottom:12px}
 .tl-toggle button{background:var(--bg-card);color:var(--text2);border:1px solid var(--border);padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px}
@@ -103,8 +146,8 @@ tr.clickable{cursor:pointer}
 .recent-scroll::-webkit-scrollbar-track{background:var(--bg-card)}
 .recent-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
-@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}}
-@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row{grid-template-columns:1fr}}
+@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr}.geo-card{grid-template-columns:minmax(0,1fr) 200px}}
+@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr)}.charts-row{grid-template-columns:1fr}.geo-card{grid-template-columns:1fr}.pie-split{flex-wrap:wrap}.pie-canvas{flex-basis:220px;margin:0 auto}.pie-side{width:100%}}
 .user-name{font-weight:600;line-height:1.2}
 .user-mail{font-size:10px;color:var(--text2);margin-top:1px}
 .country-flag{display:inline-block;margin-right:6px;font-size:15px;line-height:1;vertical-align:-1px}
@@ -316,37 +359,51 @@ tr.clickable{cursor:pointer}
   <div class="kpi"><span class="kpi-label">Active Users</span><span id="kpi-users" class="kpi-value purple">--</span></div>
 </div>
 
-<div class="charts-row four-col">
+<div class="charts-row two-col">
   <div class="chart-box">
-    <h2>Token Usage · Hosted vs Vendor</h2>
-    <canvas id="savings-chart" width="220" height="220"></canvas>
-    <div id="savings-legend" class="pie-legend single-col"></div>
-    <div class="chart-control-spacer" aria-hidden="true"></div>
-  </div>
-  <div class="chart-box">
-    <h2>By Model</h2>
-    <canvas id="token-chart" width="220" height="220"></canvas>
-    <div id="model-legend" class="pie-legend"></div>
-    <div class="tl-toggle" id="model-metric-toggle">
-      <button data-mm="cost">Cost</button>
-      <button data-mm="tokens" class="active">Tokens</button>
-      <button data-mm="requests">Requests</button>
+    <div class="chart-head">
+      <h2>By Model</h2>
+      <div class="tl-toggle" id="model-metric-toggle" style="margin-bottom:0">
+        <button data-mm="cost">Cost</button>
+        <button data-mm="tokens" class="active">Tokens</button>
+        <button data-mm="requests">Requests</button>
+      </div>
+    </div>
+    <div class="hosted-split" id="model-hosted-split"></div>
+    <div class="pie-split">
+      <canvas id="token-chart" class="pie-canvas" width="220" height="220"></canvas>
+      <div class="pie-side"><div id="model-legend" class="pie-legend vertical"></div></div>
     </div>
   </div>
   <div class="chart-box">
-    <h2>By Tool (Tokens)</h2>
-    <canvas id="tool-chart" width="220" height="220"></canvas>
-    <div id="tool-legend" class="pie-legend single-col"></div>
-    <div class="chart-control-spacer" aria-hidden="true"></div>
+    <div class="chart-head">
+      <h2>By Tool <span style="font-size:11px;color:var(--text2);font-weight:400">(tokens)</span></h2>
+    </div>
+    <div class="hosted-split" id="tool-hosted-split"></div>
+    <div class="pie-split">
+      <canvas id="tool-chart" class="pie-canvas" width="220" height="220"></canvas>
+      <div class="pie-side"><div id="tool-legend" class="pie-legend vertical"></div></div>
+    </div>
   </div>
-  <div class="chart-box">
-    <h2>By User (Top 5)</h2>
-    <canvas id="user-cost-chart" width="220" height="220"></canvas>
-    <div id="user-legend" class="pie-legend single-col"></div>
-    <div class="tl-toggle" id="user-metric-toggle">
-      <button data-um="cost" class="active">Cost</button>
-      <button data-um="tokens">Tokens</button>
-      <button data-um="requests">Requests</button>
+</div>
+
+<div class="section geo-section">
+  <div class="chart-head">
+    <h2>Usage Geography <span style="font-size:12px;color:var(--text2);font-weight:400">(by country &amp; US state)</span></h2>
+    <span class="geo-note" id="geo-note">Loading map…</span>
+  </div>
+  <div class="geo-card">
+    <div class="geo-wrap">
+      <svg id="geo-map" role="img" aria-label="World map colored by usage"></svg>
+      <div class="geo-tooltip" id="geo-tooltip"></div>
+    </div>
+    <div class="geo-side">
+      <div class="geo-scale">
+        <span>Usage intensity</span>
+        <div class="gs-bar"></div>
+        <div class="gs-labels"><span>low</span><span>high</span></div>
+      </div>
+      <div class="geo-top" id="geo-top"></div>
     </div>
   </div>
 </div>
@@ -371,6 +428,32 @@ tr.clickable{cursor:pointer}
       </tr></thead>
       <tbody id="recent-tbody"></tbody>
     </table>
+  </div>
+</div>
+
+<div class="charts-row two-col" id="bottom-analytics">
+  <div class="chart-box">
+    <div class="chart-head">
+      <h2>By User <span style="font-size:11px;color:var(--text2);font-weight:400">(top 10)</span></h2>
+      <div class="tl-toggle" id="user-metric-toggle" style="margin-bottom:0">
+        <button data-um="cost" class="active">Cost</button>
+        <button data-um="tokens">Tokens</button>
+        <button data-um="requests">Requests</button>
+      </div>
+    </div>
+    <div class="pie-split">
+      <canvas id="user-cost-chart" class="pie-canvas" width="220" height="220"></canvas>
+      <div class="pie-side"><div id="user-rank" class="user-rank"></div></div>
+    </div>
+  </div>
+  <div class="chart-box">
+    <div class="chart-head">
+      <h2>By Cost Center <span style="font-size:11px;color:var(--text2);font-weight:400">(cost)</span></h2>
+    </div>
+    <div class="pie-split">
+      <canvas id="cost-center-chart" class="pie-canvas" width="220" height="220"></canvas>
+      <div class="pie-side"><div id="cost-center-legend" class="pie-legend vertical"></div></div>
+    </div>
   </div>
 </div>
 
@@ -457,8 +540,12 @@ let isAdmin=false;        // org-wide Usage view (all users)
 let isSuperAdmin=false;   // operator tools: Routing/Compression/Admin nav + "view as"
 let modelMetric='tokens', userPieMetric='cost';
 let savingsRef='claude-opus-4-8';
-let tokenChart=null, userCostChart=null, toolChart=null, savingsChart=null;
+let tokenChart=null, userCostChart=null, toolChart=null, costCenterChart=null;
 let cachedGroups=[], cachedModels=[], cachedTools=[], chartUsers=[], directoryUsers=[];
+let cachedGeo=[], cachedCostCenters=[];
+// Recent-event keys from the previous refresh, used to flash only genuinely
+// new live requests on the map rather than replaying the whole feed.
+let lastRecentKeys=new Set(), pendingGeoFlashes=[];
 // Overview payload of the current refresh; it carries the server-computed
 // "Saved · Hosted Models" KPI (the sum of the user table's saved_usd
 // column), which is what the card shows — no client-side re-derivation.
@@ -511,12 +598,14 @@ async function refresh(force){
   // the list of things you can still pick.
   try {
     const chartSort=userPieMetric==='cost'?'cost_usd':userPieMetric==='requests'?'requests':'total_tokens';
-      const [ov,gr,chartUs,mo,tools,rc,rosterCat,modelCat,directory]=await Promise.all([
+      const [ov,gr,chartUs,mo,tools,geo,cc,rc,rosterCat,modelCat,directory]=await Promise.all([
        api('/api/v1/dashboard/overview?'+filters+'&ref='+encodeURIComponent(savingsRef),force),
        api('/api/v1/dashboard/groups?'+filters,force),
         api('/api/v1/dashboard/users?'+filters+'&sort='+chartSort+'&order=desc&limit=10&offset=0&savings=false',force),
       api('/api/v1/dashboard/models?'+filters,force),
       api('/api/v1/dashboard/tools?'+filters,force),
+      api('/api/v1/dashboard/geo?'+filters,force),
+      api('/api/v1/dashboard/cost-centers?'+filters,force),
       api('/api/v1/dashboard/recent?limit=20'+gf+uf+mf,force),
        api('/api/v1/dashboard/users?'+rangeOnly+'&limit=200&savings=false',force),
        api('/api/v1/dashboard/models?'+rangeOnly,force),
@@ -526,6 +615,8 @@ async function refresh(force){
   cachedGroups=gr;
    cachedModels=modelFilter?mo.filter(function(m){return m.model===modelFilter}):mo;
    cachedTools=Array.isArray(tools)?tools:[];
+   cachedGeo=Array.isArray(geo)?geo:[];
+   cachedCostCenters=Array.isArray(cc)?cc:[];
   // Unfiltered (range-only) model stats: used as the basis for the observed
   // cache ratio in renderSavings, so a user/group filter that contains no
   // paid traffic doesn't silently drop the cache assumption.
@@ -538,11 +629,14 @@ async function refresh(force){
    // complete directory roster so users with no recent usage, or users beyond
    // the usage limit, remain selectable in the filter dropdown.
    populateFilterDropdowns(modelCat, mergeDirectoryUsers(collapseUsageUsers(rosterCat), directoryUsers, true, []));
-  renderRecent(rc);
    renderModelChart();
    renderToolChart();
+   renderHostedSplit();
+   renderGeoMap();
+   renderCostCenterChart();
    renderUserCostChart();
   renderSavings();
+  renderRecent(rc);
     document.getElementById('last-refresh').textContent=' • '+new Date().toLocaleTimeString();
   } finally {
     if(force&&refreshBtn){refreshBtn.disabled=false;refreshBtn.textContent='Refresh';}
@@ -566,6 +660,8 @@ function friendlyClient(ua){
    if(normalized==='pi'||normalized.startsWith('pi/')||normalized.startsWith('pi-')||normalized.startsWith('pi.')||normalized.startsWith('pi ')) return 'Pi';
    if(normalized.startsWith('charm-crush/')) return 'Charm-Crush';
    if(normalized.startsWith('openai/')) return 'OpenAI';
+   if(normalized.startsWith('gemini-cli/')) return 'Gemini CLI';
+   if(normalized.startsWith('aider/')) return 'Aider';
    if(normalized.startsWith('omp/')) return 'omp';
    if(normalized.startsWith('curl/')) return 'curl';
    return 'Other';
@@ -574,7 +670,7 @@ function friendlyClient(ua){
 function toolColor(tool){
   // Chart.js needs concrete colors; CSS var() values render as gray in its
   // canvas even though they work for inline table styles.
-  return {'Claude Code':'#d29922','Codex':'#3fb950','OpenCode':'#58a6ff','Pi':'#bc8cff','curl':'#8b949e','Other':'#39d2c0'}[tool]||'#39d2c0';
+  return {'Claude Code':'#d29922','Codex':'#3fb950','OpenCode':'#58a6ff','Pi':'#bc8cff','Charm-Crush':'#f778ba','OpenAI':'#39d2c0','Gemini CLI':'#79c0ff','Aider':'#7ee787','omp':'#ffa657','curl':'#8b949e','Other':'#a5d6ff'}[tool]||'#39d2c0';
 }
 
 // statusCell maps an HTTP status to a colored cell: green for 2xx, red for
@@ -588,6 +684,15 @@ function statusCell(code){
 }
 function renderRecent(data){
   const tbody=document.getElementById('recent-tbody');
+  const nextKeys=new Set();
+  const fresh=[];
+  (data||[]).forEach(function(r){
+    const key=[r.timestamp,r.username,r.model,r.user_agent,r.total_tokens,r.status_code].join('|');
+    nextKeys.add(key);
+    if(lastRecentKeys.size&&!lastRecentKeys.has(key))fresh.push(r);
+  });
+  lastRecentKeys=nextKeys;
+  if(fresh.length)queueGeoFlashes(fresh);
   tbody.innerHTML=data.map(r=>{
     const provColor=r.provider==='anthropic'?'var(--orange)':r.provider==='openai'?'var(--green)':'var(--cyan)';
     const client=friendlyClient(r.user_agent);
@@ -698,6 +803,11 @@ function topFiveItems(items,valueFn,labelFn,limit){
   if(rest.length)result.push({item:null,label:'Other',value:other});
   return result;
 }
+function topNItems(items,valueFn,labelFn,limit){
+  return items.slice().sort(function(a,b){return valueFn(b)-valueFn(a);}).slice(0,limit||10).map(function(item){
+    return {item:item,label:labelFn(item),value:valueFn(item)};
+  });
+}
 
 var MODEL_PRICING_JS={
   'claude-opus-5':{i:5,o:25,cr:0.5,cw:6.25},'claude-fable-5':{i:10,o:50,cr:1,cw:12.5},
@@ -772,6 +882,26 @@ function isHostedModel(m){return m.hosted===true||HOSTED_PROVIDERS.indexOf(m.pro
 // reproduce per-user floors and cache-ratio decisions, and pretending it can
 // is how the card once showed $770 while the table showed $2,400. The pie
 // splits the same window into hosted vs vendor-API tokens (raw counts).
+function hostedSplitData(){
+  var hostedTokens=0,totalTokens=0;
+  (cachedModels||[]).forEach(function(m){
+    var tot=m.total_tokens||0;
+    totalTokens+=tot;
+    if(isHostedModel(m)&&tot>0)hostedTokens+=tot;
+  });
+  var vendorTokens=Math.max(totalTokens-hostedTokens,0);
+  var hostedPct=totalTokens>0?Math.round((hostedTokens/totalTokens)*100):0;
+  return {hosted:hostedTokens,vendor:vendorTokens,total:totalTokens,pct:hostedPct};
+}
+function renderHostedSplit(){
+  var d=hostedSplitData();
+  var html='<div class="hs-head"><span>Hosted model usage <b>'+d.pct+'%</b></span><span class="vendor">Vendor '+(d.total>0?100-d.pct:0)+'%</span></div>'+
+    '<div class="hs-track" title="Hosted '+fmtN(d.hosted)+' tokens · Vendor '+fmtN(d.vendor)+' tokens"><div class="hs-hosted" style="width:'+d.pct+'%"></div><div class="hs-vendor" style="width:'+(d.total>0?100-d.pct:0)+'%"></div></div>';
+  ['model-hosted-split','tool-hosted-split'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el)el.innerHTML=html;
+  });
+}
 function renderSavings(){
   populateSavingsRef();
   // The KPI number and its cache assumption come from the server
@@ -784,32 +914,7 @@ function renderSavings(){
   if(kpi&&totalSaved!==null)kpi.textContent=fmtC(totalSaved);
   var note=document.getElementById('kpi-savings-note');
   if(note)note.textContent=ov.savings_ratio_applied?Math.round((ov.savings_ratio||0)*100)+'% input est. cached':'';
-  // The pie still splits the filtered window's TOKENS (hosted vs vendor)
-  // client-side — a token count needs no pricing arithmetic to agree.
-  var hostedTokens=0, totalTokens=0;
-  (cachedModels||[]).forEach(function(m){
-    var tot=m.total_tokens||0;
-    totalTokens+=tot;
-    if(!isHostedModel(m)||tot<=0)return;
-    hostedTokens+=tot;
-  });
-  var vendorTokens=Math.max(totalTokens-hostedTokens,0);
-
-  if(savingsChart)savingsChart.destroy();
-  var canvas=document.getElementById('savings-chart');
-  if(!canvas)return;
-  savingsChart=new Chart(canvas,{
-    type:'doughnut',
-    data:{
-      labels:['Hosted — '+fmtN(hostedTokens),'Vendor — '+fmtN(vendorTokens)],
-      datasets:[{data:[hostedTokens,vendorTokens],backgroundColor:['#3fb950','#d29922'],borderWidth:0,radius:100}]
-    },
-    options:{responsive:false,width:220,height:220,radius:100,plugins:{
-       legend:{display:false},
-      tooltip:{callbacks:{label:function(ctx){var tot=hostedTokens+vendorTokens;var lbl=ctx.dataIndex===0?'Hosted':'Vendor';return lbl+': '+fmtN(ctx.raw)+' tokens ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
-    }}
-  });
-  renderPieLegend('savings-legend',['Hosted — '+fmtN(hostedTokens),'Vendor — '+fmtN(vendorTokens)],['#3fb950','#d29922']);
+  renderHostedSplit();
 }
 
 function populateFilterDropdowns(models, users){
@@ -959,8 +1064,26 @@ function clearAllFilters(){
   refresh();
 }
 
+function renderUserRank(data,m){
+  var el=document.getElementById('user-rank');
+  if(!el)return;
+  var max=Math.max.apply(null,data.map(function(d){return d.value;}).concat([0]));
+  el.innerHTML='<div class="gt-title" style="font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text2);font-weight:700;margin-bottom:2px">Top 10 users</div>'+data.map(function(d,i){
+    var item=d.item||{};
+    var username=item.username||'';
+    var name=d.label||username||'—';
+    var sub=item.display_name&&username&&name!==username?username:'';
+    var pct=max>0?Math.round((d.value/max)*100):0;
+    var value=m==='cost'&&d.value===0?'Free':pieFmt(d.value,m);
+    return '<div class="ur-row" title="'+pmEsc(name)+' · '+pmEsc(username)+' · '+pmEsc(value)+'">'+
+      '<span class="ur-rank">'+(i+1)+'</span>'+
+      '<span style="min-width:0"><span class="ur-name">'+pmEsc(name)+'</span>'+(sub?'<span class="ur-sub">'+pmEsc(sub)+'</span>':'')+
+      '<span class="bar-bg" style="display:block;margin-top:3px"><span class="bar-fill" style="display:block;width:'+pct+'%;background:'+COLORS[i%COLORS.length]+'"></span></span></span>'+
+      '<span class="ur-val">'+value+'</span></div>';
+  }).join('');
+}
 function renderUserCostChart(){
-  const data=topFiveItems(chartUsers,function(d){return pieVal(d,userPieMetric);},function(d){return d.display_name||d.username;}).slice(0,5);
+  const data=topNItems(chartUsers,function(d){return pieVal(d,userPieMetric);},function(d){return d.display_name||d.username;},10);
   const m=userPieMetric;
   const vals=data.map(d=>d.value);
   const labels=data.map(d=>`${d.label} — ${m==='cost'&&d.value===0?'Free':pieFmt(d.value,m)}`);
@@ -971,7 +1094,7 @@ function renderUserCostChart(){
     userCostChart.data.datasets[0].backgroundColor=colors;
     userCostChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
     userCostChart.update();
-    renderPieLegend('user-legend',labels,colors);
+    renderUserRank(data,m);
     return;
   }
   userCostChart=new Chart(document.getElementById('user-cost-chart'),{
@@ -980,7 +1103,7 @@ function renderUserCostChart(){
       tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);const value=m==='cost'&&ctx.raw===0?'Free':pieFmt(ctx.raw,m)+pieUnit(m);return data[ctx.dataIndex].label+': '+value+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
     }}
   });
-  renderPieLegend('user-legend',labels,colors);
+  renderUserRank(data,m);
 }
 
 async function refreshUserChartOnly(){
@@ -998,7 +1121,7 @@ async function refreshUserChartOnly(){
 function renderToolChart(){
   const toolRows=cachedTools||[];
   const existingOther=toolRows.filter(function(d){return d.tool==='Other';}).reduce(function(sum,d){return sum+(d.total_tokens||0);},0);
-  const data=topFiveItems(toolRows.filter(function(d){return d.tool!=='Other';}),function(d){return d.total_tokens||0;},function(d){return d.tool;},5);
+  const data=topFiveItems(toolRows.filter(function(d){return d.tool!=='Other';}),function(d){return d.total_tokens||0;},function(d){return d.tool;},9);
   var otherItem=data.length&&data[data.length-1].label==='Other'?data.pop():{item:null,label:'Other',value:0};
   otherItem.value+=existingOther;
   if(otherItem.value>0)data.push(otherItem);
@@ -1013,6 +1136,183 @@ function renderToolChart(){
     }}
   });
   renderPieLegend('tool-legend',labels,colors);
+}
+
+function renderCostCenterChart(){
+  const data=topFiveItems(cachedCostCenters||[],function(d){return d.cost_usd||0;},function(d){return d.cost_center_description||'Unknown';},9);
+  const vals=data.map(d=>d.value);
+  const labels=data.map(d=>`${d.label} — ${fmtC(d.value)}`);
+  const colors=data.map((_,i)=>COLORS[i%COLORS.length]);
+  if(costCenterChart){
+    costCenterChart.data.labels=labels;
+    costCenterChart.data.datasets[0].data=vals;
+    costCenterChart.data.datasets[0].backgroundColor=colors;
+    costCenterChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].label+': '+fmtC(ctx.raw)+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
+    costCenterChart.update();
+    renderPieLegend('cost-center-legend',labels,colors);
+    return;
+  }
+  costCenterChart=new Chart(document.getElementById('cost-center-chart'),{
+    type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
+    options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return data[ctx.dataIndex].label+': '+fmtC(ctx.raw)+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
+    }}
+  });
+  renderPieLegend('cost-center-legend',labels,colors);
+}
+
+// ── Usage geography map ────────────────────────────────────────────────
+// Country polygons come from world-atlas; US states are overlaid from
+// us-atlas so state-level usage can be shown where the directory has it.
+// Both assets are the same CDN pattern the dashboard already uses for
+// Chart.js. Country ids in world-atlas are ISO 3166-1 numeric, so this
+// mapping turns them into the ISO2 codes the directory stores.
+var ISO2_BY_NUM={"10":"AQ","100":"BG","104":"MM","108":"BI","112":"BY","116":"KH","12":"DZ","120":"CM","124":"CA","132":"CV","136":"KY","140":"CF","144":"LK","148":"TD","152":"CL","156":"CN","158":"TW","16":"AS","162":"CX","166":"CC","170":"CO","174":"KM","175":"YT","178":"CG","180":"CD","184":"CK","188":"CR","191":"HR","192":"CU","196":"CY","20":"AD","203":"CZ","204":"BJ","208":"DK","212":"DM","214":"DO","218":"EC","222":"SV","226":"GQ","231":"ET","232":"ER","233":"EE","234":"FO","238":"FK","239":"GS","24":"AO","242":"FJ","246":"FI","248":"AX","250":"FR","254":"GF","258":"PF","260":"TF","262":"DJ","266":"GA","268":"GE","270":"GM","275":"PS","276":"DE","28":"AG","288":"GH","292":"GI","296":"KI","300":"GR","304":"GL","308":"GD","31":"AZ","312":"GP","316":"GU","32":"AR","320":"GT","324":"GN","328":"GY","332":"HT","334":"HM","336":"VA","340":"HN","344":"HK","348":"HU","352":"IS","356":"IN","36":"AU","360":"ID","364":"IR","368":"IQ","372":"IE","376":"IL","380":"IT","384":"CI","388":"JM","392":"JP","398":"KZ","4":"AF","40":"AT","400":"JO","404":"KE","408":"KP","410":"KR","414":"KW","417":"KG","418":"LA","422":"LB","426":"LS","428":"LV","430":"LR","434":"LY","438":"LI","44":"BS","440":"LT","442":"LU","446":"MO","450":"MG","454":"MW","458":"MY","462":"MV","466":"ML","470":"MT","474":"MQ","478":"MR","48":"BH","480":"MU","484":"MX","492":"MC","496":"MN","498":"MD","499":"ME","50":"BD","500":"MS","504":"MA","508":"MZ","51":"AM","512":"OM","516":"NA","52":"BB","520":"NR","524":"NP","528":"NL","531":"CW","533":"AW","534":"SX","535":"BQ","540":"NC","548":"VU","554":"NZ","558":"NI","56":"BE","562":"NE","566":"NG","570":"NU","574":"NF","578":"NO","580":"MP","581":"UM","583":"FM","584":"MH","585":"PW","586":"PK","591":"PA","598":"PG","60":"BM","600":"PY","604":"PE","608":"PH","612":"PN","616":"PL","620":"PT","624":"GW","626":"TL","630":"PR","634":"QA","638":"RE","64":"BT","642":"RO","643":"RU","646":"RW","652":"BL","654":"SH","659":"KN","660":"AI","662":"LC","663":"MF","666":"PM","670":"VC","674":"SM","678":"ST","68":"BO","682":"SA","686":"SN","688":"RS","690":"SC","694":"SL","70":"BA","702":"SG","703":"SK","704":"VN","705":"SI","706":"SO","710":"ZA","716":"ZW","72":"BW","724":"ES","728":"SS","729":"SD","732":"EH","74":"BV","740":"SR","744":"SJ","748":"SZ","752":"SE","756":"CH","76":"BR","760":"SY","762":"TJ","764":"TH","768":"TG","772":"TK","776":"TO","780":"TT","784":"AE","788":"TN","792":"TR","795":"TM","796":"TC","798":"TV","8":"AL","800":"UG","804":"UA","807":"MK","818":"EG","826":"GB","831":"GG","832":"JE","833":"IM","834":"TZ","84":"BZ","840":"US","850":"VI","854":"BF","858":"UY","86":"IO","860":"UZ","862":"VE","876":"WF","882":"WS","887":"YE","894":"ZM","90":"SB","92":"VG","96":"BN","983":"XK"};
+var US_STATE_CODES={"Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA","Colorado":"CO","Connecticut":"CT","Delaware":"DE","District of Columbia":"DC","Florida":"FL","Georgia":"GA","Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA","Kansas":"KS","Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD","Massachusetts":"MA","Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO","Montana":"MT","Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ","New Mexico":"NM","New York":"NY","North Carolina":"NC","North Dakota":"ND","Ohio":"OH","Oklahoma":"OK","Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI","South Carolina":"SC","South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT","Vermont":"VT","Virginia":"VA","Washington":"WA","West Virginia":"WV","Wisconsin":"WI","Wyoming":"WY","Puerto Rico":"PR","Guam":"GU","American Samoa":"AS","United States Virgin Islands":"VI","Commonwealth of the Northern Mariana Islands":"MP"};
+var GEO_BASE='#161b22';
+var geoMapReady=false,geoMapLoading=false,geoCountryPaths=null,geoStatePaths=null,geoAnimFrame=null,geoMaxValue=0;
+var geoDisplayNames=null;
+try{if(window.Intl&&Intl.DisplayNames)geoDisplayNames=new Intl.DisplayNames(['en'],{type:'region'});}catch(e){}
+
+function geoRegionName(code){
+  code=String(code||'').toUpperCase();
+  if(!code||code==='UNKNOWN')return 'Unknown';
+  try{if(geoDisplayNames)return geoDisplayNames.of(code)||code;}catch(e){}
+  return code;
+}
+function geoFullName(country,state){
+  country=String(country||'').toUpperCase();state=String(state||'').toUpperCase();
+  if(state&&country==='US'){
+    for(var name in US_STATE_CODES){if(US_STATE_CODES[name]===state)return name+', US';}
+    return state+', US';
+  }
+  return geoRegionName(country);
+}
+function geoColorFor(value,max){
+  if(!(value>0)||!(max>0))return GEO_BASE;
+  // Log scale: one very heavy country should not make every other location
+  // look empty. The tooltip and top-locations list still show exact totals.
+  var t=Math.min(1,Math.log1p(value)/Math.log1p(max));
+  return d3.interpolateRgbBasis(['#0e4429','#006d32','#26a641','#39d353','#d29922','#f85149'])(t);
+}
+function geoMapTooltip(evt,label,value,extra){
+  var tip=document.getElementById('geo-tooltip');
+  var wrap=document.querySelector('.geo-wrap');
+  if(!tip||!wrap)return;
+  tip.innerHTML='<b>'+pmEsc(label)+'</b><br>'+fmtN(value)+' tokens'+(extra?'<br><span style="color:var(--text2)">'+pmEsc(extra)+'</span>':'');
+  tip.style.display='block';
+  var r=wrap.getBoundingClientRect();
+  var x=evt.clientX-r.left+12,y=evt.clientY-r.top+12;
+  tip.style.left=Math.min(x,r.width-tip.offsetWidth-6)+'px';
+  tip.style.top=Math.min(y,r.height-tip.offsetHeight-6)+'px';
+}
+function hideGeoMapTooltip(){var tip=document.getElementById('geo-tooltip');if(tip)tip.style.display='none';}
+
+async function initGeoMap(){
+  if(geoMapReady||geoMapLoading)return;
+  if(!window.d3||!window.topojson){document.getElementById('geo-note').textContent='Map assets unavailable';return;}
+  geoMapLoading=true;
+  try{
+    const [world,us]=await Promise.all([
+      fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(r=>r.json()),
+      fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json').then(r=>r.json())
+    ]);
+    const width=1000,height=500;
+    const svg=d3.select('#geo-map').attr('viewBox','0 0 '+width+' '+height).attr('preserveAspectRatio','xMidYMid meet');
+    svg.selectAll('*').remove();
+    const projection=d3.geoNaturalEarth1().fitExtent([[12,12],[width-12,height-12]],{type:'Sphere'});
+    const path=d3.geoPath(projection);
+    svg.append('path').datum({type:'Sphere'}).attr('d',path).attr('fill','#0d1117').attr('stroke','#2c3138').attr('stroke-width','.8');
+    geoCountryPaths=new Map();
+    topojson.feature(world,world.objects.countries).features.forEach(function(f){
+      const code=ISO2_BY_NUM[String(f.id)]||'';
+      const p=svg.append('path').datum(f).attr('d',path).attr('class','geo-country').attr('fill',GEO_BASE).attr('data-country',code);
+      if(code)geoCountryPaths.set(code,p);
+      p.on('mousemove',function(evt){const v=(geoValueByCountry.get(code)||0);if(!code)return;geoMapTooltip(evt,geoRegionName(code),v);}).on('mouseleave',hideGeoMapTooltip);
+    });
+    geoStatePaths=new Map();
+    topojson.feature(us,us.objects.states).features.forEach(function(f){
+      const code=US_STATE_CODES[f.properties.name]||'';
+      const p=svg.append('path').datum(f).attr('d',path).attr('class','geo-state').attr('fill',GEO_BASE).attr('data-state',code);
+      if(code)geoStatePaths.set(code,p);
+      p.on('mousemove',function(evt){const v=(geoValueByState.get('US|'+code)||0);geoMapTooltip(evt,geoFullName('US',code),v,'US state');}).on('mouseleave',hideGeoMapTooltip);
+    });
+    geoMapReady=true;
+    renderGeoMap();
+    if(pendingGeoFlashes.length){const queued=pendingGeoFlashes;pendingGeoFlashes=[];queued.forEach(function(e,i){setTimeout(function(){flashGeo(e.country,e.state,e.color);},i*140);});}
+  }catch(err){
+    document.getElementById('geo-note').textContent='Map failed to load';
+    console.error('geo map load failed',err);
+  }finally{geoMapLoading=false;}
+}
+
+var geoValueByCountry=new Map(),geoValueByState=new Map();
+function renderGeoMap(){
+  if(!geoMapReady){initGeoMap();return;}
+  const byCountry=new Map(),byState=new Map();
+  (cachedGeo||[]).forEach(function(g){
+    const country=String(g.country||'UNKNOWN').toUpperCase();
+    const state=String(g.state||'').toUpperCase();
+    const value=g.total_tokens||0;
+    byCountry.set(country,(byCountry.get(country)||0)+value);
+    if(state)byState.set(country+'|'+state,(byState.get(country+'|'+state)||0)+value);
+  });
+  geoValueByCountry=byCountry;geoValueByState=byState;
+  geoMaxValue=Math.max.apply(null,Array.from(byCountry.values()).concat(Array.from(byState.values())).concat([0]));
+  if(geoAnimFrame)cancelAnimationFrame(geoAnimFrame);
+  const targets=[];
+  geoCountryPaths.forEach(function(p,code){targets.push({p:p,value:byCountry.get(code)||0,delay:(targets.length%48)*7});});
+  geoStatePaths.forEach(function(p,code){targets.push({p:p,value:byState.get('US|'+code)||0,delay:(targets.length%48)*7});});
+  const start=performance.now();
+  function frame(now){
+    let active=false;
+    for(let i=0;i<targets.length;i++){
+      const t=targets[i];
+      const k=Math.max(0,Math.min(1,(now-start-t.delay)/900));
+      if(k<1)active=true;
+      const eased=1-Math.pow(1-k,3);
+      t.p.attr('fill',geoColorFor(t.value*eased,geoMaxValue));
+    }
+    if(active)geoAnimFrame=requestAnimationFrame(frame);else geoAnimFrame=null;
+  }
+  geoAnimFrame=requestAnimationFrame(frame);
+
+  const countries=Array.from(byCountry.keys()).filter(function(c){return c!=='UNKNOWN'&&(byCountry.get(c)||0)>0;}).length;
+  const states=Array.from(byState.keys()).filter(function(k){return k.indexOf('US|')===0&&(byState.get(k)||0)>0;}).length;
+  const total=Array.from(byCountry.values()).reduce(function(a,b){return a+b;},0);
+  const note=document.getElementById('geo-note');
+  if(note)note.textContent=total?countries+' countries · '+states+' US states · '+fmtN(total)+' tokens':'No usage in this range';
+  const top=document.getElementById('geo-top');
+  if(top){
+    const rows=(cachedGeo||[]).slice(0,8);
+    top.innerHTML='<div class="gt-title">Top locations</div>'+rows.map(function(g){
+      const label=geoFullName(g.country,g.state);
+      return '<div class="gt-row" title="'+pmEsc(label)+'"><span class="gt-swatch" style="background:'+geoColorFor(g.total_tokens||0,geoMaxValue)+'"></span><span class="gt-name">'+pmEsc(label)+'</span><span class="gt-val">'+fmtN(g.total_tokens||0)+'</span></div>';
+    }).join('');
+  }
+}
+function flashGeo(country,state,color){
+  country=String(country||'').toUpperCase();state=String(state||'').toUpperCase();
+  if(!geoMapReady){pendingGeoFlashes.push({country:country,state:state,color:color});return;}
+  var path=null;
+  if(country==='US'&&state&&geoStatePaths)path=geoStatePaths.get(state);
+  if(!path&&geoCountryPaths)path=geoCountryPaths.get(country);
+  if(!path)return;
+  const node=path.node();
+  node.style.setProperty('--geo-flash-color',color||'#fff');
+  node.classList.remove('geo-flash');
+  void node.getBoundingClientRect();
+  node.classList.add('geo-flash');
+  setTimeout(function(){node.classList.remove('geo-flash');},2000);
+}
+function requestFlashColor(event){
+  var client=friendlyClient(event&&event.user_agent||'');
+  return toolColor(client);
+}
+function queueGeoFlashes(events){
+  (events||[]).slice(0,20).forEach(function(e,i){
+    setTimeout(function(){flashGeo(e.country,e.state,requestFlashColor(e));},i*120);
+  });
 }
 
 function setGroupFilter(g){groupFilter=g;userFilter=[];updateUserFilterLabel();renderUserChecklist();refresh()}

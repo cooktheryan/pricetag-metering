@@ -103,19 +103,34 @@ family_name
 groups
 ```
 
-PriceTag currently consumes `sub`, `rhatUUID`, email/username, and groups at
-the login boundary. `rhatUUID` must match the active partner user's stable UUID;
-groups are carried in the signed session but do not grant PriceTag roles.
-Given/family names are available in the token but are not copied into the
-browser cookie.
+PriceTag consumes `sub`, `rhatUUID`, email/username, and groups at the login
+boundary. `rhatUUID` must match the active partner user's stable UUID; groups
+are carried in the signed session but do not grant PriceTag roles.
+
+After the `rhatUUID` check succeeds, the callback merges every returned profile
+claim into the partner user's tags through the normal PATCH path. This keeps
+the directory fresh between LDAP syncs and makes the usage dashboard's
+country/state and cost-center views work from one source:
+
+```text
+email, first_name, last_name, preferred_username, oidc_sub, rhat_uuid,
+country, state, region, manager_rhat_uuid, cost_center,
+cost_center_description, employee_type, organization, termination_date,
+oidc_active, groups
+```
+
+`groups` is stored as a string array (the directory also permits `*_groups`
+arrays for the local dev personas). Values omitted by the IdP leave the
+existing tag untouched, and login still never provisions, elevates, or
+authorizes a user from claims alone.
 
 For a controlled Stage/dogfood test, `OIDC_CLAIMS_DEBUG=true` renders a
 diagnostic page at the callback containing the decoded claim values and no raw
 token. Keep this disabled in Production.
 
-Country, state, city, office location, cost center, and manager data are **not
-promised by the SSO registration**. They should continue to come from the
-approved LDAP sync. The existing partner record supports string tags such as
-`country`, `state`, `region`, and `rhat_cost_center`; group membership should
-become a normalized `groups`/`group_memberships` model rather than a
-comma-separated tag. `manager_user_id` is already a relational field.
+Country, state, city, office location, cost center, and manager data are not
+promised by every SSO registration, but the Stage registration currently
+returns them. They continue to sync from LDAP as the authoritative source; the
+login-time merge only fills the partner tags with the values the IdP actually
+returned. `manager_user_id` remains the relational reporting field;
+`manager_rhat_uuid` is the raw claim value for traceability.

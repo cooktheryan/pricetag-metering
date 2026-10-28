@@ -90,6 +90,40 @@ func personaByKey(key string) (persona, bool) {
 	return persona{}, false
 }
 
+// personaProfileFields mirrors the extra profile claims the Stage IdP returns.
+// Keeping them in the mock lets the local run exercise the login-time tag
+// merge (state, cost center, manager, groups, ...) end to end.
+func personaProfileFields(p persona) map[string]any {
+	state, region := "CA", "Americas"
+	center, description := "CC-APPLIED-AI", "Applied AI Research"
+	manager := ""
+	switch p.Key {
+	case "manager-user":
+		state, region = "NY", "Americas"
+		center, description = "CC-AI-PLATFORM", "AI Platform Engineering"
+		manager = "uid=nitzikow,cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com"
+	case "blocked-country":
+		state, region = "", "EMEA"
+		center, description = "CC-SECURITY", "Security Engineering"
+	case "no-group":
+		state, region = "WA", "Americas"
+		center, description = "CC-CLOUD", "Cloud Infrastructure"
+	case "admin":
+		state, region = "CA", "Americas"
+		center, description = "CC-CTO", "Office of the CTO"
+	}
+	return map[string]any{
+		"state":                   state,
+		"region":                  region,
+		"manager_rhatUUID":        manager,
+		"cost_center":             center,
+		"cost_center_description": description,
+		"employee_type":           "employee",
+		"organization":            "Technology",
+		"active":                  true,
+	}
+}
+
 func defaultPersona() persona {
 	if key := strings.TrimSpace(os.Getenv("MOCK_OIDC_PERSONA")); key != "" {
 		if p, ok := personaByKey(key); ok {
@@ -264,6 +298,9 @@ func (p *provider) token(w http.ResponseWriter, r *http.Request) {
 		"groups":             persona.Groups,
 		"country":            persona.ClaimCountry,
 	}
+	for key, value := range personaProfileFields(persona) {
+		claims[key] = value
+	}
 	accessToken, _ := randomValue()
 	p.mu.Lock()
 	p.tokens[accessToken] = persona.Key
@@ -300,6 +337,13 @@ func (p *provider) userinfo(w http.ResponseWriter, r *http.Request) {
 		"email": persona.Email, "preferred_username": persona.Email,
 		"given_name": persona.First, "family_name": persona.Last,
 		"groups": persona.Groups, "country": persona.ClaimCountry,
+		"state": personaProfileFields(persona)["state"], "region": personaProfileFields(persona)["region"],
+		"manager_rhatUUID":        personaProfileFields(persona)["manager_rhatUUID"],
+		"cost_center":             personaProfileFields(persona)["cost_center"],
+		"cost_center_description": personaProfileFields(persona)["cost_center_description"],
+		"employee_type":           personaProfileFields(persona)["employee_type"],
+		"organization":            personaProfileFields(persona)["organization"],
+		"active":                  personaProfileFields(persona)["active"],
 	})
 }
 

@@ -290,7 +290,7 @@ func main() {
 		}
 		slog.Info("OIDC dashboard login enabled", "issuer", cfg.OIDC.IssuerURL, "client_id", cfg.OIDC.ClientID)
 	}
-	authHandler.SetOrgStore(store) // managers land on /manager after login
+	authHandler.SetOrgStore(store)        // managers land on /manager after login
 	authHandler.SetMaaSClient(maasClient) // dev-login persona reset only
 	keysHandler := handler.NewKeysHandler(k8sClient, cfg, store)
 	usageReportHandler := handler.NewUsageReportHandler(store)
@@ -421,6 +421,8 @@ func main() {
 	mux.HandleFunc("/api/v1/dashboard/directory-users", dashboardAPI(dashboardHandler.HandleDirectoryUsers))
 	mux.HandleFunc("/api/v1/dashboard/models", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleModels)))
 	mux.HandleFunc("/api/v1/dashboard/tools", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleTools)))
+	mux.HandleFunc("/api/v1/dashboard/geo", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleGeo)))
+	mux.HandleFunc("/api/v1/dashboard/cost-centers", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleCostCenters)))
 	mux.HandleFunc("/api/v1/dashboard/timeline", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleTimeline)))
 	mux.HandleFunc("/api/v1/dashboard/recent", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleRecent)))
 

@@ -81,7 +81,7 @@ const (
 	metaToolRollupVersion = "tool_rollup_normalization_version"
 	// Bump when dashboardToolSQL normalization changes. Existing deployments
 	// otherwise keep serving a ready table built with the old classifier.
-	toolRollupVersion = "4"
+	toolRollupVersion = "5"
 	costBackfillStep  = 50000
 )
 
@@ -161,6 +161,8 @@ const dashboardToolSQL = `CASE
 	WHEN btrim(lower(coalesce(e.user_agent, ''))) = 'pi' OR btrim(lower(coalesce(e.user_agent, ''))) LIKE 'pi/%' OR btrim(lower(coalesce(e.user_agent, ''))) LIKE 'pi-%' OR btrim(lower(coalesce(e.user_agent, ''))) LIKE 'pi.%' OR btrim(lower(coalesce(e.user_agent, ''))) LIKE 'pi %' THEN 'Pi'
 	WHEN btrim(lower(coalesce(e.user_agent, ''))) LIKE 'charm-crush/%' THEN 'Charm-Crush'
 	WHEN btrim(lower(coalesce(e.user_agent, ''))) LIKE 'openai/%' THEN 'OpenAI'
+	WHEN btrim(lower(coalesce(e.user_agent, ''))) LIKE 'gemini-cli/%' THEN 'Gemini CLI'
+	WHEN btrim(lower(coalesce(e.user_agent, ''))) LIKE 'aider/%' THEN 'Aider'
 	WHEN btrim(lower(coalesce(e.user_agent, ''))) LIKE 'omp/%' THEN 'omp'
 	WHEN btrim(lower(coalesce(e.user_agent, ''))) LIKE 'curl/%' THEN 'curl'
 	ELSE 'Other'

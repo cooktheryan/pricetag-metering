@@ -50,6 +50,30 @@ func TestOIDCLoginIsUnavailableWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestOIDCProfileTagsPersistAllDirectoryClaims(t *testing.T) {
+	tags := oidcProfileTags(oidcClaims{
+		Subject: "subject-1", RhatUUID: "11111111-1111-4111-8111-111111111111",
+		Username: "alice@example.com", Email: "alice@example.com",
+		GivenName: "Alice", FamilyName: "Example", Groups: []string{"GE", "platform"},
+		Country: "us", State: "ca", Region: "Americas", Manager: "manager-1",
+		CostCenter: "CC-1", CostCenterDescription: "Platform Engineering",
+		EmployeeType: "employee", Organization: "Technology", Active: true,
+		TerminationDate: "",
+	})
+	for _, key := range []string{
+		"email", "first_name", "last_name", "preferred_username", "oidc_sub", "rhat_uuid",
+		"country", "state", "region", "manager_rhat_uuid", "cost_center",
+		"cost_center_description", "employee_type", "organization", "oidc_active", "groups",
+	} {
+		if _, ok := tags[key]; !ok {
+			t.Errorf("OIDC profile tag %q missing from %#v", key, tags)
+		}
+	}
+	if tags["country"] != "US" || tags["state"] != "CA" {
+		t.Fatalf("location claims were not normalized: country=%v state=%v", tags["country"], tags["state"])
+	}
+}
+
 // newTestOIDCHandler starts a minimal discovery document so InitOIDC succeeds.
 // The token and JWKS endpoints are never called by these tests.
 func newTestOIDCHandler(t *testing.T, testLogin bool) *AuthHandler {

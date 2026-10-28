@@ -19,6 +19,8 @@ func TestDashboardTool(t *testing.T) {
 		{"pi.something/1.0", "Pi"},
 		{"pi (darwin 25.6.0; arm64)", "Pi"},
 		{"OpenAI/Python 2.43.0", "OpenAI"},
+		{"gemini-cli/0.7.0", "Gemini CLI"},
+		{"aider/0.86.1", "Aider"},
 		{"Charm-Crush/v0.0.0-20261012010324-03f5dcbe64e8 (https://charm.land/crush)", "Charm-Crush"},
 		{"omp/18.10.2", "omp"},
 		{"curl/8.0", "curl"},

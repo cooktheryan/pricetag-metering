@@ -198,6 +198,44 @@ func (h *DashboardHandler) HandleTools(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, result)
 }
 
+func (h *DashboardHandler) HandleGeo(w http.ResponseWriter, r *http.Request) {
+	since, until := parseTimeWindow(r)
+	group, user, model := parseFilters(r)
+	var ok bool
+	if user, ok = resolveScope(w, r, h.store, h.cfg, user); !ok {
+		return
+	}
+	result, err := h.store.GetDashboardGeo(r.Context(), since, until, group, user, model)
+	if err != nil {
+		slog.Error("dashboard geo query failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if result == nil {
+		result = []storage.GeoSummary{}
+	}
+	writeJSON(w, result)
+}
+
+func (h *DashboardHandler) HandleCostCenters(w http.ResponseWriter, r *http.Request) {
+	since, until := parseTimeWindow(r)
+	group, user, model := parseFilters(r)
+	var ok bool
+	if user, ok = resolveScope(w, r, h.store, h.cfg, user); !ok {
+		return
+	}
+	result, err := h.store.GetDashboardCostCenters(r.Context(), since, until, group, user, model)
+	if err != nil {
+		slog.Error("dashboard cost-center query failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if result == nil {
+		result = []storage.CostCenterSummary{}
+	}
+	writeJSON(w, result)
+}
+
 func (h *DashboardHandler) HandleTimeline(w http.ResponseWriter, r *http.Request) {
 	since, until := parseTimeWindow(r)
 	group, user, model := parseFilters(r)

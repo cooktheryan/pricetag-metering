@@ -55,3 +55,20 @@ func TestNormalizePartnerUserTagsRejectsInvalidIdentityAndValues(t *testing.T) {
 		t.Fatalf("valid minimal tags: %v", err)
 	}
 }
+
+func TestNormalizePartnerUserTagsAcceptsGroupArrays(t *testing.T) {
+	tags := map[string]any{
+		"email":      "alice@example.com",
+		"first_name": "Alice",
+		"last_name":  "Example",
+		"groups":     []any{"GE", "platform"},
+		"dev_groups": []string{"local"},
+	}
+	got, _, err := normalizePartnerUserTags(tags)
+	if err != nil {
+		t.Fatalf("group arrays should be valid: %v", err)
+	}
+	if groups, ok := got["groups"].([]string); !ok || len(groups) != 2 || groups[0] != "GE" {
+		t.Fatalf("unexpected groups normalization: %#v", got["groups"])
+	}
+}
