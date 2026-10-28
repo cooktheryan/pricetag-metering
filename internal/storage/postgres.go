@@ -1399,19 +1399,20 @@ type RecentEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 	Username  string    `json:"username"`
 	// DisplayName is "First Last" from the partner directory; empty when unknown.
-	DisplayName         string  `json:"display_name,omitempty"`
-	Country             string  `json:"country,omitempty"`
-	State               string  `json:"state,omitempty"`
-	GroupName           string  `json:"group_name"`
-	Model               string  `json:"model"`
-	Provider            string  `json:"provider"`
-	PromptTokens        int     `json:"prompt_tokens"`
-	CompletionTokens    int     `json:"completion_tokens"`
-	TotalTokens         int     `json:"total_tokens"`
-	CachedInputTokens   int     `json:"cached_input_tokens"`
-	CacheCreationTokens int     `json:"cache_creation_tokens"`
-	CostUSD             float64 `json:"cost_usd"`
-	UserAgent           string  `json:"user_agent"`
+	DisplayName           string  `json:"display_name,omitempty"`
+	Country               string  `json:"country,omitempty"`
+	State                 string  `json:"state,omitempty"`
+	CostCenterDescription string  `json:"cost_center_description,omitempty"`
+	GroupName             string  `json:"group_name"`
+	Model                 string  `json:"model"`
+	Provider              string  `json:"provider"`
+	PromptTokens          int     `json:"prompt_tokens"`
+	CompletionTokens      int     `json:"completion_tokens"`
+	TotalTokens           int     `json:"total_tokens"`
+	CachedInputTokens     int     `json:"cached_input_tokens"`
+	CacheCreationTokens   int     `json:"cache_creation_tokens"`
+	CostUSD               float64 `json:"cost_usd"`
+	UserAgent             string  `json:"user_agent"`
 	// StatusCode is the HTTP status on the row; nil (JSON null) when unknown.
 	// Quota blocks are recorded here too — RecordQuotaDenial inserts a real
 	// usage_events row with status 429, so denials flow through this feed like
@@ -1424,7 +1425,7 @@ func (s *Store) GetRecentEvents(ctx context.Context, limit int, group, user, mod
 		limit = 20
 	}
 	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
-		SELECT e.timestamp, e.username, %s, COALESCE(pu.tags->>'country',''), COALESCE(pu.tags->>'state',''), COALESCE(e.group_name,''), e.model, COALESCE(e.provider,''),
+		SELECT e.timestamp, e.username, %s, COALESCE(pu.tags->>'country',''), COALESCE(pu.tags->>'state',''), COALESCE(pu.tags->>'cost_center_description',''), COALESCE(e.group_name,''), e.model, COALESCE(e.provider,''),
 			e.prompt_tokens, e.completion_tokens, e.total_tokens,
 			COALESCE(e.cached_input_tokens, 0), COALESCE(e.cache_creation_tokens, 0),
 			COALESCE(ROUND((%s)::numeric, 4), 0),
@@ -1447,7 +1448,7 @@ func (s *Store) GetRecentEvents(ctx context.Context, limit int, group, user, mod
 	for rows.Next() {
 		var r RecentEvent
 		var displayName sql.NullString
-		if err := rows.Scan(&r.Timestamp, &r.Username, &displayName, &r.Country, &r.State, &r.GroupName, &r.Model, &r.Provider, &r.PromptTokens, &r.CompletionTokens, &r.TotalTokens, &r.CachedInputTokens, &r.CacheCreationTokens, &r.CostUSD, &r.UserAgent, &r.StatusCode); err != nil {
+		if err := rows.Scan(&r.Timestamp, &r.Username, &displayName, &r.Country, &r.State, &r.CostCenterDescription, &r.GroupName, &r.Model, &r.Provider, &r.PromptTokens, &r.CompletionTokens, &r.TotalTokens, &r.CachedInputTokens, &r.CacheCreationTokens, &r.CostUSD, &r.UserAgent, &r.StatusCode); err != nil {
 			return nil, err
 		}
 		r.DisplayName = displayName.String

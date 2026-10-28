@@ -432,6 +432,7 @@ tr.clickable{cursor:pointer}
       <thead><tr>
         <th style="cursor:default">Time</th>
         <th style="cursor:default">User</th>
+        <th style="cursor:default">Cost Center</th>
         <th style="cursor:default">Client</th>
         <th style="cursor:default">Model</th>
         <th style="cursor:default">Provider</th>
@@ -746,6 +747,7 @@ function renderRecent(data){
     return `<tr>
       <td style="white-space:nowrap;color:var(--text2)">${timeAgo(r.timestamp)}</td>
       <td>${userCell(r.username,r.display_name,{country:r.country})}</td>
+      <td title="${pmEsc(r.cost_center_description||'Unknown')}">${pmEsc(r.cost_center_description||'—')}</td>
       <td style="color:${clientColor}" title="${clientTitle}">${pmEsc(clientLabel||'—')}</td>
       <td>${r.model||'—'}</td>
       <td style="color:${provColor}">${r.provider||'—'}</td>
