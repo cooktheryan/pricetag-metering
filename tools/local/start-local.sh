@@ -73,7 +73,8 @@ echo "==> starting metering-service"
   OIDC_CLIENT_ID=local-dashboard \
   OIDC_CLIENT_SECRET=local-secret \
   OIDC_REDIRECT_URL=http://localhost:8080/oauth/callback \
-  OIDC_SCOPES="openid profile email groups" \
+  OIDC_SCOPES="openid profile email" \
+  OIDC_CLAIMS_DEBUG=false \
   OIDC_TEST_LOGIN=true \
   DEV_LOGIN_USERS="new-user@example.com,returning-user@example.com,blocked-user@example.com,nogroup-user@example.com,manager-user@example.com" \
   ONBOARDING_MODE=enforce \

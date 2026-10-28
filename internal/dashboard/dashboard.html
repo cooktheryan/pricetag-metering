@@ -1251,19 +1251,22 @@ async function initGeoMap(){
       fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(r=>r.json()),
       fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json').then(r=>r.json())
     ]);
-    const width=1000,height=400;
+    const width=1000,height=500;
     const svg=d3.select('#geo-map').attr('viewBox','0 0 '+width+' '+height).attr('preserveAspectRatio','xMidYMid meet');
     svg.selectAll('*').remove();
     // Focus on the populated operating regions rather than fitting the
     // entire globe. This removes most of Antarctica and open ocean while
     // retaining the Americas, Europe, Africa and Asia for the usage view.
-    const focusArea={type:'Polygon',coordinates:[[[-130,-48],[158,-48],[158,74],[-130,74],[-130,-48]]]};
+    const focusArea={type:'Polygon',coordinates:[[[-130,-50],[158,-50],[158,74],[-130,74],[-130,-50]]]};
     const projection=d3.geoNaturalEarth1().fitExtent([[12,12],[width-12,height-12]],focusArea);
     const path=d3.geoPath(projection);
     svg.append('path').datum({type:'Sphere'}).attr('d',path).attr('fill','#0d1117').attr('stroke','#2c3138').attr('stroke-width','.8');
     geoCountryPaths=new Map();
     topojson.feature(world,world.objects.countries).features.forEach(function(f){
       const code=ISO2_BY_NUM[String(f.id)]||'';
+      // Antarctica is outside the dashboard's operating geography and would
+      // otherwise consume valuable map area at the bottom of the projection.
+      if(code==='AQ')return;
       const p=svg.append('path').datum(f).attr('d',path).attr('class','geo-country').attr('fill',GEO_BASE).attr('data-country',code);
       if(code)geoCountryPaths.set(code,p);
       p.on('mousemove',function(evt){const v=(geoValueByCountry.get(code)||0);if(!code)return;geoMapTooltip(evt,geoRegionName(code),v);}).on('mouseleave',hideGeoMapTooltip);
