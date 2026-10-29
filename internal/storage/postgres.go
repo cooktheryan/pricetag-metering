@@ -62,6 +62,15 @@ type UsageStats struct {
 	// allowance (issue #22) rather than being under budget. Additive: the
 	// deployed gateway filter reads only hasAccess.
 	OverLimitModel bool `json:"overLimitModel,omitempty"`
+
+	// QoS classification is additive and independent of quota access. An
+	// older gateway ignores these fields.
+	QosClass            string `json:"qosClass,omitempty"`
+	QosWindowSeconds    int    `json:"qosWindowSeconds,omitempty"`
+	QosWindowTokens     int64  `json:"qosWindowTokens,omitempty"`
+	QosHoldWindowTokens int64  `json:"qosHoldWindowTokens,omitempty"`
+	QosRetryAfter       int    `json:"qosRetryAfter,omitempty"`
+	QosSubject          string `json:"qosSubject,omitempty"`
 }
 
 type Store struct {
@@ -90,6 +99,16 @@ type Store struct {
 	quotaEnforcement  atomic.Bool
 	monthSpendEnabled atomic.Bool
 	monthSpendWrites  atomic.Bool
+
+	// QoS classification state. The cached decisions are process-local,
+	// like the quota cache; the short-window and 5m-guard caches have
+	// different TTLs so the expensive 5m query is not repeated on every
+	// short-window refresh.
+	qosEnabled atomic.Bool
+	qosMu      sync.Mutex
+	qosConfig  QosConfig
+	qosWindow  map[string]qosWindowEntry
+	qosHold    map[string]qosHoldEntry
 
 	// rollupsReadyNow caches the rollup backfill completion flag; the
 	// authoritative value lives in rollup_meta. See rollups.go.
@@ -509,6 +528,25 @@ func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exe
 		stats.HasAccess = true
 	}
 	stats.HasAccess = stats.HasAccess && allowed && stats.ModelAllowed
+	if s.qosEnabled.Load() {
+		qos, qosErr := s.GetQosStatus(ctx, username, decision, exempt)
+		if qosErr != nil {
+			// QoS is advisory for quota enforcement. A classification
+			// failure must not turn a valid quota decision into a 5xx;
+			// default to main so the gateway's safety cap still applies.
+			slog.Error("qos classification failed; defaulting to main", "error", qosErr, "user", username)
+			stats.QosClass = QosMain
+			stats.QosSubject = decision.Subject
+			stats.QosWindowSeconds = s.qosConfig.WindowSeconds
+		} else {
+			stats.QosClass = qos.Class
+			stats.QosWindowSeconds = qos.WindowSeconds
+			stats.QosWindowTokens = qos.WindowTokens
+			stats.QosHoldWindowTokens = qos.HoldWindowTokens
+			stats.QosRetryAfter = qos.RetryAfterSeconds
+			stats.QosSubject = qos.Subject
+		}
+	}
 	// Classify against the FINAL access decision so the result label survives the
 	// token budget and the over-limit model exception (they can flip the raw
 	// dollar-gate answer either way). The cached flag still reports cache hits.

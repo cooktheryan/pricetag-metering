@@ -89,6 +89,60 @@ var (
 		Help: "Quota denials recorded via RecordQuotaDenial.",
 	})
 
+	// QosClassDecisionsTotal counts QoS classification decisions by class
+	// and whether the result was served from the process-local cache.
+	QosClassDecisionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "metering_qos_class_decisions_total",
+		Help: "QoS class decisions, keyed by class and cache hit.",
+	}, []string{"class", "cached"})
+
+	// QosWindowTokens observes weighted tokens in the short classification
+	// window.
+	QosWindowTokens = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "metering_qos_window_tokens",
+		Help:    "Weighted tokens in the short QoS classification window.",
+		Buckets: []float64{10_000, 50_000, 100_000, 500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000},
+	})
+
+	// QosClassTransitionsTotal counts class transitions observed by this
+	// process. The label pair is bounded by the three class values.
+	QosClassTransitionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "metering_qos_class_transitions_total",
+		Help: "Observed QoS class transitions, keyed by previous and next class.",
+	}, []string{"from", "to"})
+
+	// QosRatelimitedTotal counts decisions that entered ratelimit.
+	QosRatelimitedTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "metering_qos_ratelimited_total",
+		Help: "QoS decisions that classified the caller as ratelimit.",
+	})
+
+	// QosUnmatchedUsersTotal counts entitlement decisions for callers with
+	// no partner-user identity. These are treated as premium and are
+	// expected to be zero in normal operation.
+	QosUnmatchedUsersTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "metering_qos_unmatched_users_total",
+		Help: "QoS decisions for callers without a partner-user identity.",
+	})
+
+	// QosQueryDurationSeconds observes the usage_events classification query.
+	QosQueryDurationSeconds = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "metering_qos_query_duration_seconds",
+		Help:    "Duration of the weighted-token classification query.",
+		Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1},
+	})
+
+	// QosCacheHitsTotal and QosCacheMissesTotal split class decisions by
+	// whether they required a usage_events query.
+	QosCacheHitsTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "metering_qos_cache_hits_total",
+		Help: "QoS class decisions served from the process-local cache.",
+	})
+	QosCacheMissesTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "metering_qos_cache_misses_total",
+		Help: "QoS class decisions that required a usage_events query.",
+	})
+
 	// KeysMintedTotal counts API keys minted through the keys handler.
 	KeysMintedTotal = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "metering_keys_minted_total",
@@ -143,6 +197,14 @@ var (
 		DBPoolWaitSecondsTotal,
 		QuotaChecksTotal,
 		QuotaDenialsTotal,
+		QosClassDecisionsTotal,
+		QosWindowTokens,
+		QosClassTransitionsTotal,
+		QosRatelimitedTotal,
+		QosUnmatchedUsersTotal,
+		QosQueryDurationSeconds,
+		QosCacheHitsTotal,
+		QosCacheMissesTotal,
 		KeysMintedTotal,
 		UsageReportDurationSeconds,
 		RollupRefreshDurationSeconds,

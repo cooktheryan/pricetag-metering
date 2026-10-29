@@ -411,6 +411,26 @@ func (s *Store) PartnerLoginsForUsername(ctx context.Context, username string) (
 	return out, rows.Err()
 }
 
+// PartnerIdentityForUsername resolves the canonical partner user behind a MaaS
+// login and returns the configured tag value in the same round trip. A login
+// with no partner record returns found=false; callers treat it as an unknown
+// subject rather than hashing the username.
+func (s *Store) PartnerIdentityForUsername(ctx context.Context, username, tagKey string) (subject, tagValue string, found bool, err error) {
+	err = s.db.QueryRowContext(ctx, `
+		SELECT p.user_id::text, COALESCE(p.tags->>$2, '')
+		FROM partner_user_logins l
+		JOIN partner_users p ON p.user_id = l.user_id
+		WHERE l.username = $1
+		LIMIT 1`, username, tagKey).Scan(&subject, &tagValue)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", false, nil
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	return subject, tagValue, true, nil
+}
+
 // UpdatePartnerUserAccess changes operator-controlled authorization fields.
 // It is intentionally separate from Atlas profile PATCH so external callers
 // cannot grant themselves dashboard roles.

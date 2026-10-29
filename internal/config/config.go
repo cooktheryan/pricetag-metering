@@ -160,6 +160,44 @@ type Config struct {
 	// the standing-parity detection latency.
 	RollupRefreshSeconds int
 
+	// QoS classification (Phase 1). Disabled by default; the entitlement
+	// endpoint stays backward compatible when it is off.
+	QosEnabled bool
+	// QosWindowSeconds is the burst window used for the premium/main and
+	// main/ratelimit boundaries.
+	QosWindowSeconds int
+	// QosHoldWindowSeconds is the longer guard window that prevents rapid
+	// class flapping and catches sustained load.
+	QosHoldWindowSeconds int
+	// QosPremiumMaxTokens is the 60s weighted-token boundary between
+	// premium and main.
+	QosPremiumMaxTokens int64
+	// QosRatelimitMinTokens is the 60s weighted-token boundary at which a
+	// user enters ratelimit.
+	QosRatelimitMinTokens int64
+	// QosHoldMainTokens is the 5m weighted-token boundary between premium
+	// and main.
+	QosHoldMainTokens int64
+	// QosHoldRatelimitTokens is the 5m weighted-token boundary at which a
+	// user enters ratelimit.
+	QosHoldRatelimitTokens int64
+	// QosCacheReadWeight is the weight applied to prompt-cache reads when
+	// computing weighted token usage. Uncached input, cache writes, output,
+	// and reasoning are weighted 1.0.
+	QosCacheReadWeight float64
+	// QosClassCacheSeconds bounds staleness of the short-window class
+	// decision. The 5m guard has its own, longer cache.
+	QosClassCacheSeconds int
+	// QosHoldCacheSeconds bounds staleness of the 5m guard.
+	QosHoldCacheSeconds int
+	// QosProviders is the set of usage_events providers that count toward
+	// the shared/free-capacity class. Today this is cb-glm.
+	QosProviders []string
+	// QosExemptTagKey/Value exempts a partner user from QoS when their
+	// tags contain the configured key/value (for example origin=loadtest).
+	QosExemptTagKey   string
+	QosExemptTagValue string
+
 	KeyService KeyService
 	Kubernetes Kubernetes
 	Welcome    Welcome
@@ -320,6 +358,19 @@ func Load() Config {
 		DashboardUseRollups:      dashboardUseRollups,
 		LiveRollupsEnabled:       liveRollupsEnabled,
 		RollupRefreshSeconds:     envInt("ROLLUP_REFRESH_SECONDS", 300),
+		QosEnabled:               envBool("QOS_ENABLED", false),
+		QosWindowSeconds:         envInt("QOS_WINDOW_SECONDS", 60),
+		QosHoldWindowSeconds:     envInt("QOS_HOLD_WINDOW_SECONDS", 300),
+		QosPremiumMaxTokens:      envInt64("QOS_PREMIUM_MAX_TOKENS", 600_000),
+		QosRatelimitMinTokens:    envInt64("QOS_RATELIMIT_MIN_TOKENS", 2_000_000),
+		QosHoldMainTokens:        envInt64("QOS_HOLD_MAIN_TOKENS", 3_000_000),
+		QosHoldRatelimitTokens:   envInt64("QOS_HOLD_RATELIMIT_TOKENS", 10_000_000),
+		QosCacheReadWeight:       envFloat("QOS_CACHE_READ_WEIGHT", 0.05),
+		QosClassCacheSeconds:     envInt("QOS_CLASS_CACHE_SECONDS", 15),
+		QosHoldCacheSeconds:      envInt("QOS_HOLD_CACHE_SECONDS", 60),
+		QosProviders:             qosProviders(),
+		QosExemptTagKey:          envDefault("QOS_EXEMPT_TAG_KEY", "origin"),
+		QosExemptTagValue:        envDefault("QOS_EXEMPT_TAG_VALUE", "loadtest"),
 		KeyService: KeyService{
 			URL:                strings.TrimSuffix(os.Getenv("KEY_SERVICE_URL"), "/"),
 			UserHeader:         envDefault("KEY_SERVICE_USER_HEADER", "X-Auth-Username"),
@@ -382,6 +433,17 @@ func envList(key string) []string {
 	return result
 }
 
+// qosProviders returns the configured shared/free usage providers. The
+// default keeps existing EnMaaS deployments working without a new env var;
+// an explicit empty value is treated as the default as well.
+func qosProviders() []string {
+	providers := envList("QOS_PROVIDERS")
+	if len(providers) == 0 {
+		return []string{"cb-glm"}
+	}
+	return providers
+}
+
 func envSecrets(keys ...string) []string {
 	var result []string
 	seen := make(map[string]struct{})
@@ -398,6 +460,13 @@ func envSecrets(keys ...string) []string {
 
 func envInt(key string, fallback int) int {
 	if v, err := strconv.Atoi(os.Getenv(key)); err == nil && v >= 0 {
+		return v
+	}
+	return fallback
+}
+
+func envInt64(key string, fallback int64) int64 {
+	if v, err := strconv.ParseInt(os.Getenv(key), 10, 64); err == nil && v >= 0 {
 		return v
 	}
 	return fallback

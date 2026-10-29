@@ -296,6 +296,16 @@ type QuotaDecision struct {
 	LimitUSD          float64  `json:"limit_usd"` // effective monthly limit
 	SpentUSD          float64  `json:"spent_usd"`
 	TokensUsed        int64    `json:"-"`
+	// Subject is the canonical partner user UUID behind the requested
+	// login. It is used only for internal per-person state, never sent to
+	// the inference upstream.
+	Subject string `json:"-"`
+	// Logins is the full set of MaaS logins linked to the partner user;
+	// QoS aggregates usage across all of them.
+	Logins []string `json:"-"`
+	// TagExempt reports that the partner user carries the configured
+	// load-test exemption tag.
+	TagExempt bool `json:"-"`
 	// Post-cap allowance (issue #22): admin-listed exact model identifiers
 	// that pass when the dollar gate denies.
 	OverLimitModels []string  `json:"over_limit_models,omitempty"`
@@ -349,6 +359,19 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	logins, err := s.PartnerLoginsForUsername(ctx, username)
 	if err != nil {
 		return d, err
+	}
+	d.Logins = logins
+	if s.qosEnabled.Load() {
+		subject, tagValue, found, identityErr := s.PartnerIdentityForUsername(ctx, username, s.qosConfig.ExemptTagKey)
+		if identityErr != nil {
+			return d, fmt.Errorf("partner identity lookup: %w", identityErr)
+		}
+		if found {
+			d.Subject = subject
+			d.TagExempt = s.qosConfig.ExemptTagKey != "" &&
+				s.qosConfig.ExemptTagValue != "" &&
+				tagValue == s.qosConfig.ExemptTagValue
+		}
 	}
 
 	var userOv, defaultUSD float64

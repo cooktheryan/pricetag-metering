@@ -106,6 +106,21 @@ func main() {
 	store.SetMonthSpendEnabled(cfg.MonthSpendEnabled)
 	store.SetMonthSpendWrites(cfg.MonthSpendWrites)
 	store.SetLiveRollups(cfg.LiveRollupsEnabled)
+	store.SetQosConfig(storage.QosConfig{
+		Enabled:             cfg.QosEnabled,
+		WindowSeconds:       cfg.QosWindowSeconds,
+		HoldWindowSeconds:   cfg.QosHoldWindowSeconds,
+		PremiumMaxTokens:    cfg.QosPremiumMaxTokens,
+		RatelimitMinTokens:  cfg.QosRatelimitMinTokens,
+		HoldMainTokens:      cfg.QosHoldMainTokens,
+		HoldRatelimitTokens: cfg.QosHoldRatelimitTokens,
+		CacheReadWeight:     cfg.QosCacheReadWeight,
+		ClassCacheTTL:       time.Duration(cfg.QosClassCacheSeconds) * time.Second,
+		HoldCacheTTL:        time.Duration(cfg.QosHoldCacheSeconds) * time.Second,
+		Providers:           cfg.QosProviders,
+		ExemptTagKey:        cfg.QosExemptTagKey,
+		ExemptTagValue:      cfg.QosExemptTagValue,
+	})
 	if cfg.DashboardUseRollups && !cfg.LiveRollupsEnabled {
 		slog.Warn("dashboard rollups are eventually consistent because live writes are disabled", "refresh_interval_seconds", cfg.RollupRefreshSeconds)
 	} else if cfg.DashboardUseRollups && cfg.LiveRollupsEnabled {
