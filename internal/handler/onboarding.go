@@ -50,9 +50,10 @@ func (h *OnboardingHandler) ServeAccount(w http.ResponseWriter, r *http.Request)
 	_, _ = w.Write([]byte(page))
 }
 
-// ServeAccessPolicyPage renders the super-admin country/group policy form.
+// ServeAccessPolicyPage keeps the old standalone URL working by sending
+// super admins to the Access tab inside the admin console.
 func (h *OnboardingHandler) ServeAccessPolicyPage(w http.ResponseWriter, r *http.Request) {
-	h.servePage(w, "access-policy.html")
+	http.Redirect(w, r, "/admin#access", http.StatusFound)
 }
 
 // ServeTerms renders the versioned Terms document. The text is intentionally

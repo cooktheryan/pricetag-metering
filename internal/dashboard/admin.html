@@ -526,6 +526,17 @@ td .tag{white-space:nowrap}
 .pm-opts{margin-left:auto;display:flex;align-items:center;gap:10px;color:var(--t2,#8090a8);font-size:12px}
 .pm-close{background:none;border:1px solid var(--bdr,#232b3b);color:var(--t2,#8090a8);border-radius:7px;padding:3px 9px;cursor:pointer}
 .pm-body table{width:100%;border-collapse:collapse;font-size:12.5px;text-align:left}
+
+/* Access policy tab */
+.access-label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--t2);font-weight:700;margin:0 0 6px}
+.access-form textarea{width:100%;min-height:90px;background:var(--c2);border:1px solid var(--bdr);color:var(--t);border-radius:8px;padding:11px 13px;font:12.5px 'SF Mono',Consolas,Menlo,monospace;outline:none;resize:vertical}
+.access-form textarea:focus{border-color:var(--blu)}
+.access-hint{font-size:11px;color:var(--t2);margin-top:6px}
+.access-row{display:flex;align-items:center;gap:9px;margin-top:14px;font-size:12.5px}
+.access-row input{accent-color:var(--grn);width:16px;height:16px}
+.access-actions{display:flex;align-items:center;gap:12px;margin-top:16px}
+.access-msg{font-size:12px;min-height:18px}.access-msg.ok{color:var(--grn)}.access-msg.err{color:var(--red)}
+.access-warn{background:rgba(235,168,48,.08);border:1px solid rgba(235,168,48,.3);border-radius:9px;padding:12px 14px;font-size:12px;color:var(--org);margin-bottom:18px}
 .pm-body th{color:var(--t2,#8090a8);font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:6px 8px;border-bottom:1px solid var(--bdr,#232b3b)}
 .pm-body td{padding:6px 8px;border-bottom:1px solid var(--bdr,#232b3b)}
 .pm-zero{color:var(--t2,#8090a8)}
@@ -546,7 +557,6 @@ td .tag{white-space:nowrap}
     <a href="/dashboard">Usage</a>
     <a href="/manager" id="team-tab" style="display:none" title="Usage for everyone on your team">My team</a>
     <a href="/routing">Routing</a>
-    <a href="/admin/access">Access</a>
     <a href="/admin" class="on">Admin</a>
   </nav>
   <div class="ab-right">
@@ -560,7 +570,7 @@ td .tag{white-space:nowrap}
 
 <!-- Console tabs -->
 <div class="vtabs">
-  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button><button class="vtab" id="vtab-safety-net" onclick="showTab('safety-net')">Safety Net</button><button class="vtab" id="vtab-pricing-discounts" onclick="showTab('pricing-discounts')">Pricing Discounts</button><button class="vtab" id="vtab-model-restrictions" onclick="showTab('model-restrictions')">Model Restrictions</button>
+  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button><button class="vtab" id="vtab-safety-net" onclick="showTab('safety-net')">Safety Net</button><button class="vtab" id="vtab-pricing-discounts" onclick="showTab('pricing-discounts')">Pricing Discounts</button><button class="vtab" id="vtab-model-restrictions" onclick="showTab('model-restrictions')">Model Restrictions</button><button class="vtab" id="vtab-access" onclick="showTab('access')">Access</button>
   <div class="vtab-tools">
     <span id="last-updated"></span>
     <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="refreshTab(activeTab,true)">Refresh</button>
@@ -671,6 +681,27 @@ td .tag{white-space:nowrap}
     <div class="ts" style="margin-bottom:14px">Read-only view of users restricted by the external model-policy API. An empty allowed-model list means deny-all.</div>
     <div id="model-restrictions-list"><div class="loading"><div class="spinner"></div>Loading model restrictions...</div></div>
     <div class="partner-users-pager"><button id="model-restrictions-prev" onclick="changeModelRestrictionsPage(-1)">Previous</button><span id="model-restrictions-page-label">Page 1</span><button id="model-restrictions-next" onclick="changeModelRestrictionsPage(1)">Next</button></div>
+  </div>
+</div>
+
+<!-- ============ TAB: Access ============ -->
+<div class="tab-panel" id="tab-access">
+  <div class="card">
+    <div class="card-hdr"><div><span class="card-title">Access Policy</span><span class="card-count" id="access-meta"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadAccessPolicy()">Refresh</button></div>
+    <div class="ts" style="margin-bottom:14px">Group allowlist and ISO 3166-1 alpha-3 country blocklist. Changes apply on the next request — no redeploy.</div>
+    <div class="access-warn">This policy is enforced only when <code>ONBOARDING_MODE=enforce</code>. In <code>observe</code> mode decisions are logged but not blocked.</div>
+    <div class="access-form">
+      <label class="access-label" for="access-groups">Authorized groups (OIDC groups claim)</label>
+      <textarea id="access-groups" placeholder="GE&#10;enmaas-users"></textarea>
+      <div class="access-hint">One group per line or comma-separated. A user needs <strong>any one</strong> of these groups (not all of them). Matching is case-insensitive. Leave empty to accept any non-technical group.</div>
+
+      <label class="access-label" for="access-countries" style="margin-top:18px">Blocked countries — ISO 3166-1 alpha-3</label>
+      <textarea id="access-countries" placeholder="IRN&#10;PRK&#10;RUS"></textarea>
+      <div class="access-hint">This is a deny list, not an allow list: users in these countries are blocked. Three-letter codes only (e.g. <code>IRN</code>, not <code>IR</code>). The directory's alpha-2 values are converted automatically.</div>
+
+      <div class="access-row"><input type="checkbox" id="access-unknown"><label for="access-unknown" style="margin:0;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--t);font-weight:400">Allow users whose country cannot be determined</label></div>
+      <div class="access-actions"><button class="btn btn-blu" id="access-save" onclick="saveAccessPolicy()">Save policy</button><div class="access-msg" id="access-msg"></div></div>
+    </div>
   </div>
 </div>
 
@@ -848,7 +879,7 @@ function resolveModelName(crdName) {
 /* ================================================================
    Tabs — one panel visible, lazy load on first open, deep-linkable
    ================================================================ */
-var TABS = ['people', 'safety-net', 'pricing-discounts', 'model-restrictions'];
+var TABS = ['people', 'safety-net', 'pricing-discounts', 'model-restrictions', 'access'];
 
 function showTab(name, pushHash) {
   if (TABS.indexOf(name) < 0) name = 'people';
@@ -876,8 +907,55 @@ function refreshTab(name, manual) {
     loadPricingDiscounts();
   } else if (name === 'model-restrictions') {
     loadModelRestrictions();
+  } else if (name === 'access') {
+    loadAccessPolicy();
   }
   if (manual) touchUpdated();
+}
+
+/* ================================================================
+   Access policy tab — group allowlist and country blocklist
+   ================================================================ */
+function accessPolicyLines(v) {
+  return v.split(/[\n,]+/).map(function(s) { return s.trim(); }).filter(Boolean);
+}
+
+function loadAccessPolicy() {
+  fetchJSON('/api/v1/admin/access-policy').then(function(p) {
+    document.getElementById('access-groups').value = (p.allowed_groups || []).join('\n');
+    document.getElementById('access-countries').value = (p.blocked_countries || []).join('\n');
+    document.getElementById('access-unknown').checked = !!p.allow_unknown_country;
+    document.getElementById('access-meta').textContent = p.updated_by
+      ? ('Last changed by ' + p.updated_by + ' · ' + new Date(p.updated_at).toLocaleString())
+      : 'Using deployment defaults (no saved policy yet).';
+  }).catch(function(e) {
+    var msg = document.getElementById('access-msg');
+    msg.className = 'access-msg err';
+    msg.textContent = 'Could not load policy: ' + e.message;
+  });
+}
+
+function saveAccessPolicy() {
+  var btn = document.getElementById('access-save');
+  var msg = document.getElementById('access-msg');
+  btn.disabled = true;
+  msg.className = 'access-msg';
+  msg.textContent = 'Saving…';
+  updateJSON('/api/v1/admin/access-policy', 'PUT', {
+    allowed_groups: accessPolicyLines(document.getElementById('access-groups').value),
+    blocked_countries: accessPolicyLines(document.getElementById('access-countries').value),
+    allow_unknown_country: document.getElementById('access-unknown').checked
+  }).then(function(p) {
+    msg.className = 'access-msg ok';
+    msg.textContent = 'Saved.';
+    document.getElementById('access-meta').textContent =
+      'Last changed by ' + (p.updated_by || 'you') + ' · just now';
+  }).catch(function(e) {
+    msg.className = 'access-msg err';
+    msg.textContent = e.message.slice(0, 200);
+  }).then(function() {
+    btn.disabled = false;
+  });
 }
 
 function touchUpdated() {
@@ -1056,7 +1134,7 @@ refreshTimer = setInterval(function() {
   if (document.querySelector('.modal-overlay.open, .confirm-overlay.open')) return;
   var ae = document.activeElement;
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return;
-  if (activeTab === 'people' || activeTab === 'safety-net') return; // editable tabs use explicit refresh/save
+  if (activeTab === 'people' || activeTab === 'safety-net' || activeTab === 'access') return; // editable tabs use explicit refresh/save
   refreshTab(activeTab, false);
 }, REFRESH_INTERVAL);
 
