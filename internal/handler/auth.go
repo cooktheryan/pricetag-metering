@@ -442,11 +442,12 @@ func isDevTestUser(tags map[string]any) bool {
 	return false
 }
 
-// loginDestination is where a successful login lands. Admins keep the Usage
-// page; a manager (someone with direct reports in partner_users) goes straight
-// to their team view. The legacy org directory is intentionally not consulted:
-// partner_users is the single identity source. Users without a partner role
-// land on /account. Fails closed to /dashboard.
+// loginDestination is where a successful login lands. Admins land on the
+// org-wide Usage page; a manager (someone with direct reports in
+// partner_users) goes straight to their team view; everyone else lands on
+// their personal My usage page (which also carries the API Keys tab). The
+// legacy org directory is intentionally not consulted: partner_users is the
+// single identity source. Fails closed to /dashboard.
 func (h *AuthHandler) loginDestination(r *http.Request, username string, groups []string) string {
 	if h.orgStore == nil {
 		return "/dashboard"

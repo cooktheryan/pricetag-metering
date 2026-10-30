@@ -554,7 +554,9 @@ td .tag{white-space:nowrap}
 <header class="appbar">
   <a class="logo" href="/dashboard"><span class="en">En</span><em>MaaS</em></a>
   <nav>
-    <a href="/dashboard">Usage</a>
+    <a href="/account">My usage</a>
+    <a href="/account?tab=keys">API keys</a>
+    <a href="/dashboard">Org usage</a>
     <a href="/manager" id="team-tab" style="display:none" title="Usage for everyone on your team">My team</a>
     <a href="/routing">Routing</a>
     <a href="/admin" class="on">Admin</a>
@@ -2542,7 +2544,7 @@ fetch("/whoami").then(function(r){return r.json()}).then(function(d){
   }
   var mvb=document.getElementById("my-view-btn");
   if(mvb&&d.user){mvb.href="/admin/impersonate?as="+encodeURIComponent(d.user);}
-  if(d.isManager){var tt=document.getElementById("team-tab");if(tt)tt.style.display="";}
+  if(d.isManager||d.isSuperAdmin){var tt=document.getElementById("team-tab");if(tt)tt.style.display="";}
 }).catch(function(){})
 </script>
 <!-- Model pricing modal (shared across pages) -->

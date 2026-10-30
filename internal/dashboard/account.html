@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>My account — EnMaaS</title>
+<title>My usage — EnMaaS</title>
 <script>
   (function () {
     try {
@@ -30,6 +30,10 @@
   .tab{background:none;border:0;color:var(--t2);font:600 12px Inter,sans-serif;padding:8px 14px;border-radius:8px;cursor:pointer}
   .tab:hover{color:var(--t);background:var(--c3)}
   .tab.on{color:var(--t);background:var(--c3)}
+  .nav-link{color:var(--t2);font:600 12px Inter,sans-serif;padding:8px 11px;border-radius:8px;text-decoration:none;white-space:nowrap}
+  .nav-link:hover{color:var(--t);background:var(--c3)}
+  .nav-link.on{color:var(--t);background:var(--c3)}
+  .brand{color:var(--t);text-decoration:none}
   .right{margin-left:auto;display:flex;align-items:center;gap:14px}
   .identity{font-size:12px;color:var(--t2);text-align:right;line-height:1.25}
   .identity b{display:block;color:var(--t);font-weight:600}
@@ -160,10 +164,16 @@
 <body>
 
 <header class="appbar">
-  <div class="brand"><span class="en">En</span><span class="maas">MaaS</span></div>
+  <a class="brand" href="/account"><span class="en">En</span><span class="maas">MaaS</span></a>
   <nav class="tabs">
-    <button class="tab" id="tab-usage" data-tab="usage">Usage</button>
+    <button class="tab" id="tab-usage" data-tab="usage">My usage</button>
     <button class="tab" id="tab-keys" data-tab="keys">API Keys</button>
+  </nav>
+  <nav class="tabs" aria-label="Workspace links">
+    <a class="nav-link" href="/manager" id="nav-team" style="display:none" title="Usage for everyone on your team">My team</a>
+    <a class="nav-link" href="/dashboard" id="nav-org" style="display:none" title="Usage for the whole organisation">Org usage</a>
+    <a class="nav-link" href="/routing" id="nav-routing" style="display:none">Routing</a>
+    <a class="nav-link" href="/admin" id="nav-admin" style="display:none">Admin</a>
   </nav>
   <div class="right">
     <div class="identity"><b id="who-name">…</b><span id="who-sub"></span></div>
@@ -182,7 +192,7 @@
   <section id="view-usage">
     <div class="pg-head">
       <div>
-        <h1>Your spend</h1>
+        <h1>My usage</h1>
         <div class="sub" id="usage-sub">Month to date · updated just now</div>
       </div>
       <div class="range-group">
@@ -333,7 +343,7 @@
       </div>
       <div class="key-success">
         <strong>Congratulations — you’re ready to use EnMaaS.</strong>
-        Start using your key with your local tools. Come back anytime to review your usage in the <a href="/account?tab=usage">Usage tab</a>, or <a href="/welcome" target="_blank" rel="noopener">see how to set up your tools ↗</a>.
+        Start using your key with your local tools. Come back anytime to review your usage in the <a href="/account?tab=usage">My usage tab</a>, or <a href="/welcome" target="_blank" rel="noopener">see how to set up your tools ↗</a>.
       </div>
       <div class="saved"><input type="checkbox" id="reveal-saved"><label for="reveal-saved">I've saved this key in a safe place</label></div>
       <div class="modal-actions"><button class="btn btn-primary" id="reveal-done" disabled>Done</button></div>
@@ -474,6 +484,15 @@
       if(d.quota && typeof d.quota.limit_usd === 'number' && d.quota.limit_usd>0) parts.push('budget $'+Math.round(d.quota.limit_usd));
       $('who-sub').textContent = parts.join(' · ');
       if(d.quota) state.quota=d.quota;
+      // Workspace links mirror the role-gated tabs on every other page:
+      // everyone has this personal page; managers get My team; admins get
+      // the org-wide usage page; super admins also get the operator pages.
+      if(d.isManager || d.isSuperAdmin) $('nav-team').style.display='';
+      if(d.isAdmin || d.isSuperAdmin) $('nav-org').style.display='';
+      if(d.isSuperAdmin){
+        $('nav-routing').style.display='';
+        $('nav-admin').style.display='';
+      }
     }).catch(function(){});
   }
 

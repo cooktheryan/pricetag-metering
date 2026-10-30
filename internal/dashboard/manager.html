@@ -138,10 +138,12 @@ td.num{text-align:right}
 <canvas id="dashboard-flow" aria-hidden="true"></canvas>
 <div class="dashboard-content">
 <header class="appbar">
-  <a class="logo" href="/dashboard"><span class="en">En</span><em>MaaS</em></a>
+  <a class="logo" href="/manager"><span class="en">En</span><em>MaaS</em></a>
   <nav>
-    <a href="/dashboard">Usage</a>
+    <a href="/account">My usage</a>
+    <a href="/account?tab=keys">API keys</a>
     <a href="/manager" class="on" title="Usage for everyone on your team">My team</a>
+    <a href="/dashboard" id="tab-org" style="display:none" title="Usage for the whole organisation">Org usage</a>
     <a href="/routing" id="tab-routing" style="display:none">Routing</a>
     <a href="/admin" id="tab-admin" style="display:none">Admin</a>
   </nav>
@@ -668,6 +670,9 @@ async function boot(){
     const mvb=document.getElementById('my-view-btn');
     mvb.href='/admin/impersonate?as='+encodeURIComponent(me.user);
     mvb.style.display='';
+  }
+  if(me.isAdmin||me.isSuperAdmin){
+    document.getElementById('tab-org').style.display='';
   }
   if(typeof initDemoPrivacy==='function')initDemoPrivacy(!!me.isSuperAdmin);
   if(me.impersonating){
