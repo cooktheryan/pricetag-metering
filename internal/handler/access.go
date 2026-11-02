@@ -116,6 +116,88 @@ func NormalizeGroups(groups []string) []string {
 	return out
 }
 
+// tagStringList reads a tag that may be stored as a JSONB string array, a
+// JSON array string, or a comma/newline-separated string. Partner tags arrive
+// through several paths (OIDC merge, LDAP sync, dev seed), so the gate accepts
+// all of the encodings the directory contract permits.
+func tagStringList(value any) []string {
+	switch v := value.(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	case string:
+		s := strings.TrimSpace(v)
+		if s == "" {
+			return nil
+		}
+		if strings.HasPrefix(s, "[") {
+			var parsed []string
+			if err := json.Unmarshal([]byte(s), &parsed); err == nil {
+				return parsed
+			}
+		}
+		parts := strings.FieldsFunc(s, func(r rune) bool {
+			return r == ',' || r == '\n' || r == ';'
+		})
+		out := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if part = strings.TrimSpace(part); part != "" {
+				out = append(out, part)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// gateGroups chooses the group source used for authorization. When the
+// directory supplies LDAP/Rover group membership, that is authoritative,
+// matching Atlas's memberOf check. Otherwise it falls back to the OIDC groups
+// claim carried in the signed session so deployments work while the directory
+// sync is being rolled out.
+func gateGroups(session []string, tags map[string]any) []string {
+	// The key's presence makes directory membership authoritative, even when
+	// the list is empty. An empty list means the user left every Rover Group;
+	// falling back to OIDC then would silently re-authorize them.
+	if raw, ok := tags["rover_groups"]; ok {
+		return NormalizeGroups(tagStringList(raw))
+	}
+	groups := append([]string{}, session...)
+	groups = append(groups, tagStringList(tags["groups"])...)
+	return NormalizeGroups(groups)
+}
+
+// tagTruthy accepts the encodings the partner tag API can carry: JSON true,
+// or the strings "true", "1", "yes", "y", and "on" (case-insensitive).
+func tagTruthy(tags map[string]any, keys ...string) bool {
+	for _, key := range keys {
+		switch v := tags[key].(type) {
+		case bool:
+			if v {
+				return true
+			}
+		case string:
+			switch strings.ToLower(strings.TrimSpace(v)) {
+			case "true", "1", "yes", "y", "on":
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasWorksCouncilOverride(tags map[string]any) bool {
+	return tagTruthy(tags, "works_council_override", "has_works_council_override")
+}
+
 // EffectivePolicy returns the database policy when a super admin has saved
 // one, otherwise the deployment defaults. A database error falls back to the
 // environment rather than opening access.
@@ -176,6 +258,10 @@ func (g *AccessGate) Evaluate(ctx context.Context, username string, groups []str
 		return state, nil
 	}
 	state.UserID = user.UserID
+	// Prefer Rover/LDAP group membership from the directory when present;
+	// fall back to the OIDC groups claim while the directory sync is rolled
+	// out. This mirrors Atlas, whose guest-list check reads LDAP memberOf.
+	state.Groups = gateGroups(groups, user.Tags)
 	if user.Tags != nil {
 		if first, _ := user.Tags["first_name"].(string); first != "" {
 			state.DisplayName = strings.TrimSpace(first)
@@ -206,7 +292,8 @@ func (g *AccessGate) Evaluate(ctx context.Context, username string, groups []str
 	}
 
 	// --- Group gate -------------------------------------------------------
-	// Source of truth is the OIDC groups claim carried in the signed session.
+	// Source of truth is the directory's rover_groups tag when present,
+	// falling back to the OIDC groups claim during directory-sync rollout.
 	// The allowlist is case-insensitive; an empty allowlist accepts any
 	// non-technical group ("whatever group the user has").
 	policy := g.EffectivePolicy(ctx)
@@ -248,7 +335,7 @@ func (g *AccessGate) Evaluate(ctx context.Context, username string, groups []str
 	iso3 := normalizeCountry(rawCountry)
 	state.Country = iso3
 	if iso3 == "" {
-		if policy.AllowUnknownCountry || g.cfg.Access.AllowUnknownCountry {
+		if policy.AllowUnknownCountry {
 			country.Status = GatePass
 			country.Detail = "Region could not be verified; access is allowed by policy."
 		} else {
@@ -265,9 +352,14 @@ func (g *AccessGate) Evaluate(ctx context.Context, username string, groups []str
 			}
 		}
 		if blocked {
-			country.Status = GateFail
-			country.Detail = "EnMaaS is not available in your region."
-			state.CountryState = GateFail
+			if hasWorksCouncilOverride(user.Tags) {
+				country.Status = GatePass
+				country.Detail = "Works Council access override recorded."
+			} else {
+				country.Status = GateFail
+				country.Detail = "EnMaaS is not available in your region."
+				state.CountryState = GateFail
+			}
 		} else {
 			country.Status = GatePass
 		}

@@ -54,3 +54,21 @@ The merge and validation run under a row lock. Concurrent profile refreshes
 therefore cannot overwrite one another using stale reads. Successful patches
 write a `partner_user.patch` audit record containing the changed tag keys and
 whether the email changed.
+
+## Eligibility attributes
+
+The onboarding gate reads these optional tags:
+
+| Tag | Type | Meaning |
+|---|---|---|
+| `country` | string | LDAP `c` (2-letter) or `co` (3-letter). Normalized to ISO alpha-3 for the blocklist check. |
+| `rover_groups` | string array | Rover Group names parsed from LDAP `memberOf`. When present this is the authoritative group source, matching Atlas. |
+| `groups` | string array | OIDC `groups` claim fallback used only when `rover_groups` is absent. |
+| `works_council_override` | string | `"true"` exempts this user from the Works Council country blocklist. `has_works_council_override` is accepted as an alias. |
+
+Array tags may be sent as JSON arrays. `country` and the override are strings,
+consistent with the rest of the tag contract. `rover_groups` is the complete
+current list: send an empty array when the user leaves the group so the stale
+membership is cleared. Once `rover_groups` is present it is authoritative,
+even when empty; the OIDC `groups` fallback applies only when the tag is
+absent.

@@ -45,7 +45,7 @@ The Atlas user is fully eligible only when all three checks pass.
 | --- | --- | --- |
 | Works Council country | `country` check | `partner_users.tags.country`, normalized from LDAP/OIDC `c` (2-letter accepted, stored as ISO-3166 alpha-3 for comparison) |
 | Policy acknowledgement | `terms` check | `user_agreements` row for the configured policy version |
-| Guest list Rover Group | `group` check | OIDC `groups` claim in the signed session, compared with the saved/ENV group allowlist |
+| Guest list Rover Group | `group` check | `partner_users.tags.rover_groups` (LDAP `memberOf`), with the OIDC `groups` claim as the rollout fallback |
 
 The group and country policy is editable by a super admin under
 **Admin → Access** and is stored in `access_policy`; it overrides
@@ -54,17 +54,20 @@ The group and country policy is editable by a super admin under
 
 ## Differences to keep in mind
 
-- **Group source.** Atlas reads LDAP `memberOf`. PriceTag reads the OIDC
-  `groups` claim. The IdP must map the Rover Group into that claim, or the
-  PriceTag allowlist must use the value the IdP actually returns. Do not
-  assume the claim is the LDAP distinguished name.
-- **Country override.** Atlas supports a per-user Works Council override.
-  PriceTag's super-admin policy removes a country from the blocklist for
-  everyone instead. A per-user override can be added if Atlas parity is
-  required.
+- **Group source.** Atlas reads LDAP `memberOf`. PriceTag now prefers the
+  `rover_groups` partner tag, which the directory sync must populate from
+  LDAP `memberOf`. Until that sync ships, the gate falls back to the OIDC
+  `groups` claim. Do not assume the OIDC claim is the LDAP distinguished
+  name.
+- **Country override.** Atlas uses `ai.has_works_council_override`. PriceTag
+  accepts the flat partner tag `works_council_override: "true"` (alias
+  `has_works_council_override`). The Atlas directory sync can PATCH it through
+  the partner user API.
 - **Unknown country.** Atlas passes when the country is absent. PriceTag
-  denies by default; set `ACCESS_UNKNOWN_COUNTRY_ALLOW=true` to match Atlas,
-  or keep the stricter default deliberately.
+  denies by default. To match Atlas exactly, enable "allow unknown country"
+  in **Admin → Access** (or set `ACCESS_UNKNOWN_COUNTRY_ALLOW=true` when no
+  database policy is saved). Keeping it off is a deliberate hardening
+  difference, not missing functionality.
 - **Policy record.** Atlas stores one boolean. PriceTag records acceptance per
   policy version, which makes a future policy update require a fresh
   acknowledgement.
@@ -77,9 +80,34 @@ The group and country policy is editable by a super admin under
 - Restricted country for Atlas parity: `ACCESS_BLOCKED_COUNTRIES=NLD` (or set
   `NLD` in Admin → Access). The repository's local demo uses `IRN` only to
   exercise the blocked-country persona with `ONBOARDING_MODE=enforce`.
-- Allowed group for Atlas parity: set the group exactly as it appears in the
-  OIDC `groups` claim, expected to be `enmaas-users`.
+- Allowed group for Atlas parity: set `ACCESS_ALLOWED_GROUPS=enmaas-users` (or
+  the same value in Admin → Access) and have the directory sync populate
+  `rover_groups` from LDAP `memberOf`.
 - Policy version: `ONBOARDING_TERMS_VERSION=redhat-ai-policy-v1`. Bump this
   when the linked Red Hat policy changes in a way that requires a new
   acknowledgement.
 - Policy URL shown by `/legal/terms` is the Red Hat Legal source link above.
+
+## Closure checklist
+
+Code parity is in place. Closing the operational gaps requires these steps:
+
+1. **Directory sync:** have the Atlas/LDAP sync PATCH `rover_groups` with the
+   complete LDAP `memberOf` list and PATCH `works_council_override` when an
+   exception exists. Until `rover_groups` is populated, PriceTag falls back
+   to the OIDC `groups` claim. Once the tag exists it is authoritative, so a
+   user who leaves every Rover Group is denied even if the OIDC claim still
+   has an unrelated group.
+2. **Access policy:** set `allowed_groups` to the exact Rover group
+   (`enmaas-users`), set `blocked_countries` to `NLD`, and decide whether
+   unknown countries are allowed. Prefer **Admin → Access**; a saved policy
+   overrides the environment.
+3. **Identity provider:** confirm the Stage realm's `groups` claim values.
+   They are not necessarily the same names as LDAP `memberOf`.
+4. **Acceptance data:** verify the deployed `ONBOARDING_TERMS_VERSION` is
+   `redhat-ai-policy-v1`; users who accepted `draft-tbd` will be asked again.
+5. **Verification:** test one eligible user, one NL user without override, one
+   NL user with override, one user outside `enmaas-users`, and one user who
+   has not acknowledged the policy.
+6. **Merge hygiene:** remove the temporary dev-login scaffolding before this
+   branch is marked ready; it can force onboarding for test identities.

@@ -59,3 +59,63 @@ func TestSameOrigin(t *testing.T) {
 		t.Fatal("cross-origin request must be refused")
 	}
 }
+
+func TestGateGroupsPrefersDirectoryRoverGroups(t *testing.T) {
+	tags := map[string]any{
+		"rover_groups": []any{"enmaas-users", "other-group"},
+		"groups":       []string{"GE", "platform"},
+	}
+	got := gateGroups([]string{"GE"}, tags)
+	want := []string{"enmaas-users", "other-group"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("gateGroups = %#v, want %#v", got, want)
+	}
+}
+
+func TestGateGroupsEmptyDirectoryListDoesNotFallBack(t *testing.T) {
+	tags := map[string]any{
+		"rover_groups": []any{},
+		"groups":       []string{"GE"},
+	}
+	if got := gateGroups([]string{"GE"}, tags); len(got) != 0 {
+		t.Fatalf("gateGroups = %#v, want no groups", got)
+	}
+}
+
+func TestGateGroupsFallsBackToOIDCClaim(t *testing.T) {
+	tags := map[string]any{"groups": []any{"GE", " offline_access ", "platform"}}
+	got := gateGroups([]string{"session-group"}, tags)
+	want := []string{"GE", "platform", "session-group"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("gateGroups = %#v, want %#v", got, want)
+	}
+}
+
+func TestTagStringListEncodings(t *testing.T) {
+	cases := map[string]any{
+		"array":       []any{"GE", "platform"},
+		"json string": `["GE","platform"]`,
+		"csv":         "GE, platform",
+	}
+	for name, value := range cases {
+		got := tagStringList(value)
+		if len(got) != 2 || got[0] != "GE" || got[1] != "platform" {
+			t.Errorf("%s: tagStringList = %#v", name, got)
+		}
+	}
+}
+
+func TestWorksCouncilOverride(t *testing.T) {
+	for _, tags := range []map[string]any{
+		{"works_council_override": true},
+		{"works_council_override": "true"},
+		{"has_works_council_override": "yes"},
+	} {
+		if !hasWorksCouncilOverride(tags) {
+			t.Errorf("expected override for %#v", tags)
+		}
+	}
+	if hasWorksCouncilOverride(map[string]any{"works_council_override": "false"}) {
+		t.Fatal("false override must not pass")
+	}
+}
