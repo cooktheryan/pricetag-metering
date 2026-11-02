@@ -152,7 +152,7 @@ func (g *AccessGate) Evaluate(ctx context.Context, username string, groups []str
 	identity := GateCheck{ID: GateIdentity, Label: "Red Hat identity", Status: GateFail}
 	group := GateCheck{ID: GateGroup, Label: "EnMaaS access group", Status: GateFail}
 	country := GateCheck{ID: GateCountry, Label: "Region eligibility", Status: GateFail}
-	terms := GateCheck{ID: GateTerms, Label: "Terms & Conditions", Status: GatePending}
+	terms := GateCheck{ID: GateTerms, Label: "AI usage policy", Status: GatePending}
 
 	if g.store == nil {
 		identity.Detail = "The user directory is unavailable."

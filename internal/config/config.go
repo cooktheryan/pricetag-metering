@@ -416,7 +416,7 @@ func Load() Config {
 		},
 		Onboarding: Onboarding{
 			Mode:                  strings.ToLower(envDefault("ONBOARDING_MODE", OnboardingOff)),
-			TermsVersion:          envDefault("ONBOARDING_TERMS_VERSION", "draft-tbd"),
+			TermsVersion:          envDefault("ONBOARDING_TERMS_VERSION", "redhat-ai-policy-v1"),
 			TermsURL:              envDefault("ONBOARDING_TERMS_URL", "/legal/terms"),
 			DefaultKeyExpiryHours: envInt("DEFAULT_KEY_EXPIRY_HOURS", 90*24),
 			MaxKeyExpiryHours:     envInt("MAX_KEY_EXPIRY_HOURS", 365*24),

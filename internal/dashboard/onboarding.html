@@ -279,7 +279,7 @@
       <div>
         <span class="kicker">Your access</span>
         <h2 id="setup-title">A few quick checks</h2>
-        <p class="lede" id="setup-lede">We verify your identity, group, and region automatically. You only need to accept the terms.</p>
+        <p class="lede" id="setup-lede">We verify your identity, group, and region automatically. You only need to acknowledge Red Hat's AI usage policy.</p>
       </div>
       <div class="progress" id="progress" aria-live="polite">
         <b><span id="progress-count">0</span><i>/ <span id="progress-total">4</span></i></b>
@@ -296,16 +296,16 @@
 
   <section class="panel terms-panel hidden" id="terms-card" aria-labelledby="terms-title" style="margin-top:18px">
     <span class="kicker">One last step</span>
-    <h2 id="terms-title">Terms &amp; Conditions</h2>
-    <p class="terms-copy">Please read and accept the EnMaaS terms. We keep them short: acceptable use, keeping keys safe, how usage is metered, and what data is appropriate for each model.</p>
+    <h2 id="terms-title">Review the policy on the use of AI Technology</h2>
+    <p class="terms-copy">Check the box below to acknowledge that you have read and understood Red Hat's policy on the Use of AI Technology, which describes Red Hat's requirements and guidelines for using AI and code-assistant tools.</p>
     <label class="consent" for="accept">
       <input type="checkbox" id="accept">
       <span class="box" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M2.5 8.5 6 12l7.5-8"/></svg></span>
-      <span class="consent-text">I have read and accept the EnMaaS Terms &amp; Conditions <span class="version" id="terms-version">draft-tbd</span>.<br><a href="/legal/terms" class="terms-link" id="terms-open" aria-haspopup="dialog" aria-controls="terms-overlay">Read the full terms</a></span>
+      <span class="consent-text">I have reviewed the Red Hat policy for using AI and code assistant tools. <span class="version" id="terms-version">redhat-ai-policy-v1</span><br><a href="/legal/terms" class="terms-link" id="terms-open" aria-haspopup="dialog" aria-controls="terms-overlay">Read Red Hat's policy on the Use of AI Technology</a></span>
     </label>
     <div class="err" id="err"></div>
     <div class="cta-row">
-      <button class="btn green" id="start" disabled>Accept &amp; open my account →</button>
+      <button class="btn green" id="start" disabled>Acknowledge &amp; open my account →</button>
       <span class="hint">Your acceptance is recorded with the date and version.</span>
     </div>
   </section>
@@ -342,7 +342,7 @@
   <footer>
     <span>EnMaaS · Engineering AI access</span>
     <a href="/welcome">About the service</a>
-    <a href="/legal/terms" class="terms-link" data-terms-open>Terms</a>
+    <a href="/legal/terms" class="terms-link" data-terms-open>AI policy</a>
     <a class="sp" href="/logout">Sign out</a>
   </footer>
 </main>
@@ -353,7 +353,7 @@
     <div class="terms-modal-head">
       <div>
         <span class="kicker">Legal</span>
-        <h2 id="terms-modal-title">Terms &amp; Conditions <span class="version" id="terms-modal-version"></span></h2>
+        <h2 id="terms-modal-title">Policy on the Use of AI Technology <span class="version" id="terms-modal-version"></span></h2>
       </div>
       <button class="terms-close" id="terms-close" type="button" aria-label="Close terms">×</button>
     </div>
@@ -369,7 +369,7 @@
 <script>
 (function () {
   var state = null;
-  var labels = {identity:'Red Hat identity', group:'EnMaaS access group', country:'Region eligibility', terms:'Terms & Conditions'};
+  var labels = {identity:'Red Hat identity', group:'EnMaaS access group', country:'Region eligibility', terms:'AI usage policy'};
   var badgeText = {pass:'', queued:'queued', checking:'checking', pending:'action needed', fail:'blocked', locked:'locked', skipped:'skipped'};
   var CHECK_DETAILS = {
     identity: 'Verifying your Red Hat identity…',
@@ -548,8 +548,8 @@
         return;
       }
 
-      setCheck('terms', 'pending', terms.detail || 'Accept the terms below to finish.');
-      $('setup-lede').textContent = 'Three checks passed. Accept the terms to open your account.';
+      setCheck('terms', 'pending', terms.detail || 'Acknowledge the AI usage policy below to finish.');
+      $('setup-lede').textContent = 'Three checks passed. Acknowledge Red Hat\'s AI usage policy to open your account.';
       showStatus();
     }
 
@@ -632,7 +632,7 @@
         btn.disabled = false;
         return;
       }
-      setCheck('terms', 'pass', 'Accepted. Opening your account…');
+      setCheck('terms', 'pass', 'Acknowledged. Opening your account…');
       syncProgress();
       setTimeout(function () {
         location.href = (res.body && res.body.redirect) || '/account?tab=keys&first=1';

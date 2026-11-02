@@ -70,10 +70,10 @@ DELETE FROM user_agreements WHERE user_id IN (
 );
 DELETE FROM user_agreements WHERE user_id = '22222222-2222-4222-8222-222222222222';
 INSERT INTO user_agreements (user_id, doc_type, version, accepted_at, method)
-VALUES ('22222222-2222-4222-8222-222222222222', 'terms', 'draft-tbd', NOW() - interval '30 days', 'oidc')
+VALUES ('22222222-2222-4222-8222-222222222222', 'terms', 'redhat-ai-policy-v1', NOW() - interval '30 days', 'oidc')
 ON CONFLICT DO NOTHING;
 INSERT INTO user_agreements (user_id, doc_type, version, accepted_at, method)
-SELECT id, 'terms', 'draft-tbd', NOW() - interval '14 days', 'oidc'
+SELECT id, 'terms', 'redhat-ai-policy-v1', NOW() - interval '14 days', 'oidc'
 FROM (VALUES
   ('55555555-5555-4555-8555-555555555555'::uuid),
   ('66666666-6666-4666-8666-666666666666'::uuid),

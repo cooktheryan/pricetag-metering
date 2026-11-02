@@ -78,7 +78,7 @@ echo "==> starting metering-service"
   OIDC_TEST_LOGIN=true \
   DEV_LOGIN_USERS="new-user@example.com,returning-user@example.com,blocked-user@example.com,nogroup-user@example.com,manager-user@example.com" \
   ONBOARDING_MODE=enforce \
-  ONBOARDING_TERMS_VERSION=draft-tbd \
+  ONBOARDING_TERMS_VERSION=redhat-ai-policy-v1 \
   ONBOARDING_TERMS_URL=/legal/terms \
   ACCESS_ALLOWED_GROUPS=GE \
   ACCESS_BLOCKED_COUNTRIES=IRN \
