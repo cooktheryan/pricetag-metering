@@ -85,7 +85,7 @@ func TestMoneyReadsStayOnPrimary(t *testing.T) {
 		}
 	}
 
-	// And the six allowlisted dashboard reads must actually use it —
+	// And the seven allowlisted dashboard reads must actually use it —
 	// otherwise Phase 2 is silently a no-op.
 	offloaded := []string{
 		"func (s *Store) GetDashboardOverview",
@@ -94,6 +94,7 @@ func TestMoneyReadsStayOnPrimary(t *testing.T) {
 		"func (s *Store) GetHostedSavings",
 		"func (s *Store) GetDashboardModels",
 		"func (s *Store) GetDashboardTimeline",
+		"func (s *Store) GetDashboardTools",
 	}
 	for _, decl := range offloaded {
 		start := strings.Index(text, decl)

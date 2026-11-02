@@ -23,7 +23,7 @@ belong here, not in an imperative `psql` line.
 ## Verify
 
 - Grants: run the self-validation query at the bottom of `20-grants.sql`
-  — exactly `model_pricing, usage_events, usage_hourly, user_profiles`.
+  — exactly `model_pricing, usage_events, usage_hourly, usage_tool_hourly, user_profiles`.
 - Permission probes: as `metering_reader`, SELECT on each granted table
   must succeed; INSERT and access to quota tables / `rollup_meta` must
   be denied.

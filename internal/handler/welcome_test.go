@@ -25,38 +25,22 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 	for _, want := range []string{
 		"https://gateway.test",
 		"Welcome to",
+		"MaaS User Guide",
 		"Claude Code",
 		"Codex",
 		"OpenCode",
-		"About EnMaaS",
-		"Model discovery and limits",
-		"Route supported models through one gateway.",
-		"Anthropic-compatible requests",
-		"Authentication belongs to the gateway key",
-		"Authorization: Bearer",
-		"credential-dependent",
-		"1,000,000-token context window",
-		"enmaas-glm-5-3",
-		"openai-completions",
-		`"contextWindow": 1048576`,
+		"Pi",
+		"What you need",
+		"Make a test request",
+		"Find a supported model",
+		"MAAS_BASE_URL",
+		"MAAS_API_KEY",
+		"MAAS_MODEL",
+		"your-maas-host.example",
 		"https://gateway.test/v1",
-		"enmaas-welcome-height",
-		"modelPicker",
-		"rits/zai-org/glm-5-3",
-		"rits/deepseek-ai/DeepSeek-V4.1-Flash-1017",
-		`"modalities": {`,
-		`"input": ["text", "image"]`,
-		`"name": "DeepSeek V4.1 Flash",
-           "limit": {
-             "context": 1048576,
-             "output": 65536
-           },`,
-		"DeepSeek image input",
-		"OpenCode does not need a separate model-picker block",
-		"https://devservices.dpp.openshift.com/support/enmaas/",
-		"/v1/messages",
-		"/v1/chat/completions",
-		"/v1/responses",
+		"/chat/completions",
+		"/models",
+		"Replace them with details from your service provider.",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page missing %q", want)
@@ -67,6 +51,23 @@ func TestServeWelcomeSubstitution(t *testing.T) {
 	}
 	if strings.Contains(body, "Current status") {
 		t.Errorf("page still contains removed Current status section")
+	}
+	for _, url := range regexp.MustCompile(`https?://[^"'\s]+`).FindAllString(body, -1) {
+		allowed := false
+		for _, origin := range []string{
+			"https://gateway.test",
+			"https://your-maas-host.example",
+			"https://fonts.googleapis.com",
+			"https://fonts.gstatic.com",
+		} {
+			if url == origin || strings.HasPrefix(url, origin+"/") {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			t.Errorf("public welcome page contains an unexpected URL %q", url)
+		}
 	}
 }
 

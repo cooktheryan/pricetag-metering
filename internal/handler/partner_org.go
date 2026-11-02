@@ -171,6 +171,27 @@ type orgChartsResponse struct {
 	Timeline []storage.TimelineBucket  `json:"timeline"`
 }
 
+// orgChartsUserFilter turns a resolved root into the dashboard user filter.
+// A non-empty root with no logins must not collapse to an empty filter: the
+// dashboard queries interpret "" as whole-organisation, which would leak data
+// outside the selected person's scope. The bool is false when charts must be
+// empty instead.
+func orgChartsUserFilter(root string, usernames []string) (string, bool) {
+	if root != "" && len(usernames) == 0 {
+		return "", false
+	}
+	return strings.Join(usernames, ","), true
+}
+
+func emptyOrgChartsResponse() orgChartsResponse {
+	return orgChartsResponse{
+		Overview: storage.DashboardOverview{},
+		Models:   []storage.ModelSummary{},
+		Users:    []storage.UserSummary{},
+		Timeline: []storage.TimelineBucket{},
+	}
+}
+
 // HandleOrgCharts returns the analytics bundle for the manager page charts.
 // GET /api/v1/org/charts?range=&root=&ref=
 func (h *PartnerOrgHandler) HandleOrgCharts(w http.ResponseWriter, r *http.Request) {
@@ -190,7 +211,11 @@ func (h *PartnerOrgHandler) HandleOrgCharts(w http.ResponseWriter, r *http.Reque
 
 	// Join usernames with "," for the dashboard user filter; nil (whole org)
 	// becomes "" which the dashboard queries treat as unfiltered.
-	userFilter := strings.Join(usernames, ",")
+	userFilter, ok := orgChartsUserFilter(root, usernames)
+	if !ok {
+		writeJSON(w, emptyOrgChartsResponse())
+		return
+	}
 	refModel := r.URL.Query().Get("ref")
 
 	overview, err := h.store.GetDashboardOverview(ctx, since, until, "", userFilter, "")

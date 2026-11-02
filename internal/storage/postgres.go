@@ -640,6 +640,7 @@ type ModelSummary struct {
 type ToolSummary struct {
 	Tool        string  `json:"tool"`
 	Requests    int     `json:"requests"`
+	Users       int     `json:"users"`
 	TotalTokens int64   `json:"total_tokens"`
 	CostUSD     float64 `json:"cost_usd"`
 }
@@ -1160,7 +1161,8 @@ func (s *Store) GetDashboardTools(ctx context.Context, since, until time.Time, g
 	if s.rollupsLive() && s.ToolRollupsReady() {
 		rows, err := s.reader().QueryContext(ctx, `
 			SELECT COALESCE(e.tool, 'Other'), SUM(e.requests), SUM(e.total_tokens),
-				COALESCE(ROUND(SUM(e.cost_usd)::numeric, 2), 0)
+				COALESCE(ROUND(SUM(e.cost_usd)::numeric, 2), 0),
+				COUNT(DISTINCT NULLIF(e.username, ''))
 			FROM usage_tool_hourly e
 			WHERE e.hour >= date_trunc('hour', $1::timestamptz) AND e.hour < $2
 				AND ($3 = '' OR e.group_name = $3)
@@ -1175,7 +1177,7 @@ func (s *Store) GetDashboardTools(ctx context.Context, since, until time.Time, g
 		var result []ToolSummary
 		for rows.Next() {
 			var item ToolSummary
-			if err := rows.Scan(&item.Tool, &item.Requests, &item.TotalTokens, &item.CostUSD); err != nil {
+			if err := rows.Scan(&item.Tool, &item.Requests, &item.TotalTokens, &item.CostUSD, &item.Users); err != nil {
 				return nil, err
 			}
 			result = append(result, item)
@@ -1183,7 +1185,7 @@ func (s *Store) GetDashboardTools(ctx context.Context, since, until time.Time, g
 		return result, rows.Err()
 	}
 	query := fmt.Sprintf(`
-		SELECT COALESCE(e.user_agent, ''),
+		SELECT COALESCE(e.user_agent, ''), e.username,
 			COUNT(*),
 			COALESCE(SUM(e.total_tokens), 0),
 			COALESCE(ROUND(SUM(%s)::numeric, 2), 0)
@@ -1193,7 +1195,7 @@ func (s *Store) GetDashboardTools(ctx context.Context, since, until time.Time, g
 			AND ($3 = '' OR e.group_name = $3)
 			AND ($4 = '' OR e.username = ANY(string_to_array($4, ',')))
 			AND ($5 = '' OR e.model = $5)
-		GROUP BY COALESCE(e.user_agent, '')`, costUSDExpr)
+		GROUP BY COALESCE(e.user_agent, ''), e.username`, costUSDExpr)
 	rows, err := s.reader().QueryContext(ctx, query, since, until, group, user, model)
 	if err != nil {
 		return nil, err
@@ -1201,12 +1203,13 @@ func (s *Store) GetDashboardTools(ctx context.Context, since, until time.Time, g
 	defer rows.Close()
 
 	byTool := make(map[string]*ToolSummary)
+	usersByTool := make(map[string]map[string]struct{})
 	for rows.Next() {
-		var userAgent string
+		var userAgent, username string
 		var requests int
 		var totalTokens int64
 		var costUSD float64
-		if err := rows.Scan(&userAgent, &requests, &totalTokens, &costUSD); err != nil {
+		if err := rows.Scan(&userAgent, &username, &requests, &totalTokens, &costUSD); err != nil {
 			return nil, err
 		}
 		tool := dashboardTool(userAgent)
@@ -1218,12 +1221,21 @@ func (s *Store) GetDashboardTools(ctx context.Context, since, until time.Time, g
 		item.Requests += requests
 		item.TotalTokens += totalTokens
 		item.CostUSD += costUSD
+		if username != "" {
+			users := usersByTool[tool]
+			if users == nil {
+				users = make(map[string]struct{})
+				usersByTool[tool] = users
+			}
+			users[username] = struct{}{}
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	result := make([]ToolSummary, 0, len(byTool))
 	for _, item := range byTool {
+		item.Users = len(usersByTool[item.Tool])
 		result = append(result, *item)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].TotalTokens > result[j].TotalTokens })
