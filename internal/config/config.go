@@ -7,6 +7,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -16,6 +17,63 @@ import (
 // DefaultMonthlyTokenQuota is the per-user monthly token allowance applied
 // when MONTHLY_TOKEN_QUOTA is unset.
 const DefaultMonthlyTokenQuota = 100_000_000
+
+// MeteringMode selects which workloads a process runs.
+//
+//   - all: serves the HTTP API and owns rollup maintenance/backfill (default;
+//     the historical single-deployment behavior).
+//   - api: serves the HTTP API only. Rollup maintenance and the one-time
+//     backfill are owned by a separate rollup worker; this process keeps its
+//     dashboard parity state in sync from rollup_meta.
+//   - rollup: runs maintenance and backfill only; exposes health and metrics,
+//     not the API routes.
+//
+// core and dashboard are reserved for a future finer split and are not
+// accepted yet.
+type MeteringMode string
+
+const (
+	ModeAll    MeteringMode = "all"
+	ModeAPI    MeteringMode = "api"
+	ModeRollup MeteringMode = "rollup"
+)
+
+// ParseMeteringMode validates METERING_MODE. Empty means all.
+func ParseMeteringMode(raw string) (MeteringMode, error) {
+	switch MeteringMode(strings.ToLower(strings.TrimSpace(raw))) {
+	case "", ModeAll:
+		return ModeAll, nil
+	case ModeAPI:
+		return ModeAPI, nil
+	case ModeRollup:
+		return ModeRollup, nil
+	default:
+		return "", fmt.Errorf("METERING_MODE %q is invalid (want all, api, or rollup)", raw)
+	}
+}
+
+// RunsMaintenance reports whether this mode owns rollup maintenance and the
+// one-time backfill. The zero value behaves like all for backward compatibility.
+func (m MeteringMode) RunsMaintenance() bool {
+	return m == "" || m == ModeAll || m == ModeRollup
+}
+
+// ServesAPIRoutes reports whether this mode serves the HTTP API. The zero value
+// behaves like all for backward compatibility.
+func (m MeteringMode) ServesAPIRoutes() bool {
+	return m == "" || m == ModeAll || m == ModeAPI
+}
+
+// parseMeteringModeOrRaw keeps an invalid value in the Config so Validate can
+// reject it, instead of silently falling back to a workload the operator did
+// not ask for.
+func parseMeteringModeOrRaw(raw string) MeteringMode {
+	mode, err := ParseMeteringMode(raw)
+	if err != nil {
+		return MeteringMode(strings.ToLower(strings.TrimSpace(raw)))
+	}
+	return mode
+}
 
 // Config is the resolved runtime configuration.
 type Config struct {
@@ -29,6 +87,9 @@ type Config struct {
 	// Served by its own http.Server so scrape traffic never shares the
 	// application listener.
 	MetricsPort string
+
+	// MeteringMode selects the workload this process runs (all, api, rollup).
+	MeteringMode MeteringMode
 
 	// MonthlyTokenQuota caps per-user monthly token usage. Balance checks
 	// report no access once a user exceeds it.
@@ -352,6 +413,7 @@ func Load() Config {
 		DatabaseURL:       os.Getenv("DATABASE_URL"),
 		Port:              envDefault("PORT", "8080"),
 		MetricsPort:       envDefault("METRICS_PORT", "9902"),
+		MeteringMode:      parseMeteringModeOrRaw(os.Getenv("METERING_MODE")),
 		MonthlyTokenQuota: envFloat("MONTHLY_TOKEN_QUOTA", DefaultMonthlyTokenQuota),
 		// The $600 safety net is on by default. Operators can still use the
 		// environment as a deployment-level kill switch while the policy's
@@ -461,6 +523,15 @@ func Load() Config {
 			SubscriptionName:           envDefault("MAAS_SUBSCRIPTION_NAME", "dogfood-team"),
 		},
 	}
+}
+
+// Validate rejects enum-valued settings that Load keeps raw so a typo fails
+// startup instead of silently running the wrong workload.
+func (c Config) Validate() error {
+	if _, err := ParseMeteringMode(string(c.MeteringMode)); err != nil {
+		return err
+	}
+	return nil
 }
 
 func envDefault(key, fallback string) string {

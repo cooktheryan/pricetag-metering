@@ -3,6 +3,7 @@ package storage
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // These guard the SQL STRUCTURE of the Phase 3 machinery. The numeric
@@ -64,5 +65,42 @@ func TestRebuildOverwritesFromRawDoesNotAdd(t *testing.T) {
 	}
 	if !strings.Contains(rebuildHourSQL, "COUNT(*)") {
 		t.Error("rebuild counts requests from raw rows (denials included, plan rev2 parity rule)")
+	}
+}
+
+func TestParityStateFromMeta(t *testing.T) {
+	now := time.Date(2026, 11, 2, 18, 0, 0, 0, time.UTC)
+	fresh := now.Add(-2 * time.Minute).Format(time.RFC3339)
+	stale := now.Add(-45 * time.Minute).Format(time.RFC3339)
+	cases := []struct {
+		name    string
+		healthy string
+		checked string
+		maxAge  time.Duration
+		want    bool
+		wantOK  bool
+	}{
+		{"fresh green", "true", fresh, 15 * time.Minute, true, true},
+		{"fresh red", "false", fresh, 15 * time.Minute, false, true},
+		{"stale green falls back", "true", stale, 15 * time.Minute, false, true},
+		{"missing checked_at", "true", "", 15 * time.Minute, false, false},
+		{"unparsable checked_at", "true", "not-a-time", 15 * time.Minute, false, false},
+		{"zero max age trusts the verdict", "true", stale, 0, true, true},
+	}
+	for _, tc := range cases {
+		healthy, checkedAt, ok := parityStateFromMeta(tc.healthy, tc.checked, now, tc.maxAge)
+		if ok != tc.wantOK {
+			t.Errorf("%s: ok = %v, want %v", tc.name, ok, tc.wantOK)
+			continue
+		}
+		if !ok {
+			continue
+		}
+		if healthy != tc.want {
+			t.Errorf("%s: healthy = %v, want %v", tc.name, healthy, tc.want)
+		}
+		if checkedAt.IsZero() {
+			t.Errorf("%s: checkedAt is zero for a parsed verdict", tc.name)
+		}
 	}
 }

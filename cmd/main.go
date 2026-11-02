@@ -88,6 +88,15 @@ func main() {
 		slog.Error("M2M_AUTH_REQUIRED is enabled but M2M_SHARED_SECRET is empty")
 		os.Exit(1)
 	}
+	if err := cfg.Validate(); err != nil {
+		slog.Error("invalid configuration", "error", err)
+		os.Exit(1)
+	}
+	meteringMode := cfg.MeteringMode
+	slog.Info("metering workload mode",
+		"mode", string(meteringMode),
+		"serves_api_routes", meteringMode.ServesAPIRoutes(),
+		"runs_rollup_maintenance", meteringMode.RunsMaintenance())
 
 	// MonthlyTokenQuota is the per-user monthly token budget the entitlement
 	// endpoint reports against. Enforcement of actual traffic belongs in the
@@ -254,105 +263,16 @@ func main() {
 	// Starting this earlier creates a startup race where historical rows can be
 	// frozen at pre-discount rates (or the opposite), making the accounting
 	// result depend on timing.
-	go store.EnsureRollupsBackfilled(context.Background())
-
-	eventsHandler := handler.NewEventsHandler(store)
-	entitlementsHandler := handler.NewEntitlementsHandler(store, cfg)
-	dashboardHandler := handler.NewDashboardHandler(store, cfg)
-
-	// Kubernetes adapter — optional. It stays disabled until model/provider
-	// CRD coordinates are configured, and even when enabled it degrades
-	// gracefully to empty data if the cluster is unreachable, so the service
-	// runs anywhere the CloudEvents contract holds.
-	var k8sClient *k8s.Client
-	if cfg.Kubernetes.Enabled() {
-		k8sClient, err = k8s.NewClient(cfg.Kubernetes)
-		if err != nil {
-			slog.Warn("kubernetes adapter unavailable — admin API will return empty data", "error", err)
-			k8sClient = nil
-		}
-	} else {
-		slog.Info("kubernetes adapter disabled — set MODEL_CRD_GROUP/PROVIDER_CRD_GROUP to enable")
+	if meteringMode.RunsMaintenance() {
+		go store.EnsureRollupsBackfilled(context.Background())
 	}
 
-	// maas-api client for key management (create/list/revoke). The base URL
-	// defaults to the same maas-api the login flow validates against, so a
-	// fresh cluster needs no extra configuration.
-	maasAPIURL := os.Getenv("MAAS_API_URL")
-	if maasAPIURL == "" {
-		validateURL := os.Getenv("MAAS_VALIDATE_URL")
-		if validateURL == "" {
-			validateURL = "http://maas-api:8080/internal/v1/api-keys/validate"
-		}
-		maasAPIURL = strings.TrimSuffix(validateURL, "/internal/v1/api-keys/validate")
+	if meteringMode.ServesAPIRoutes() {
+		go store.RunParitySync(ctx, 15*time.Second, paritySyncMaxAge(cfg.RollupRefreshSeconds))
 	}
-	maasTenant := os.Getenv("MAAS_TENANT")
-	if maasTenant == "" {
-		maasTenant = "models-as-a-service"
-	}
-	maasClient := maasapi.NewClient(maasAPIURL, maasTenant)
 
-	adminHandler := handler.NewAdminHandler(k8sClient, maasClient, cfg)
-	adminHandler.SetStore(store)
-	meUsageHandler := handler.NewMeUsageHandler(store, cfg)
-	accountHandler := handler.NewAccountHandler(cfg)
-	if cfg.OIDC.Enabled && strings.TrimSpace(os.Getenv("SESSION_SECRET")) == "" {
-		slog.Error("OIDC is enabled but SESSION_SECRET is not set; a per-process secret breaks state/session cookies across replicas and restarts")
-		os.Exit(1)
-	}
-	authHandler := handler.NewAuthHandler(cfg)
-	if cfg.OIDC.Enabled {
-		if err := authHandler.InitOIDC(ctx); err != nil {
-			// OIDC is an additional login method. An IdP outage must not take
-			// down API-key login or the rest of the dashboard, so degrade
-			// loudly instead of exiting.
-			slog.Error("OIDC is enabled but provider initialization failed; continuing with API-key login only", "error", err)
-		} else {
-			slog.Info("OIDC dashboard login enabled", "issuer", cfg.OIDC.IssuerURL, "client_id", cfg.OIDC.ClientID)
-		}
-	}
-	authHandler.SetOrgStore(store) // managers land on /manager after login
-	keysHandler := handler.NewKeysHandler(k8sClient, cfg, store)
-	usageReportHandler := handler.NewUsageReportHandler(store)
-	partnerUsersHandler := handler.NewPartnerUsersHandler(store, maasClient, cfg.PartnerUserKeyGroup)
-	partnerUsersHandler.SetUserHeader(cfg.UserHeader)
-	partnerUserUsageHandler := handler.NewPartnerUserUsageHandler(store)
-	modelCatalogHandler := handler.NewModelCatalogHandler(k8sClient)
-	userModelPolicyHandler := handler.NewUserModelPolicyHandler(store)
-	quotaAdminHandler := handler.NewQuotaAdminHandler(store)
-	pricingDiscountHandler := handler.NewPricingDiscountHandler(store)
-	historicalRepricingHandler := handler.NewHistoricalRepricingHandler(store)
-	modelPolicyAdminHandler := handler.NewModelPolicyAdminHandler(store)
-	auth := authHandler.RequireAuth
-
-	mux := http.NewServeMux()
-
-	// Machine-to-machine APIs — no session required
-	m2mAuth := func(next http.HandlerFunc) http.HandlerFunc { return handler.RequireM2MAuth(cfg, next) }
-	mux.HandleFunc("/api/v1/events", m2mAuth(eventsHandler.HandleEvent))
-	mux.HandleFunc("/api/v1/customers/", m2mAuth(entitlementsHandler.HandleEntitlement))
-	// Partner APIs use endpoint-specific bearer credentials in addition to any
-	// Route/AuthPolicy. This protects direct Service and port-forward access.
-	mux.HandleFunc("/api/v1/usage/users/", handler.RequirePartnerAPIAuthAny(cfg.UsageReportAPISecrets, usageReportHandler.HandleUserUsage))
-	mux.HandleFunc("/api/v1/usage/reports", handler.RequirePartnerAPIAuthAny(cfg.UsageReportAPISecrets, partnerUserUsageHandler.HandleBatchUserUsage))
-	mux.HandleFunc("/api/v1/models", handler.RequirePartnerAPIAuthAny(cfg.ModelCatalogAPISecrets, modelCatalogHandler.Handle))
-	mux.HandleFunc("/api/v1/users", handler.RequirePartnerAPIAuth(cfg.UserManagementAPISecret, partnerUsersHandler.HandleUsers))
-	mux.HandleFunc("/api/v1/users/", handler.RequirePartnerAPIAuth(cfg.UserManagementAPISecret, partnerUsersHandler.HandleUsers))
-	mux.HandleFunc("/api/v1/admin/partner-users/", auth(handler.RequirePartnerSuperAdmin(cfg, store, partnerUsersHandler.HandleAdminAccess)))
-	mux.HandleFunc("/api/v1/admin/partner-users", auth(handler.RequirePartnerSuperAdmin(cfg, store, partnerUsersHandler.HandleAdminUsers)))
-	mux.HandleFunc("/api/v1/model-policies/users/", handler.RequirePartnerAPIAuthAny(cfg.ModelPolicyAPISecrets, userModelPolicyHandler.HandleUserModelPolicy))
-	// /api/v1/team-usage was REMOVED on purpose: it sat outside auth, took
-	// the group from the query string, and defaulted to a hard-coded team.
-	// Its replacement is /api/v1/org/usage below, which is authenticated
-	// and scope-enforced. Do not re-add a sibling.
-
-	// Auth endpoints — unauthenticated by definition
-	mux.HandleFunc("/login", authHandler.HandleLogin)
-	mux.HandleFunc("/oauth/login", authHandler.HandleOIDCLogin)
-	mux.HandleFunc("/oauth/callback", authHandler.HandleOIDCCallback)
-	mux.HandleFunc("/logout", authHandler.HandleLogout)
-	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+	healthHandler := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }
+	readyHandler := func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 		if err := store.Ping(ctx); err != nil {
@@ -368,125 +288,227 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-	})
+	}
 
-	// Public welcome page — no session by design: it is the link you
-	// send someone before they have a key. Its gateway URLs are substituted
-	// at serve time from WELCOME_*_URL env vars, so the repo template stays
-	// host-free. Root sends newcomers here; signed-in users navigate on.
-	mux.HandleFunc("/welcome", dashboardHandler.ServeWelcome)
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			http.Redirect(w, r, "/welcome", http.StatusFound)
-			return
+	mux := http.NewServeMux()
+	if meteringMode.ServesAPIRoutes() {
+		eventsHandler := handler.NewEventsHandler(store)
+		entitlementsHandler := handler.NewEntitlementsHandler(store, cfg)
+		dashboardHandler := handler.NewDashboardHandler(store, cfg)
+
+		// Kubernetes adapter — optional. It stays disabled until model/provider
+		// CRD coordinates are configured, and even when enabled it degrades
+		// gracefully to empty data if the cluster is unreachable, so the service
+		// runs anywhere the CloudEvents contract holds.
+		var k8sClient *k8s.Client
+		if cfg.Kubernetes.Enabled() {
+			k8sClient, err = k8s.NewClient(cfg.Kubernetes)
+			if err != nil {
+				slog.Warn("kubernetes adapter unavailable — admin API will return empty data", "error", err)
+				k8sClient = nil
+			}
+		} else {
+			slog.Info("kubernetes adapter disabled — set MODEL_CRD_GROUP/PROVIDER_CRD_GROUP to enable")
 		}
-		http.NotFound(w, r)
-	})
 
-	// User pages — session required. /whoami backs both the legacy pages and
-	// the redesigned user dashboard (name, groups, admin flag, impersonation).
-	// The legacy "My account" page is retired — its tab is gone from every
-	// page and old bookmarks redirect to the main dashboard instead of 404.
-	mux.HandleFunc("/me", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/", http.StatusMovedPermanently)
-	})
-	// Authenticated personal Usage + API Keys surface.
-	mux.HandleFunc("/account", auth(accountHandler.ServeAccount))
-	mux.HandleFunc("/api/v1/me/usage/summary", auth(meUsageHandler.HandleSummary))
-	mux.HandleFunc("/api/v1/me/usage/models", auth(meUsageHandler.HandleModels))
-	mux.HandleFunc("/api/v1/me/usage/recent", auth(meUsageHandler.HandleRecent))
-	mux.HandleFunc("/api/v1/me/keys", auth(adminHandler.HandleMyKeys))
-	mux.HandleFunc("/api/v1/me/keys/", auth(adminHandler.HandleMyKeys))
-	mux.HandleFunc("/me/keys", auth(adminHandler.HandleMyKeys))
-	mux.HandleFunc("/me/keys/", auth(adminHandler.HandleMyKeys))
-	mux.HandleFunc("/me/whoami", auth(keysHandler.HandleWhoAmI))
-	mux.HandleFunc("/api/v1/whoami", auth(keysHandler.HandleWhoAmI))
-	mux.HandleFunc("/whoami", auth(keysHandler.HandleWhoAmI))
+		// maas-api client for key management (create/list/revoke). The base URL
+		// defaults to the same maas-api the login flow validates against, so a
+		// fresh cluster needs no extra configuration.
+		maasAPIURL := os.Getenv("MAAS_API_URL")
+		if maasAPIURL == "" {
+			validateURL := os.Getenv("MAAS_VALIDATE_URL")
+			if validateURL == "" {
+				validateURL = "http://maas-api:8080/internal/v1/api-keys/validate"
+			}
+			maasAPIURL = strings.TrimSuffix(validateURL, "/internal/v1/api-keys/validate")
+		}
+		maasTenant := os.Getenv("MAAS_TENANT")
+		if maasTenant == "" {
+			maasTenant = "models-as-a-service"
+		}
+		maasClient := maasapi.NewClient(maasAPIURL, maasTenant)
 
-	// Dashboard — session required, per-user scoping in handlers. The API
-	// and page are administrator-only while user dashboard access is pending
-	// legal approval. The API handlers ride the response cache (inside auth:
-	// a hit still pays session validation, and the cache key contains the
-	// resolved scope).
-	dashCache := handler.NewDashboardCache(cfg, store)
-	dashboardPage := func(next http.HandlerFunc) http.HandlerFunc {
-		return auth(func(w http.ResponseWriter, r *http.Request) {
-			if !handler.IsPartnerAdmin(r.Context(), cfg, store, r) {
-				// Regular users now have a real account page; the old
-				// "coming soon" dead end is retired.
-				http.Redirect(w, r, "/account", http.StatusFound)
+		adminHandler := handler.NewAdminHandler(k8sClient, maasClient, cfg)
+		adminHandler.SetStore(store)
+		meUsageHandler := handler.NewMeUsageHandler(store, cfg)
+		accountHandler := handler.NewAccountHandler(cfg)
+		if cfg.OIDC.Enabled && strings.TrimSpace(os.Getenv("SESSION_SECRET")) == "" {
+			slog.Error("OIDC is enabled but SESSION_SECRET is not set; a per-process secret breaks state/session cookies across replicas and restarts")
+			os.Exit(1)
+		}
+		authHandler := handler.NewAuthHandler(cfg)
+		if cfg.OIDC.Enabled {
+			if err := authHandler.InitOIDC(ctx); err != nil {
+				// OIDC is an additional login method. An IdP outage must not take
+				// down API-key login or the rest of the dashboard, so degrade
+				// loudly instead of exiting.
+				slog.Error("OIDC is enabled but provider initialization failed; continuing with API-key login only", "error", err)
+			} else {
+				slog.Info("OIDC dashboard login enabled", "issuer", cfg.OIDC.IssuerURL, "client_id", cfg.OIDC.ClientID)
+			}
+		}
+		authHandler.SetOrgStore(store) // managers land on /manager after login
+		keysHandler := handler.NewKeysHandler(k8sClient, cfg, store)
+		usageReportHandler := handler.NewUsageReportHandler(store)
+		partnerUsersHandler := handler.NewPartnerUsersHandler(store, maasClient, cfg.PartnerUserKeyGroup)
+		partnerUsersHandler.SetUserHeader(cfg.UserHeader)
+		partnerUserUsageHandler := handler.NewPartnerUserUsageHandler(store)
+		modelCatalogHandler := handler.NewModelCatalogHandler(k8sClient)
+		userModelPolicyHandler := handler.NewUserModelPolicyHandler(store)
+		quotaAdminHandler := handler.NewQuotaAdminHandler(store)
+		pricingDiscountHandler := handler.NewPricingDiscountHandler(store)
+		historicalRepricingHandler := handler.NewHistoricalRepricingHandler(store)
+		modelPolicyAdminHandler := handler.NewModelPolicyAdminHandler(store)
+		auth := authHandler.RequireAuth
+
+		// Machine-to-machine APIs — no session required
+		m2mAuth := func(next http.HandlerFunc) http.HandlerFunc { return handler.RequireM2MAuth(cfg, next) }
+		mux.HandleFunc("/api/v1/events", m2mAuth(eventsHandler.HandleEvent))
+		mux.HandleFunc("/api/v1/customers/", m2mAuth(entitlementsHandler.HandleEntitlement))
+		// Partner APIs use endpoint-specific bearer credentials in addition to any
+		// Route/AuthPolicy. This protects direct Service and port-forward access.
+		mux.HandleFunc("/api/v1/usage/users/", handler.RequirePartnerAPIAuthAny(cfg.UsageReportAPISecrets, usageReportHandler.HandleUserUsage))
+		mux.HandleFunc("/api/v1/usage/reports", handler.RequirePartnerAPIAuthAny(cfg.UsageReportAPISecrets, partnerUserUsageHandler.HandleBatchUserUsage))
+		mux.HandleFunc("/api/v1/models", handler.RequirePartnerAPIAuthAny(cfg.ModelCatalogAPISecrets, modelCatalogHandler.Handle))
+		mux.HandleFunc("/api/v1/users", handler.RequirePartnerAPIAuth(cfg.UserManagementAPISecret, partnerUsersHandler.HandleUsers))
+		mux.HandleFunc("/api/v1/users/", handler.RequirePartnerAPIAuth(cfg.UserManagementAPISecret, partnerUsersHandler.HandleUsers))
+		mux.HandleFunc("/api/v1/admin/partner-users/", auth(handler.RequirePartnerSuperAdmin(cfg, store, partnerUsersHandler.HandleAdminAccess)))
+		mux.HandleFunc("/api/v1/admin/partner-users", auth(handler.RequirePartnerSuperAdmin(cfg, store, partnerUsersHandler.HandleAdminUsers)))
+		mux.HandleFunc("/api/v1/model-policies/users/", handler.RequirePartnerAPIAuthAny(cfg.ModelPolicyAPISecrets, userModelPolicyHandler.HandleUserModelPolicy))
+		// /api/v1/team-usage was REMOVED on purpose: it sat outside auth, took
+		// the group from the query string, and defaulted to a hard-coded team.
+		// Its replacement is /api/v1/org/usage below, which is authenticated
+		// and scope-enforced. Do not re-add a sibling.
+
+		// Auth endpoints — unauthenticated by definition
+		mux.HandleFunc("/login", authHandler.HandleLogin)
+		mux.HandleFunc("/oauth/login", authHandler.HandleOIDCLogin)
+		mux.HandleFunc("/oauth/callback", authHandler.HandleOIDCCallback)
+		mux.HandleFunc("/logout", authHandler.HandleLogout)
+		mux.HandleFunc("/health", healthHandler)
+		mux.HandleFunc("/ready", readyHandler)
+
+		// Public welcome page — no session by design: it is the link you
+		// send someone before they have a key. Its gateway URLs are substituted
+		// at serve time from WELCOME_*_URL env vars, so the repo template stays
+		// host-free. Root sends newcomers here; signed-in users navigate on.
+		mux.HandleFunc("/welcome", dashboardHandler.ServeWelcome)
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/" {
+				http.Redirect(w, r, "/welcome", http.StatusFound)
 				return
 			}
-			next(w, r)
+			http.NotFound(w, r)
 		})
+
+		// User pages — session required. /whoami backs both the legacy pages and
+		// the redesigned user dashboard (name, groups, admin flag, impersonation).
+		// The legacy "My account" page is retired — its tab is gone from every
+		// page and old bookmarks redirect to the main dashboard instead of 404.
+		mux.HandleFunc("/me", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/", http.StatusMovedPermanently)
+		})
+		// Authenticated personal Usage + API Keys surface.
+		mux.HandleFunc("/account", auth(accountHandler.ServeAccount))
+		mux.HandleFunc("/api/v1/me/usage/summary", auth(meUsageHandler.HandleSummary))
+		mux.HandleFunc("/api/v1/me/usage/models", auth(meUsageHandler.HandleModels))
+		mux.HandleFunc("/api/v1/me/usage/recent", auth(meUsageHandler.HandleRecent))
+		mux.HandleFunc("/api/v1/me/keys", auth(adminHandler.HandleMyKeys))
+		mux.HandleFunc("/api/v1/me/keys/", auth(adminHandler.HandleMyKeys))
+		mux.HandleFunc("/me/keys", auth(adminHandler.HandleMyKeys))
+		mux.HandleFunc("/me/keys/", auth(adminHandler.HandleMyKeys))
+		mux.HandleFunc("/me/whoami", auth(keysHandler.HandleWhoAmI))
+		mux.HandleFunc("/api/v1/whoami", auth(keysHandler.HandleWhoAmI))
+		mux.HandleFunc("/whoami", auth(keysHandler.HandleWhoAmI))
+
+		// Dashboard — session required, per-user scoping in handlers. The API
+		// and page are administrator-only while user dashboard access is pending
+		// legal approval. The API handlers ride the response cache (inside auth:
+		// a hit still pays session validation, and the cache key contains the
+		// resolved scope).
+		dashCache := handler.NewDashboardCache(cfg, store)
+		dashboardPage := func(next http.HandlerFunc) http.HandlerFunc {
+			return auth(func(w http.ResponseWriter, r *http.Request) {
+				if !handler.IsPartnerAdmin(r.Context(), cfg, store, r) {
+					// Regular users now have a real account page; the old
+					// "coming soon" dead end is retired.
+					http.Redirect(w, r, "/account", http.StatusFound)
+					return
+				}
+				next(w, r)
+			})
+		}
+		dashboardAPI := func(next http.HandlerFunc) http.HandlerFunc {
+			return auth(handler.RequirePartnerAdminAPI(cfg, store, next))
+		}
+		mux.HandleFunc("/dashboard", dashboardPage(dashboardHandler.ServeDashboard))
+		mux.HandleFunc("/api/v1/dashboard/overview", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleOverview)))
+		mux.HandleFunc("/api/v1/dashboard/groups", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleGroups)))
+		mux.HandleFunc("/api/v1/dashboard/users", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleUsers)))
+		mux.HandleFunc("/api/v1/dashboard/directory-users", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleDirectoryUsers)))
+		mux.HandleFunc("/api/v1/dashboard/models", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleModels)))
+		mux.HandleFunc("/api/v1/dashboard/tools", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleTools)))
+		mux.HandleFunc("/api/v1/dashboard/geo", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleGeo)))
+		mux.HandleFunc("/api/v1/dashboard/cost-centers", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleCostCenters)))
+		mux.HandleFunc("/api/v1/dashboard/timeline", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleTimeline)))
+		mux.HandleFunc("/api/v1/dashboard/recent", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleRecent)))
+
+		// Pricing modal rate card — readable by any logged-in user: the rates
+		// are the same numbers every request is billed at, no user data.
+		mux.HandleFunc("/api/v1/pricing", auth(handler.NewPricingRefreshHandler(store).HandleList))
+
+		// Operator pages (admin console, routing) are SUPER-ADMIN
+		// only. Regular admins get the org-wide Usage view on /dashboard and
+		// nothing else — most of them only ever want to look at usage, and the
+		// pages below mutate platform state. Gated server-side, not just in the
+		// nav, so deep links and direct API calls are refused too.
+		mux.HandleFunc("/admin", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.ServeAdmin)))
+		mux.HandleFunc("/routing", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.ServeRouting)))
+		mux.HandleFunc("/admin2", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.ServeRouting)))
+		// Admin APIs are gated by RequirePartnerSuperAdmin (auth() alone is not enough —
+		// otherwise any signed-in user could change weights/config).
+		// Cache hit/miss counters — the Phase 1 verify step: hit ratio should
+		// approach (polls − filter-combos-per-TTL) / polls once the fleet
+		// settles. Read-only, super-admin page material.
+		mux.HandleFunc("/api/v1/admin/cache-stats", auth(handler.RequirePartnerSuperAdmin(cfg, store, dashCache.ServeStats)))
+		rollupHandler := handler.NewRollupHandler(store, cfg.RollupRefreshSeconds)
+		mux.HandleFunc("/api/v1/admin/rollups", auth(handler.RequirePartnerSuperAdmin(cfg, store, rollupHandler.HandleStatus)))
+		mux.HandleFunc("/api/v1/admin/providers", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleProviders)))
+		mux.HandleFunc("/api/v1/admin/models", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleModels)))
+		mux.HandleFunc("/api/v1/admin/models/", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleUpdateWeights)))
+		mux.HandleFunc("/api/v1/admin/config", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleConfig)))
+		mux.HandleFunc("/api/v1/admin/models/provider/", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleUpdateProvider)))
+		mux.HandleFunc("/api/v1/admin/pricing/refresh", auth(handler.RequirePartnerSuperAdmin(cfg, store, handler.NewPricingRefreshHandler(store).HandleRefresh)))
+		mux.HandleFunc("/api/v1/admin/safety-net", auth(handler.RequirePartnerSuperAdmin(cfg, store, quotaAdminHandler.HandlePolicy)))
+		mux.HandleFunc("/api/v1/admin/pricing-discounts", auth(handler.RequirePartnerSuperAdmin(cfg, store, pricingDiscountHandler.Handle)))
+		mux.HandleFunc("/api/v1/admin/pricing/reprice", auth(handler.RequirePartnerSuperAdmin(cfg, store, historicalRepricingHandler.Handle)))
+		mux.HandleFunc("/api/v1/admin/pricing/reprice/", auth(handler.RequirePartnerSuperAdmin(cfg, store, historicalRepricingHandler.HandleStatus)))
+		mux.HandleFunc("/api/v1/admin/model-policies", auth(handler.RequirePartnerSuperAdmin(cfg, store, modelPolicyAdminHandler.HandleList)))
+		// OpenShift users/entitlements management (redesigned admin page).
+
+		// Key APIs are reachable by any signed-in user: the user dashboard manages
+		// the caller's own keys. The handlers scope non-admins to their own
+		// identity, so a regular user can only ever see or create their own keys.
+		mux.HandleFunc("/api/v1/admin/keys", auth(adminHandler.HandleKeys))
+		mux.HandleFunc("/api/v1/admin/keys/", auth(adminHandler.HandleKeys))
+		// Admin "view as user" — the handler checks admin against the real
+		// session identity, not the swapped header, so it also clears itself.
+		mux.HandleFunc("/admin/impersonate", auth(authHandler.HandleImpersonate))
+
+		// Manager view — session required; the page adapts to the caller's
+		// scope (plain user sees self, manager sees subtree, super-admin sees
+		// all). Backed entirely by partner_users.
+		orgHandler := handler.NewPartnerOrgHandler(store, cfg)
+		managerAuth := func(next http.HandlerFunc) http.HandlerFunc { return auth(next) }
+		mux.HandleFunc("/manager", managerAuth(orgHandler.ServeManager))
+		mux.HandleFunc("/api/v1/org/scope", managerAuth(orgHandler.HandleScope))
+		mux.HandleFunc("/api/v1/org/usage", managerAuth(orgHandler.HandleOrgUsage))
+		mux.HandleFunc("/api/v1/org/charts", managerAuth(orgHandler.HandleOrgCharts))
+		mux.HandleFunc("/api/v1/org/person", managerAuth(orgHandler.HandleOrgPerson))
+	} else {
+		mux.HandleFunc("/health", healthHandler)
+		mux.HandleFunc("/ready", readyHandler)
 	}
-	dashboardAPI := func(next http.HandlerFunc) http.HandlerFunc {
-		return auth(handler.RequirePartnerAdminAPI(cfg, store, next))
-	}
-	mux.HandleFunc("/dashboard", dashboardPage(dashboardHandler.ServeDashboard))
-	mux.HandleFunc("/api/v1/dashboard/overview", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleOverview)))
-	mux.HandleFunc("/api/v1/dashboard/groups", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleGroups)))
-	mux.HandleFunc("/api/v1/dashboard/users", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleUsers)))
-	mux.HandleFunc("/api/v1/dashboard/directory-users", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleDirectoryUsers)))
-	mux.HandleFunc("/api/v1/dashboard/models", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleModels)))
-	mux.HandleFunc("/api/v1/dashboard/tools", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleTools)))
-	mux.HandleFunc("/api/v1/dashboard/geo", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleGeo)))
-	mux.HandleFunc("/api/v1/dashboard/cost-centers", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleCostCenters)))
-	mux.HandleFunc("/api/v1/dashboard/timeline", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleTimeline)))
-	mux.HandleFunc("/api/v1/dashboard/recent", dashboardAPI(dashCache.Wrap(dashboardHandler.HandleRecent)))
-
-	// Pricing modal rate card — readable by any logged-in user: the rates
-	// are the same numbers every request is billed at, no user data.
-	mux.HandleFunc("/api/v1/pricing", auth(handler.NewPricingRefreshHandler(store).HandleList))
-
-	// Operator pages (admin console, routing) are SUPER-ADMIN
-	// only. Regular admins get the org-wide Usage view on /dashboard and
-	// nothing else — most of them only ever want to look at usage, and the
-	// pages below mutate platform state. Gated server-side, not just in the
-	// nav, so deep links and direct API calls are refused too.
-	mux.HandleFunc("/admin", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.ServeAdmin)))
-	mux.HandleFunc("/routing", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.ServeRouting)))
-	mux.HandleFunc("/admin2", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.ServeRouting)))
-	// Admin APIs are gated by RequirePartnerSuperAdmin (auth() alone is not enough —
-	// otherwise any signed-in user could change weights/config).
-	// Cache hit/miss counters — the Phase 1 verify step: hit ratio should
-	// approach (polls − filter-combos-per-TTL) / polls once the fleet
-	// settles. Read-only, super-admin page material.
-	mux.HandleFunc("/api/v1/admin/cache-stats", auth(handler.RequirePartnerSuperAdmin(cfg, store, dashCache.ServeStats)))
-	rollupHandler := handler.NewRollupHandler(store, cfg.RollupRefreshSeconds)
-	mux.HandleFunc("/api/v1/admin/rollups", auth(handler.RequirePartnerSuperAdmin(cfg, store, rollupHandler.HandleStatus)))
-	mux.HandleFunc("/api/v1/admin/providers", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleProviders)))
-	mux.HandleFunc("/api/v1/admin/models", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleModels)))
-	mux.HandleFunc("/api/v1/admin/models/", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleUpdateWeights)))
-	mux.HandleFunc("/api/v1/admin/config", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleConfig)))
-	mux.HandleFunc("/api/v1/admin/models/provider/", auth(handler.RequirePartnerSuperAdmin(cfg, store, adminHandler.HandleUpdateProvider)))
-	mux.HandleFunc("/api/v1/admin/pricing/refresh", auth(handler.RequirePartnerSuperAdmin(cfg, store, handler.NewPricingRefreshHandler(store).HandleRefresh)))
-	mux.HandleFunc("/api/v1/admin/safety-net", auth(handler.RequirePartnerSuperAdmin(cfg, store, quotaAdminHandler.HandlePolicy)))
-	mux.HandleFunc("/api/v1/admin/pricing-discounts", auth(handler.RequirePartnerSuperAdmin(cfg, store, pricingDiscountHandler.Handle)))
-	mux.HandleFunc("/api/v1/admin/pricing/reprice", auth(handler.RequirePartnerSuperAdmin(cfg, store, historicalRepricingHandler.Handle)))
-	mux.HandleFunc("/api/v1/admin/pricing/reprice/", auth(handler.RequirePartnerSuperAdmin(cfg, store, historicalRepricingHandler.HandleStatus)))
-	mux.HandleFunc("/api/v1/admin/model-policies", auth(handler.RequirePartnerSuperAdmin(cfg, store, modelPolicyAdminHandler.HandleList)))
-	// OpenShift users/entitlements management (redesigned admin page).
-
-	// Key APIs are reachable by any signed-in user: the user dashboard manages
-	// the caller's own keys. The handlers scope non-admins to their own
-	// identity, so a regular user can only ever see or create their own keys.
-	mux.HandleFunc("/api/v1/admin/keys", auth(adminHandler.HandleKeys))
-	mux.HandleFunc("/api/v1/admin/keys/", auth(adminHandler.HandleKeys))
-	// Admin "view as user" — the handler checks admin against the real
-	// session identity, not the swapped header, so it also clears itself.
-	mux.HandleFunc("/admin/impersonate", auth(authHandler.HandleImpersonate))
-
-	// Manager view — session required; the page adapts to the caller's
-	// scope (plain user sees self, manager sees subtree, super-admin sees
-	// all). Backed entirely by partner_users.
-	orgHandler := handler.NewPartnerOrgHandler(store, cfg)
-	managerAuth := func(next http.HandlerFunc) http.HandlerFunc { return auth(next) }
-	mux.HandleFunc("/manager", managerAuth(orgHandler.ServeManager))
-	mux.HandleFunc("/api/v1/org/scope", managerAuth(orgHandler.HandleScope))
-	mux.HandleFunc("/api/v1/org/usage", managerAuth(orgHandler.HandleOrgUsage))
-	mux.HandleFunc("/api/v1/org/charts", managerAuth(orgHandler.HandleOrgCharts))
-	mux.HandleFunc("/api/v1/org/person", managerAuth(orgHandler.HandleOrgPerson))
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -538,4 +560,14 @@ func main() {
 	defer cancel()
 	server.Shutdown(ctx)
 	metricsServer.Shutdown(ctx)
+}
+
+// paritySyncMaxAge is how stale the shared rollup_meta verdict may be before
+// API-mode pods stop trusting it and fall back to raw dashboard reads.
+func paritySyncMaxAge(refreshSeconds int) time.Duration {
+	maxAge := 2 * time.Duration(refreshSeconds) * time.Second
+	if maxAge < 15*time.Minute {
+		maxAge = 15 * time.Minute
+	}
+	return maxAge
 }

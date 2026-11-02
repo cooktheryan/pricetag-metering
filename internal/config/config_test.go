@@ -234,3 +234,72 @@ func TestDBPoolEnv(t *testing.T) {
 		t.Errorf("DB pool env overrides not honored: %+v", cfg)
 	}
 }
+
+func TestParseMeteringMode(t *testing.T) {
+	cases := []struct {
+		raw     string
+		want    MeteringMode
+		wantErr bool
+	}{
+		{"", ModeAll, false},
+		{"all", ModeAll, false},
+		{"API", ModeAPI, false},
+		{" rollup ", ModeRollup, false},
+		{"rolup", "", true},
+		{"core", "", true},
+	}
+	for _, tc := range cases {
+		got, err := ParseMeteringMode(tc.raw)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("ParseMeteringMode(%q) = %q, want error", tc.raw, got)
+			}
+			continue
+		}
+		if err != nil || got != tc.want {
+			t.Errorf("ParseMeteringMode(%q) = %q, %v; want %q", tc.raw, got, err, tc.want)
+		}
+	}
+}
+
+func TestMeteringModeWorkloads(t *testing.T) {
+	cases := []struct {
+		mode        MeteringMode
+		api         bool
+		maintenance bool
+	}{
+		{ModeAll, true, true},
+		{ModeAPI, true, false},
+		{ModeRollup, false, true},
+		{"", true, true},
+	}
+	for _, tc := range cases {
+		if got := tc.mode.ServesAPIRoutes(); got != tc.api {
+			t.Errorf("%q.ServesAPIRoutes() = %v, want %v", tc.mode, got, tc.api)
+		}
+		if got := tc.mode.RunsMaintenance(); got != tc.maintenance {
+			t.Errorf("%q.RunsMaintenance() = %v, want %v", tc.mode, got, tc.maintenance)
+		}
+	}
+}
+
+func TestValidateRejectsInvalidMeteringMode(t *testing.T) {
+	t.Setenv("METERING_MODE", "rolup")
+	cfg := Load()
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() accepted an invalid METERING_MODE")
+	}
+	if cfg.MeteringMode.ServesAPIRoutes() || cfg.MeteringMode.RunsMaintenance() {
+		t.Errorf("invalid mode %q must not silently enable a workload", cfg.MeteringMode)
+	}
+
+	t.Setenv("METERING_MODE", "api")
+	cfg = Load()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() rejected api: %v", err)
+	}
+	if !cfg.MeteringMode.ServesAPIRoutes() || cfg.MeteringMode.RunsMaintenance() {
+		t.Errorf("api mode workloads = api:%v maintenance:%v, want true/false",
+			cfg.MeteringMode.ServesAPIRoutes(), cfg.MeteringMode.RunsMaintenance())
+	}
+}

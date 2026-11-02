@@ -299,6 +299,9 @@ func (s *Store) RepriceHistorical(ctx context.Context, actor string, req Histori
 	result.OperationID, result.Status, result.CompletedChunks, result.TotalChunks = op.ID, "completed", op.TotalChunks, op.TotalChunks
 	s.parityHealthy.Store(false)
 	s.servingRollups.Store(false)
+	// Share the invalidation with the other processes: API pods sync their
+	// parity state from rollup_meta, and the worker's next pass restores green.
+	_ = s.metaSet(ctx, metaParityHealthy, "false")
 	return result, nil
 }
 

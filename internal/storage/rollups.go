@@ -216,6 +216,67 @@ func (s *Store) metaSet(ctx context.Context, key, value string) error {
 	return err
 }
 
+// parityStateFromMeta interprets the shared parity verdict written by whichever
+// process owns maintenance. Pure so the staleness rule is testable without a
+// database.
+func parityStateFromMeta(healthyRaw, checkedRaw string, now time.Time, maxAge time.Duration) (healthy bool, checkedAt time.Time, ok bool) {
+	if checkedRaw == "" {
+		return false, time.Time{}, false
+	}
+	parsed, err := time.Parse(time.RFC3339, checkedRaw)
+	if err != nil {
+		return false, time.Time{}, false
+	}
+	if maxAge > 0 && now.Sub(parsed) > maxAge {
+		return false, parsed, true
+	}
+	return healthyRaw == "true", parsed, true
+}
+
+// RunParitySync keeps this process's parity state in step with rollup_meta.
+// API-mode pods do not run maintenance; without this they would fall back to
+// raw reads forever once a dedicated worker owns the loop.
+func (s *Store) RunParitySync(ctx context.Context, interval, maxAge time.Duration) {
+	if interval < 5*time.Second {
+		interval = 5 * time.Second
+	}
+	s.syncParityFromMeta(ctx, maxAge)
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.syncParityFromMeta(ctx, maxAge)
+		}
+	}
+}
+
+func (s *Store) syncParityFromMeta(ctx context.Context, maxAge time.Duration) {
+	healthyRaw, _ := s.metaGet(ctx, metaParityHealthy)
+	checkedRaw, ok := s.metaGet(ctx, metaParityCheckedAt)
+	if !ok {
+		return
+	}
+	healthy, checkedAt, parsed := parityStateFromMeta(healthyRaw, checkedRaw, time.Now().UTC(), maxAge)
+	if !parsed {
+		slog.Warn("rollup parity checked_at is unparsable — staying on raw reads", "value", checkedRaw)
+		return
+	}
+	prev := s.parityHealthy.Swap(healthy)
+	green := 0.0
+	if healthy {
+		green = 1
+	}
+	metrics.RollupParityGreen.Set(green)
+	metrics.RollupParityCheckedAtSeconds.Set(float64(checkedAt.Unix()))
+	if prev != healthy {
+		slog.Info("rollup parity state synced from rollup_meta",
+			"healthy", healthy, "checked_at", checkedRaw, "stale_after", maxAge.String())
+	}
+}
+
 // RollupsReady reports whether usage_hourly is trustworthy for reads —
 // the gate for the Phase 3 read switch (PR B). Memory flag first; meta
 // after, so a restarted pod with a completed backfill is instantly ready.
