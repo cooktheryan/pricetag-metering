@@ -23,7 +23,7 @@ database, so a mistyped or missing row cannot open a session.
 
 Dev logins are routed through the normal `loginDestination` logic, and the
 `AccessGate` applies onboarding mode `enforce` only to allowlisted `dev_test`
-identities. That demonstrates the country, group, and terms gates without
+identities. That demonstrates the country, group, and AI-policy gates without
 switching the whole deployment to enforcing mode (which would affect real
 users). IdP group claims are supplied by an optional `"dev_groups": ["GE"]`
 tag.
@@ -36,8 +36,8 @@ real users, it only feeds the enforced check for the dev identities.
 
 | Persona | Tag behavior | Landing |
 | --- | --- | --- |
-| Nina New | `dev_reset_on_login: true`; terms and API keys reset on every login | `/onboarding` |
-| Ravi Return | terms accepted, has usage | `/account` |
+| Nina New | `dev_reset_on_login: true`; policy acknowledgement and API keys reset on every login | `/onboarding` |
+| Ravi Return | policy acknowledged, has usage | `/account` |
 | Bea Blocked | `country: IR` | `/onboarding` (country gate) |
 | Noah Nogroup | no `dev_groups` | `/onboarding` (group gate) |
 | Maya Manager | has two seeded direct reports with team traffic | `/manager` |
