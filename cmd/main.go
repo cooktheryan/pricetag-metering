@@ -267,7 +267,9 @@ func main() {
 		go store.EnsureRollupsBackfilled(context.Background())
 	}
 
-	if meteringMode.ServesAPIRoutes() {
+	// Only api mode needs the shared-verdict sync: all mode owns the loop in
+	// this process, and rollup mode has no dashboard reads.
+	if meteringMode == config.ModeAPI {
 		go store.RunParitySync(ctx, 15*time.Second, paritySyncMaxAge(cfg.RollupRefreshSeconds))
 	}
 
@@ -568,6 +570,9 @@ func paritySyncMaxAge(refreshSeconds int) time.Duration {
 	maxAge := 2 * time.Duration(refreshSeconds) * time.Second
 	if maxAge < 15*time.Minute {
 		maxAge = 15 * time.Minute
+	}
+	if maxAge > 30*time.Minute {
+		maxAge = 30 * time.Minute
 	}
 	return maxAge
 }

@@ -254,9 +254,16 @@ func (s *Store) RunParitySync(ctx context.Context, interval, maxAge time.Duratio
 }
 
 func (s *Store) syncParityFromMeta(ctx context.Context, maxAge time.Duration) {
+	// Latch the shared backfill flag first: api-mode pods do not run the
+	// backfill, and rollupsLive() requires this cache alongside parity.
+	readyBefore := s.rollupsReadyNow.Load()
+	if s.RollupsReady() && !readyBefore {
+		slog.Info("rollup readiness synced from rollup_meta")
+	}
 	healthyRaw, _ := s.metaGet(ctx, metaParityHealthy)
 	checkedRaw, ok := s.metaGet(ctx, metaParityCheckedAt)
 	if !ok {
+		slog.Warn("rollup parity checked_at missing — dashboard rollups stay off until the worker reports")
 		return
 	}
 	healthy, checkedAt, parsed := parityStateFromMeta(healthyRaw, checkedRaw, time.Now().UTC(), maxAge)
