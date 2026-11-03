@@ -1104,7 +1104,7 @@ func rollupTimelineSQL(truncInterval, seriesCol string) string {
 var rollupUsersSelect = `
 		SELECT e.username,
 			%s,
-			COALESCE(e.group_name, ''),
+			COALESCE(NULLIF(e.group_name, ''), 'unknown'),
 			COALESCE(SUM(e.requests),0) as requests,
 			COALESCE(SUM(e.prompt_tokens),0) as prompt_tokens,
 			COALESCE(SUM(e.completion_tokens),0) as completion_tokens,
@@ -1116,8 +1116,8 @@ var rollupUsersSelect = `
 		LEFT JOIN sv ON sv.username = e.username
 		WHERE e.hour >= $1 AND e.hour < $2 AND ($3 = '' OR COALESCE(NULLIF(e.group_name, ''), 'unknown') = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5)
 			AND ($9 = '' OR lower(e.username) LIKE '%%' || lower($9) || '%%' OR lower(TRIM(CONCAT_WS(' ', up.first_name, up.last_name))) LIKE '%%' || lower($9) || '%%')
-		GROUP BY e.username, %s, COALESCE(e.group_name, '')
-		ORDER BY %s %s, e.username ASC, COALESCE(e.group_name, '') ASC
+		GROUP BY e.username, %s, COALESCE(NULLIF(e.group_name, ''), 'unknown')
+		ORDER BY %s %s, e.username ASC, COALESCE(NULLIF(e.group_name, ''), 'unknown') ASC
 		LIMIT $6 OFFSET $7`
 
 // RecentModels returns the distinct model identifiers seen in the last 7
