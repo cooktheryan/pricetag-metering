@@ -118,8 +118,8 @@ var (
 	})
 
 	// QosUnmatchedUsersTotal counts entitlement decisions for callers with
-	// no partner-user identity. These are treated as premium and are
-	// expected to be zero in normal operation.
+	// no partner-user identity. These are classified main and are expected
+	// to be zero in normal operation.
 	QosUnmatchedUsersTotal = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "metering_qos_unmatched_users_total",
 		Help: "QoS decisions for callers without a partner-user identity.",

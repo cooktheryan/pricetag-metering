@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"time"
 
@@ -19,6 +20,13 @@ const (
 )
 
 const qosRatelimitRetrySeconds = 30
+
+const (
+	qosDefaultPremiumMaxTokens    int64 = 600_000
+	qosDefaultRatelimitMinTokens  int64 = 2_000_000
+	qosDefaultHoldMainTokens      int64 = 3_000_000
+	qosDefaultHoldRatelimitTokens int64 = 10_000_000
+)
 
 // QosConfig is the runtime policy for weighted-token classification. It is
 // deliberately separate from the monthly quota policy: this controls priority
@@ -84,6 +92,30 @@ func (s *Store) SetQosConfig(cfg QosConfig) {
 		cfg.Providers = []string{"cb-glm"}
 	}
 	cfg.Providers = append([]string(nil), cfg.Providers...)
+	if cfg.PremiumMaxTokens <= 0 {
+		cfg.PremiumMaxTokens = qosDefaultPremiumMaxTokens
+	}
+	if cfg.RatelimitMinTokens <= 0 {
+		cfg.RatelimitMinTokens = qosDefaultRatelimitMinTokens
+	}
+	if cfg.HoldMainTokens <= 0 {
+		cfg.HoldMainTokens = qosDefaultHoldMainTokens
+	}
+	if cfg.HoldRatelimitTokens <= 0 {
+		cfg.HoldRatelimitTokens = qosDefaultHoldRatelimitTokens
+	}
+	if cfg.RatelimitMinTokens <= cfg.PremiumMaxTokens {
+		slog.Warn("QoS thresholds invalid: ratelimit boundary must exceed premium; using defaults",
+			"premium", cfg.PremiumMaxTokens, "ratelimit", cfg.RatelimitMinTokens)
+		cfg.PremiumMaxTokens = qosDefaultPremiumMaxTokens
+		cfg.RatelimitMinTokens = qosDefaultRatelimitMinTokens
+	}
+	if cfg.HoldRatelimitTokens <= cfg.HoldMainTokens {
+		slog.Warn("QoS hold thresholds invalid: ratelimit boundary must exceed main; using defaults",
+			"hold_main", cfg.HoldMainTokens, "hold_ratelimit", cfg.HoldRatelimitTokens)
+		cfg.HoldMainTokens = qosDefaultHoldMainTokens
+		cfg.HoldRatelimitTokens = qosDefaultHoldRatelimitTokens
+	}
 
 	s.qosMu.Lock()
 	s.qosConfig = cfg
@@ -94,8 +126,8 @@ func (s *Store) SetQosConfig(cfg QosConfig) {
 }
 
 // GetQosStatus classifies the caller from weighted token usage over the short
-// and hold windows. It returns premium for exempt or unknown-subject users
-// without querying usage_events.
+// and hold windows. It returns premium for exempt users and main for callers
+// without a partner identity, without querying usage_events.
 func (s *Store) GetQosStatus(ctx context.Context, username string, decision QuotaDecision, exempt bool) (QosStatus, error) {
 	cfg := s.qosConfig
 	status := QosStatus{
@@ -214,6 +246,8 @@ func (s *Store) queryQosTokens(ctx context.Context, username string, logins []st
 		providerClause = "provider = $3"
 		providerArg = cfg.Providers[0]
 	}
+	// completion_tokens already contains reasoning_tokens (reasoning is a
+	// subset of output); adding reasoning_tokens separately would double-count.
 	query := fmt.Sprintf(`
 		SELECT
 			COALESCE(SUM(

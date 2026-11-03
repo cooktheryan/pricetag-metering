@@ -264,3 +264,75 @@ func insertQosUsageProvider(t *testing.T, store *Store, username, provider strin
 		t.Fatalf("insert usage event: %v", err)
 	}
 }
+
+func TestSetQosConfigThresholdValidation(t *testing.T) {
+	var store Store
+	store.SetQosConfig(QosConfig{Enabled: true})
+	store.qosMu.Lock()
+	cfg := store.qosConfig
+	store.qosMu.Unlock()
+	if cfg.PremiumMaxTokens != qosDefaultPremiumMaxTokens ||
+		cfg.RatelimitMinTokens != qosDefaultRatelimitMinTokens ||
+		cfg.HoldMainTokens != qosDefaultHoldMainTokens ||
+		cfg.HoldRatelimitTokens != qosDefaultHoldRatelimitTokens {
+		t.Fatalf("zero thresholds were not defaulted: %+v", cfg)
+	}
+
+	store.SetQosConfig(QosConfig{
+		Enabled:             true,
+		PremiumMaxTokens:    5_000_000,
+		RatelimitMinTokens:  1_000_000,
+		HoldMainTokens:      9_000_000,
+		HoldRatelimitTokens: 2_000_000,
+	})
+	store.qosMu.Lock()
+	cfg = store.qosConfig
+	store.qosMu.Unlock()
+	if cfg.PremiumMaxTokens != qosDefaultPremiumMaxTokens || cfg.RatelimitMinTokens != qosDefaultRatelimitMinTokens {
+		t.Fatalf("inverted window thresholds were not defaulted: %+v", cfg)
+	}
+	if cfg.HoldMainTokens != qosDefaultHoldMainTokens || cfg.HoldRatelimitTokens != qosDefaultHoldRatelimitTokens {
+		t.Fatalf("inverted hold thresholds were not defaulted: %+v", cfg)
+	}
+}
+
+func insertQosUsageReasoning(t *testing.T, store *Store, username string, ts time.Time, prompt, cached, cacheWrite, completion, reasoning int) {
+	t.Helper()
+	_, err := store.db.ExecContext(context.Background(), `
+		INSERT INTO usage_events
+			(event_id, timestamp, username, provider, model,
+			 prompt_tokens, completion_tokens, total_tokens,
+			 cached_input_tokens, cache_creation_tokens, reasoning_tokens)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		fmt.Sprintf("qos-test-%d-%d", time.Now().UnixNano(), prompt),
+		ts, username, "cb-glm", "rits/zai-org/glm-5-3",
+		prompt, completion, prompt+completion, cached, cacheWrite, reasoning)
+	if err != nil {
+		t.Fatalf("insert usage event: %v", err)
+	}
+}
+
+// TestQosReasoningCountedOnce pins that reasoning tokens are already part of
+// completion_tokens. The 1,000 completion tokens (800 of them reasoning) sit
+// below the 1,500 premium boundary; adding reasoning separately would count
+// 1,800 and misclassify the caller as main.
+func TestQosReasoningCountedOnce(t *testing.T) {
+	store, ctx := openTestStore(t)
+	cfg := qosTestConfig()
+	cfg.PremiumMaxTokens = 1_500
+	cfg.RatelimitMinTokens = 3_000
+	cfg.HoldMainTokens = 10_000
+	cfg.HoldRatelimitTokens = 20_000
+	store.SetQosConfig(cfg)
+
+	userID := "44444444-4444-4444-4444-444444444444"
+	email := "qos-reasoning@example.com"
+	if _, err := store.CreatePartnerUser(ctx, "test", userID, map[string]any{
+		"email": email, "first_name": "QoS", "last_name": "Reasoning",
+	}); err != nil {
+		t.Fatalf("CreatePartnerUser: %v", err)
+	}
+
+	insertQosUsageReasoning(t, store, email, time.Now().Add(-10*time.Second), 0, 0, 0, 1_000, 800)
+	assertQosClass(t, store, ctx, email, userID, QosPremium)
+}

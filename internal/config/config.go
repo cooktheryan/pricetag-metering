@@ -182,8 +182,8 @@ type Config struct {
 	// user enters ratelimit.
 	QosHoldRatelimitTokens int64
 	// QosCacheReadWeight is the weight applied to prompt-cache reads when
-	// computing weighted token usage. Uncached input, cache writes, output,
-	// and reasoning are weighted 1.0.
+	// computing weighted token usage. Uncached input, cache writes, and
+	// output are weighted 1.0; output already includes reasoning tokens.
 	QosCacheReadWeight float64
 	// QosClassCacheSeconds bounds staleness of the short-window class
 	// decision. The 5m guard has its own, longer cache.
