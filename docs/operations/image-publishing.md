@@ -21,8 +21,8 @@ secret.
   image
 
 The personal namespace is an interim build path, not a production
-supply-chain boundary. Production deployments must pin the digest from an
-approved workflow run.
+supply-chain boundary. Production deployments must pin the digest from a
+workflow run on `main`; the workflow has no environment approval gate.
 
 ## Credentials
 

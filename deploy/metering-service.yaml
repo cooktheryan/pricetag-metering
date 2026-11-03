@@ -16,7 +16,9 @@ spec:
     spec:
       containers:
         - name: metering-service
-          image: ghcr.io/redhat-et/pricetag-metering:latest
+          # Pin the digest from the publish workflow in real deployments;
+          # :main is a mutable convenience tag.
+          image: quay.io/modden/enmaas-metering-service:main
           ports:
             - containerPort: 8080
             - containerPort: 9902
