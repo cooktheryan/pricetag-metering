@@ -168,18 +168,28 @@ func IsPartnerSuperAdmin(ctx context.Context, cfg config.Config, store *storage.
 	return IsPartnerSuperAdminUsername(ctx, cfg, store, r.Header.Get(cfg.UserHeader))
 }
 
-func IsPartnerSuperAdminUsername(ctx context.Context, cfg config.Config, store *storage.Store, username string) bool {
+// partnerSuperAdminVerdict resolves the super-admin verdict and reports whether
+// it is safe to cache. A successful directory lookup is authoritative; the
+// break-glass fallback after a failed lookup is not cacheable so the next
+// request retries the directory instead of serving the fallback for the TTL.
+func partnerSuperAdminVerdict(ctx context.Context, cfg config.Config, store *storage.Store, username string) (superAdmin bool, resolved bool) {
 	if strings.TrimSpace(username) == "" && cfg.AllowUnauthenticatedAdmin {
-		return true
+		return true, true
 	}
 	if store != nil {
 		role, err := store.GetPartnerRoleByUsername(ctx, username)
 		if err == nil {
-			return role == storage.PartnerRoleSuperAdmin
+			return role == storage.PartnerRoleSuperAdmin, true
 		}
 		slog.Warn("Partner super-admin role lookup failed; using break-glass authorization", "error", err)
+		return isBreakGlassSuperAdminUsername(cfg, username), false
 	}
-	return isBreakGlassSuperAdminUsername(cfg, username)
+	return isBreakGlassSuperAdminUsername(cfg, username), true
+}
+
+func IsPartnerSuperAdminUsername(ctx context.Context, cfg config.Config, store *storage.Store, username string) bool {
+	superAdmin, _ := partnerSuperAdminVerdict(ctx, cfg, store, username)
+	return superAdmin
 }
 
 func RequirePartnerSuperAdmin(cfg config.Config, store *storage.Store, next http.HandlerFunc) http.HandlerFunc {

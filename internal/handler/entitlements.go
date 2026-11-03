@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/redhat-et/pricetag-metering/internal/config"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
@@ -17,13 +17,8 @@ type EntitlementsHandler struct {
 	store *storage.Store
 	cfg   config.Config
 
-	roleMu    sync.Mutex
-	roleCache map[string]roleCacheEntry
-}
-
-type roleCacheEntry struct {
-	superAdmin bool
-	expires    time.Time
+	roleCache   *expirable.LRU[string, bool]
+	resolveRole func(context.Context, string) (bool, bool)
 }
 
 const (
@@ -32,39 +27,30 @@ const (
 )
 
 func NewEntitlementsHandler(store *storage.Store, cfg config.Config) *EntitlementsHandler {
-	return &EntitlementsHandler{store: store, cfg: cfg, roleCache: map[string]roleCacheEntry{}}
+	return &EntitlementsHandler{
+		store:     store,
+		cfg:       cfg,
+		roleCache: expirable.NewLRU[string, bool](roleCacheMaxEntries, nil, roleCacheTTL),
+		resolveRole: func(ctx context.Context, username string) (bool, bool) {
+			return partnerSuperAdminVerdict(ctx, cfg, store, username)
+		},
+	}
 }
 
 // isSuperAdmin caches the role lookup for the entitlement hot path. The
 // per-request role query used to run for every gateway request; a short TTL
 // keeps role changes bounded by the same staleness as the quota decision.
+// Verdicts that fell back after a directory error are not cached, so the next
+// request retries the directory.
 func (h *EntitlementsHandler) isSuperAdmin(ctx context.Context, username string) bool {
 	key := strings.ToLower(strings.TrimSpace(username))
-	now := time.Now()
-	h.roleMu.Lock()
-	entry, ok := h.roleCache[key]
-	h.roleMu.Unlock()
-	if ok && now.Before(entry.expires) {
-		return entry.superAdmin
+	if cached, ok := h.roleCache.Get(key); ok {
+		return cached
 	}
-
-	superAdmin := IsPartnerSuperAdminUsername(ctx, h.cfg, h.store, username)
-	h.roleMu.Lock()
-	if h.roleCache == nil {
-		h.roleCache = map[string]roleCacheEntry{}
+	superAdmin, resolved := h.resolveRole(ctx, username)
+	if resolved {
+		h.roleCache.Add(key, superAdmin)
 	}
-	if len(h.roleCache) >= roleCacheMaxEntries {
-		for existing, cached := range h.roleCache {
-			if now.After(cached.expires) {
-				delete(h.roleCache, existing)
-			}
-		}
-		if len(h.roleCache) >= roleCacheMaxEntries {
-			clear(h.roleCache)
-		}
-	}
-	h.roleCache[key] = roleCacheEntry{superAdmin: superAdmin, expires: now.Add(roleCacheTTL)}
-	h.roleMu.Unlock()
 	return superAdmin
 }
 
