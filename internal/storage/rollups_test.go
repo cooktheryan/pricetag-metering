@@ -85,6 +85,8 @@ func TestParityStateFromMeta(t *testing.T) {
 		{"stale green falls back", "true", stale, 15 * time.Minute, false, true},
 		{"missing checked_at", "true", "", 15 * time.Minute, false, false},
 		{"unparsable checked_at", "true", "not-a-time", 15 * time.Minute, false, false},
+		{"future-dated verdict is red", "true", now.Add(10 * time.Minute).Format(time.RFC3339), 15 * time.Minute, false, true},
+		{"small future skew stays fresh", "true", now.Add(time.Minute).Format(time.RFC3339), 15 * time.Minute, true, true},
 		{"zero max age trusts the verdict", "true", stale, 0, true, true},
 	}
 	for _, tc := range cases {

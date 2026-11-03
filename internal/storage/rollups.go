@@ -332,6 +332,11 @@ func parityStateFromMeta(healthyRaw, checkedRaw string, now time.Time, maxAge ti
 	if err != nil {
 		return false, time.Time{}, false
 	}
+	// A verdict from the future is a clock error, not freshness; treat it as
+	// red until the worker reports a sane timestamp.
+	if parsed.After(now.Add(5 * time.Minute)) {
+		return false, parsed, true
+	}
 	if maxAge > 0 && now.Sub(parsed) > maxAge {
 		return false, parsed, true
 	}
@@ -368,18 +373,26 @@ func (s *Store) syncParityFromMeta(ctx context.Context, maxAge time.Duration) {
 	healthyRaw, checkedRaw, ok, err := s.metaLookupParity(ctx)
 	if err != nil {
 		slog.Warn("read rollup parity state failed", "error", err)
+		// An unreadable verdict is not a green one: clear the local gate so
+		// this pod falls back to raw instead of trusting an older state.
+		s.parityHealthy.Store(false)
+		s.servingRollups.Store(false)
 		return
 	}
 	if !ok {
 		if s.parityMetaMissing.CompareAndSwap(false, true) {
 			slog.Warn("rollup parity checked_at missing — dashboard rollups stay off until the worker reports")
 		}
+		s.parityHealthy.Store(false)
+		s.servingRollups.Store(false)
 		return
 	}
 	s.parityMetaMissing.Store(false)
 	healthy, checkedAt, parsed := parityStateFromMeta(healthyRaw, checkedRaw, time.Now().UTC(), maxAge)
 	if !parsed {
 		slog.Warn("rollup parity checked_at is unparsable — staying on raw reads", "value", checkedRaw)
+		s.parityHealthy.Store(false)
+		s.servingRollups.Store(false)
 		return
 	}
 	prev := s.parityHealthy.Swap(healthy)
@@ -830,18 +843,27 @@ func (s *Store) maintainOnce(ctx context.Context, deep bool) {
 	metrics.RollupParityGreen.Set(parityGreen)
 	now := time.Now().UTC()
 	metrics.RollupParityCheckedAtSeconds.Set(float64(now.Unix()))
-	prev := s.parityHealthy.Swap(!red)
+	prev := s.parityHealthy.Load()
 	wrote, writeErr := s.metaSetParity(ctx, !red, now, start)
-	if writeErr != nil {
+	switch {
+	case writeErr != nil:
 		slog.Warn("failed to publish rollup parity verdict", "error", writeErr)
-	} else if !wrote {
+		// The shared verdict was not updated; keep this pod on raw rather
+		// than claiming a local green the other processes cannot see.
+		s.parityHealthy.Store(false)
+		s.servingRollups.Store(false)
+	case !wrote:
 		slog.Info("parity verdict skipped — a newer invalidation landed during the check", "window", window)
+		s.parityHealthy.Store(false)
+		s.servingRollups.Store(false)
+	default:
+		s.parityHealthy.Store(!red)
 	}
 	if red {
 		slog.Error("ROLLUP PARITY RED — dashboard aggregations falling back to raw", "window", window, "shapes", report)
-	} else if deep {
+	} else if deep && wrote {
 		slog.Info("rollup parity green", "window", window)
-	} else if !prev {
+	} else if !prev && s.parityHealthy.Load() {
 		slog.Info("rollup parity recovered — dashboard reads return to usage_hourly")
 	}
 }
