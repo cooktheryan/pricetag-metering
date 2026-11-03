@@ -164,3 +164,24 @@ func TestMetaSetParityGuardIntegration(t *testing.T) {
 		t.Fatal("unguarded write should always proceed")
 	}
 }
+
+// TestMaintainOnceFailureClearsLocalParity covers Mode "all": the pod that
+// owns maintenance must clear its own in-memory parity gate on a failed pass,
+// not just the shared rollup_meta verdict (all mode has no parity sync loop).
+func TestMaintainOnceFailureClearsLocalParity(t *testing.T) {
+	store, _ := testIntegrationStore(t)
+	store.rollupsReadyNow.Store(true)
+	store.parityHealthy.Store(true)
+	store.servingRollups.Store(true)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // refreshRecentHours fails immediately on the cancelled context
+	store.maintainOnce(ctx, false)
+
+	if store.parityHealthy.Load() {
+		t.Fatal("failed maintenance pass must clear the local parity flag")
+	}
+	if store.servingRollups.Load() {
+		t.Fatal("failed maintenance pass must clear the serving flag")
+	}
+}

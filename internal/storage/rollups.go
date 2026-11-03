@@ -780,9 +780,12 @@ func (s *Store) maintainOnce(ctx context.Context, deep bool) {
 	}
 	if err := s.refreshRecentHours(ctx); err != nil {
 		slog.Error("rollup refresh failed", "error", err)
-		// A failed pass must not look like a healthy one: publish a red
-		// verdict with a fresh checked_at so api pods fall back to raw
-		// instead of trusting the last green for the full staleness window.
+		// A failed pass must not look like a healthy one: clear the local
+		// read gate and publish a red verdict with a fresh checked_at so
+		// api pods fall back to raw instead of trusting the last green for
+		// the full staleness window.
+		s.parityHealthy.Store(false)
+		s.servingRollups.Store(false)
 		if _, writeErr := s.metaSetParity(ctx, false, time.Now().UTC(), start); writeErr != nil {
 			slog.Warn("failed to publish red parity after refresh failure", "error", writeErr)
 		}
@@ -800,6 +803,8 @@ func (s *Store) maintainOnce(ctx context.Context, deep bool) {
 	report, err := s.ParityReport(ctx, until.Add(-window), until)
 	if err != nil {
 		slog.Error("rollup parity check failed", "window", window, "error", err)
+		s.parityHealthy.Store(false)
+		s.servingRollups.Store(false)
 		if _, writeErr := s.metaSetParity(ctx, false, time.Now().UTC(), start); writeErr != nil {
 			slog.Warn("failed to publish red parity after parity check failure", "error", writeErr)
 		}

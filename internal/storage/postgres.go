@@ -823,7 +823,7 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 		query += fmt.Sprintf(`
 		SELECT e.username,
 			%s,
-			COALESCE(e.group_name, ''),
+			COALESCE(NULLIF(e.group_name, ''), 'unknown'),
 			COUNT(*) as requests,
 			COALESCE(SUM(e.prompt_tokens),0) as prompt_tokens,
 			COALESCE(SUM(e.completion_tokens),0) as completion_tokens,
@@ -835,8 +835,8 @@ func (s *Store) GetDashboardUsers(ctx context.Context, since, until time.Time, g
 		LEFT JOIN (SELECT l.username AS username, pu.tags->>'first_name' AS first_name, pu.tags->>'last_name' AS last_name FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username
 		LEFT JOIN sv ON sv.username = e.username
 		WHERE e.timestamp >= $1 AND e.timestamp < $2 AND ($3 = '' OR COALESCE(NULLIF(e.group_name, ''), 'unknown') = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5) AND ($9 = '' OR lower(e.username) LIKE '%%' || lower($9) || '%%' OR lower(TRIM(CONCAT_WS(' ', up.first_name, up.last_name))) LIKE '%%' || lower($9) || '%%')
-		GROUP BY e.username, %s, COALESCE(e.group_name, '')
-		ORDER BY %s %s, e.username ASC, COALESCE(e.group_name, '') ASC
+		GROUP BY e.username, %s, COALESCE(NULLIF(e.group_name, ''), 'unknown')
+		ORDER BY %s %s, e.username ASC, COALESCE(NULLIF(e.group_name, ''), 'unknown') ASC
 			LIMIT $6 OFFSET $7`, displayNameExpr, costUSDExpr, displayNameExpr, sortExpr, direction)
 	}
 
@@ -885,7 +885,7 @@ func dashboardUsersWithoutSavingsSQL(rollup bool, displayNameExpr, sortExpr, dir
 	return fmt.Sprintf(`
 		SELECT e.username,
 			%s,
-			COALESCE(e.group_name, '') AS group_name,
+			COALESCE(NULLIF(e.group_name, ''), 'unknown') AS group_name,
 			%s AS requests,
 			COALESCE(SUM(e.prompt_tokens),0) AS prompt_tokens,
 			COALESCE(SUM(e.completion_tokens),0) AS completion_tokens,
@@ -897,8 +897,8 @@ func dashboardUsersWithoutSavingsSQL(rollup bool, displayNameExpr, sortExpr, dir
 			FROM partner_user_logins l JOIN partner_users pu ON pu.user_id = l.user_id) up ON up.username = e.username
 		WHERE %s AND ($3 = '' OR COALESCE(NULLIF(e.group_name, ''), 'unknown') = $3) AND ($4 = '' OR e.username = ANY(string_to_array($4, ','))) AND ($5 = '' OR e.model = $5)
 			AND ($8 = '' OR lower(e.username) LIKE '%%' || lower($8) || '%%' OR lower(TRIM(CONCAT_WS(' ', up.first_name, up.last_name))) LIKE '%%' || lower($8) || '%%')
-		GROUP BY e.username, %s, COALESCE(e.group_name, '')
-		ORDER BY %s %s, e.username ASC, COALESCE(e.group_name, '') ASC
+		GROUP BY e.username, %s, COALESCE(NULLIF(e.group_name, ''), 'unknown')
+		ORDER BY %s %s, e.username ASC, COALESCE(NULLIF(e.group_name, ''), 'unknown') ASC
 		LIMIT $6 OFFSET $7`, displayNameExpr, requests, cost, from, window, displayNameExpr, sortExpr, direction)
 }
 
@@ -1478,7 +1478,7 @@ func (s *Store) GetRecentEvents(ctx context.Context, limit int, group, user, mod
 		limit = 20
 	}
 	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
-		SELECT e.timestamp, e.username, %s, COALESCE(pu.tags->>'country',''), COALESCE(pu.tags->>'state',''), COALESCE(pu.tags->>'cost_center_description',''), COALESCE(e.group_name,''), e.model, COALESCE(e.provider,''),
+		SELECT e.timestamp, e.username, %s, COALESCE(pu.tags->>'country',''), COALESCE(pu.tags->>'state',''), COALESCE(pu.tags->>'cost_center_description',''), COALESCE(NULLIF(e.group_name, ''), 'unknown'), e.model, COALESCE(e.provider,''),
 			e.prompt_tokens, e.completion_tokens, e.total_tokens,
 			COALESCE(e.cached_input_tokens, 0), COALESCE(e.cache_creation_tokens, 0),
 			COALESCE(ROUND((%s)::numeric, 4), 0),
