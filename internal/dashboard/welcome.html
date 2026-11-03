@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MaaS · User Guide</title>
+<meta name="description" content="A general guide to connecting clients to a MaaS API.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#fff;--soft:#f5f8f6;--ink:#15231d;--muted:#52655b;--line:#dce7df;--green:#087f50;--blue:#2f65c8;--code:#14251d;--shadow:0 12px 30px rgba(21,35,29,.08)}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--ink);background:var(--bg);font:16px/1.65 "IBM Plex Sans",sans-serif;-webkit-font-smoothing:antialiased}a{color:var(--blue)}code,pre,.mono{font-family:"IBM Plex Mono",monospace}.shell{max-width:1080px;margin:auto;padding:0 26px}.hero{background:linear-gradient(125deg,#eef8f1,#f7f9ff 68%,#fff);border-bottom:1px solid var(--line)}.hero .shell{padding-top:64px;padding-bottom:68px}.eyebrow{color:var(--green);font:600 11px "IBM Plex Mono",monospace;letter-spacing:.14em;text-transform:uppercase}.hero h1{max-width:760px;margin:16px 0 0;font-size:clamp(42px,7vw,72px);line-height:1.05;letter-spacing:-.05em}.hero h1 span{color:var(--green)}.hero p{max-width:680px;color:var(--muted);font-size:18px;margin:18px 0 0}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}.btn{display:inline-block;padding:9px 14px;border-radius:7px;background:var(--blue);color:#fff;text-decoration:none;font-size:14px;font-weight:600}.btn.alt{background:transparent;border:1px solid var(--line);color:var(--blue)}section{padding:54px 0 0;scroll-margin-top:24px}.head{max-width:720px;margin-bottom:22px}h2,h3{line-height:1.15;letter-spacing:-.025em}h2{font-size:clamp(28px,4vw,40px);margin:0}h3{font-size:19px;margin:0 0 8px}.lede{color:var(--muted);font-size:17px;margin:10px 0 0}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.card{padding:22px;border:1px solid var(--line);border-radius:12px;background:#fff;box-shadow:var(--shadow)}.card p{color:var(--muted);margin:0 0 10px}.card p:last-child{margin-bottom:0}.card ul{color:var(--muted);padding-left:21px;margin:8px 0 0}.tip{padding:13px 15px;border-left:3px solid var(--blue);background:#f5f8ff;color:var(--muted);font-size:14px;margin-top:14px}.code{position:relative;margin-top:12px}.code pre{margin:0;padding:16px;overflow:auto;border-radius:9px;background:var(--code);color:#d9eee0;font-size:12px;line-height:1.65;white-space:pre}.tool{padding:20px 0;border-top:1px solid var(--line)}.tool:first-child{border-top:0}.tool h3{margin-bottom:5px}.tool p{margin:4px 0 9px;color:var(--muted);font-size:14px}.tool .code pre{font-size:11.5px;padding:13px}.note{color:var(--muted);font-size:13px}.footer{margin:58px 0 28px;padding-top:18px;border-top:1px solid var(--line);color:#788a80;font-size:12px}@media(max-width:720px){.shell{padding-left:18px;padding-right:18px}.hero .shell{padding-top:48px;padding-bottom:52px}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="hero" id="top">
+  <div class="shell">
+    <span class="eyebrow">Model as a Service · User Guide</span>
+    <h1>Welcome to <span>MaaS</span></h1>
+    <p>Connect compatible AI clients to a MaaS API using the endpoint, key, and model identifiers supplied by your service provider.</p>
+    <div class="actions"><a class="btn" href="#quickstart">Try the API</a><a class="btn alt" href="#clients">Client setup</a></div>
+  </div>
+</header>
+<main class="shell">
+  <section id="before-you-start">
+    <div class="head"><h2>What you need</h2><p class="lede">Your MaaS provider supplies the connection details. The exact models and API features depend on that service.</p></div>
+    <div class="grid">
+      <div class="card"><h3>Connection details</h3><ul><li>API base URL</li><li>API key</li><li>Exact model identifier</li><li>Supported API format, such as Chat Completions, Responses, or Messages</li></ul></div>
+      <div class="card"><h3>Keep credentials private</h3><p>Store keys in a secret manager or a protected environment variable. Do not commit a real key to source control, paste it into shared examples, or include it in a request body.</p></div>
+    </div>
+  </section>
+  <section id="quickstart">
+    <div class="head"><h2>Make a test request</h2><p class="lede">This example uses an OpenAI-compatible Chat Completions endpoint. Use the API format documented by your MaaS provider.</p></div>
+    <div class="card">
+      <h3>Chat Completions</h3>
+      <p>Replace the sample base URL and model identifier with the values for your service.</p>
+      <div class="code"><pre>export MAAS_BASE_URL="{{GATEWAY_URL}}/v1"
+export MAAS_API_KEY="your-api-key"
+export MAAS_MODEL="provider/model-id"
+
+curl "$MAAS_BASE_URL/chat/completions" \
+  -H "Authorization: Bearer $MAAS_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"'"$MAAS_MODEL"'","messages":[{"role":"user","content":"Reply with exactly OK."}]}'</pre></div>
+      <p class="tip">If your provider uses a different authentication header or API dialect, follow its instructions instead of copying this request unchanged.</p>
+    </div>
+  </section>
+  <section id="models">
+    <div class="head"><h2>Find a supported model</h2><p class="lede">Some MaaS services provide a model catalog; others require you to use a model identifier supplied by an administrator.</p></div>
+    <div class="grid">
+      <div class="card"><h3>Optional model discovery</h3><p>If your service exposes <code>/models</code>, you can try:</p><div class="code"><pre>curl "$MAAS_BASE_URL/models" \
+  -H "Authorization: Bearer $MAAS_API_KEY"</pre></div></div>
+      <div class="card"><h3>Use exact identifiers</h3><p>Model names are service-specific. Copy the exact identifier from the service documentation or catalog; a friendly display name may not be accepted by the API.</p></div>
+    </div>
+  </section>
+  <section id="clients">
+    <div class="head"><h2>Connect a client</h2><p class="lede">Client settings vary by version and by the API formats your MaaS service supports. Keep the base URL and key consistent, and choose a compatible model and API format.</p></div>
+    <div class="card">
+      <div class="tool"><h3>Claude Code</h3><p>For an Anthropic-compatible MaaS endpoint, configure the client with the base URL and key provided by your service, then select a supported model.</p><div class="code"><pre>export ANTHROPIC_BASE_URL="https://your-maas-host.example"
+export ANTHROPIC_API_KEY="$MAAS_API_KEY"</pre></div></div>
+      <div class="tool"><h3>Codex</h3><p>Configure a custom model provider using the base URL, authentication variable, and API format supported by your service. For example, a Responses-compatible provider may use:</p><div class="code"><pre>[model_providers.maas]
+name = "MaaS"
+base_url = "https://your-maas-host.example/v1"
+env_key = "MAAS_API_KEY"
+wire_api = "responses"</pre></div></div>
+      <div class="tool"><h3>OpenCode</h3><p>Add a provider with your MaaS base URL and an environment-variable reference for the key. OpenCode configuration schemas differ by version; use the schema for your installed version and pin an exact supported model identifier.</p></div>
+      <div class="tool"><h3>Pi</h3><p>Add a provider using the base URL, API format, and model identifier supported by your service. Keep the API key in Pi’s supported authentication mechanism rather than in a shared model configuration.</p></div>
+      <p class="note">These are general patterns, not provider-specific guarantees. Check your service and client documentation for supported endpoints, settings, and model capabilities.</p>
+    </div>
+  </section>
+  <div class="footer">MaaS User Guide · Examples use placeholders. Replace them with details from your service provider.</div>
+</main>
+</body>
+</html>
