@@ -168,14 +168,16 @@ func main() {
 		}
 	}
 
-	// Phase 3 part B: maintenance loop (refresh recent hours, standing
-	// parity check) runs REGARDLESS of the read switch — keeping the
-	// table reconciled and the parity signal warm is what makes
-	// DASHBOARD_USE_ROLLUPS a risk-free flip and a red check an
-	// automatic fallback to raw. Reads switch only when flag + ready +
+	// Phase 3 part B: the maintenance loop (recent-hour refresh + standing
+	// parity check) belongs to the modes that own it; api pods only sync the
+	// shared verdict from rollup_meta. Reads switch only when flag + ready +
 	// parity-green all hold; see /api/v1/admin/rollups for state.
 	store.UseRollups(cfg.DashboardUseRollups)
-	go store.RunRollupMaintenance(context.Background(), time.Duration(cfg.RollupRefreshSeconds)*time.Second)
+	if meteringMode.RunsMaintenance() {
+		go store.RunRollupMaintenance(context.Background(), time.Duration(cfg.RollupRefreshSeconds)*time.Second)
+	} else {
+		slog.Info("rollup maintenance disabled in this mode — parity state syncs from rollup_meta")
+	}
 
 	// Seed model pricing from LiteLLM (try fetch latest, fall back to bundled)
 	ctx := context.Background()

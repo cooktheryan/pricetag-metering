@@ -1308,7 +1308,7 @@ func (s *Store) GetDashboardGeo(ctx context.Context, since, until time.Time, gro
 		SELECT %s AS country, %s AS state, %s,
 			COALESCE(SUM(e.total_tokens), 0), COUNT(DISTINCT e.username), %s
 		FROM %s
-		WHERE %s AND ($3 = '' OR e.group_name = $3)
+		WHERE %s AND ($3 = '' OR COALESCE(NULLIF(e.group_name, ''), 'unknown') = $3)
 			AND ($4 = '' OR e.username = ANY(string_to_array($4, ',')))
 			AND ($5 = '' OR e.model = $5)
 		GROUP BY country, state
@@ -1352,7 +1352,7 @@ func (s *Store) GetDashboardCostCenters(ctx context.Context, since, until time.T
 		SELECT %s AS cost_center, %s,
 			COALESCE(SUM(e.total_tokens), 0), COUNT(DISTINCT e.username), %s
 		FROM %s
-		WHERE %s AND ($3 = '' OR e.group_name = $3)
+		WHERE %s AND ($3 = '' OR COALESCE(NULLIF(e.group_name, ''), 'unknown') = $3)
 			AND ($4 = '' OR e.username = ANY(string_to_array($4, ',')))
 			AND ($5 = '' OR e.model = $5)
 		GROUP BY cost_center

@@ -840,9 +840,7 @@ func (s *Store) maintainOnce(ctx context.Context, deep bool) {
 	if !red {
 		parityGreen = 1.0
 	}
-	metrics.RollupParityGreen.Set(parityGreen)
 	now := time.Now().UTC()
-	metrics.RollupParityCheckedAtSeconds.Set(float64(now.Unix()))
 	prev := s.parityHealthy.Load()
 	wrote, writeErr := s.metaSetParity(ctx, !red, now, start)
 	switch {
@@ -852,12 +850,16 @@ func (s *Store) maintainOnce(ctx context.Context, deep bool) {
 		// than claiming a local green the other processes cannot see.
 		s.parityHealthy.Store(false)
 		s.servingRollups.Store(false)
+		metrics.RollupParityGreen.Set(math.NaN())
 	case !wrote:
 		slog.Info("parity verdict skipped — a newer invalidation landed during the check", "window", window)
 		s.parityHealthy.Store(false)
 		s.servingRollups.Store(false)
+		metrics.RollupParityGreen.Set(math.NaN())
 	default:
 		s.parityHealthy.Store(!red)
+		metrics.RollupParityGreen.Set(parityGreen)
+		metrics.RollupParityCheckedAtSeconds.Set(float64(now.Unix()))
 	}
 	if red {
 		slog.Error("ROLLUP PARITY RED — dashboard aggregations falling back to raw", "window", window, "shapes", report)
