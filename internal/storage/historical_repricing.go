@@ -306,11 +306,8 @@ func (s *Store) RepriceHistorical(ctx context.Context, actor string, req Histori
 	// repricing run, and losing this signal would leave other pods on rollups.
 	metaCtx, cancelMeta := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelMeta()
-	if err := s.metaSet(metaCtx, metaParityHealthy, "false"); err != nil {
+	if _, err := s.metaSetParity(metaCtx, false, time.Now().UTC(), time.Time{}); err != nil {
 		slog.Warn("failed to invalidate shared rollup parity state", "error", err)
-	}
-	if err := s.metaSet(metaCtx, metaParityCheckedAt, time.Now().UTC().Format(time.RFC3339)); err != nil {
-		slog.Warn("failed to refresh shared rollup parity timestamp", "error", err)
 	}
 	return result, nil
 }

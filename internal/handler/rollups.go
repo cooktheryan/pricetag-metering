@@ -40,7 +40,7 @@ func (h *RollupHandler) HandleStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	resp := map[string]any{
-		"ready":                    h.store.RollupsReady(),
+		"ready":                    h.store.RollupsReady(r.Context()),
 		"use_rollups":              h.store.RollupFlag(),
 		"live_writes":              h.store.LiveRollupsEnabled(),
 		"freshness":                freshness,
