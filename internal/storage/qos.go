@@ -48,7 +48,8 @@ type QosConfig struct {
 }
 
 // QosStatus is the per-request classification result. Subject is the
-// canonical partner user UUID and stays internal to EnMaaS.
+// canonical partner user UUID and stays internal to EnMaaS. Callers with no
+// partner identity are classified QosMain (conservative), never premium.
 type QosStatus struct {
 	Class             string
 	WindowSeconds     int
@@ -85,7 +86,7 @@ func (s *Store) SetQosConfig(cfg QosConfig) {
 	if cfg.HoldCacheTTL <= 0 {
 		cfg.HoldCacheTTL = 60 * time.Second
 	}
-	if cfg.CacheReadWeight <= 0 || !isFinite(cfg.CacheReadWeight) {
+	if cfg.CacheReadWeight < 0 || !isFinite(cfg.CacheReadWeight) {
 		cfg.CacheReadWeight = 0.05
 	}
 	if len(cfg.Providers) == 0 {

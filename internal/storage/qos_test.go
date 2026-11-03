@@ -98,14 +98,14 @@ func TestGetQosStatusHoldGuard(t *testing.T) {
 	assertQosClass(t, store, ctx, email, userID, QosRatelimit)
 }
 
-func TestGetQosStatusProviderScopeAndExemption(t *testing.T) {
+func TestGetQosStatusProviderScope(t *testing.T) {
 	store, ctx := openTestStore(t)
 	store.SetQosConfig(qosTestConfig())
 
 	userID := "33333333-3333-3333-3333-333333333333"
 	email := "qos-scope@example.com"
 	if _, err := store.CreatePartnerUser(ctx, "test", userID, map[string]any{
-		"email": email, "first_name": "QoS", "last_name": "Scope", "origin": "loadtest",
+		"email": email, "first_name": "QoS", "last_name": "Scope",
 	}); err != nil {
 		t.Fatalf("CreatePartnerUser: %v", err)
 	}
@@ -113,9 +113,22 @@ func TestGetQosStatusProviderScopeAndExemption(t *testing.T) {
 	// Paid-provider usage does not count toward the cb-glm class.
 	insertQosUsageProvider(t, store, email, "openai", time.Now().Add(-10*time.Second), 3_000_000, 0, 0, 0)
 	assertQosClass(t, store, ctx, email, userID, QosPremium)
+}
 
-	// Even heavy cb-glm usage is exempt for a tagged load-test user.
-	insertQosUsage(t, store, email, time.Now().Add(-5*time.Second), 3_000_000, 0, 0, 0)
+func TestGetQosStatusExemption(t *testing.T) {
+	store, ctx := openTestStore(t)
+	store.SetQosConfig(qosTestConfig())
+
+	userID := "55555555-5555-5555-5555-555555555555"
+	email := "qos-exempt@example.com"
+	if _, err := store.CreatePartnerUser(ctx, "test", userID, map[string]any{
+		"email": email, "first_name": "QoS", "last_name": "Exempt", "origin": "loadtest",
+	}); err != nil {
+		t.Fatalf("CreatePartnerUser: %v", err)
+	}
+
+	// Heavy cb-glm usage is still premium for a tagged load-test user.
+	insertQosUsage(t, store, email, time.Now().Add(-10*time.Second), 3_000_000, 0, 0, 0)
 	assertQosClass(t, store, ctx, email, userID, QosPremium)
 }
 
@@ -335,4 +348,23 @@ func TestQosReasoningCountedOnce(t *testing.T) {
 
 	insertQosUsageReasoning(t, store, email, time.Now().Add(-10*time.Second), 0, 0, 0, 1_000, 800)
 	assertQosClass(t, store, ctx, email, userID, QosPremium)
+}
+
+func TestSetQosConfigAllowsZeroCacheReadWeight(t *testing.T) {
+	var store Store
+	store.SetQosConfig(QosConfig{Enabled: true, CacheReadWeight: 0})
+	store.qosMu.Lock()
+	cfg := store.qosConfig
+	store.qosMu.Unlock()
+	if cfg.CacheReadWeight != 0 {
+		t.Fatalf("cache read weight = %v, want 0 (cache reads are free)", cfg.CacheReadWeight)
+	}
+
+	store.SetQosConfig(QosConfig{Enabled: true, CacheReadWeight: -1})
+	store.qosMu.Lock()
+	cfg = store.qosConfig
+	store.qosMu.Unlock()
+	if cfg.CacheReadWeight != 0.05 {
+		t.Fatalf("negative cache read weight = %v, want default 0.05", cfg.CacheReadWeight)
+	}
 }
