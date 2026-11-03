@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -204,9 +205,23 @@ var rebuildToolHourSQL = fmt.Sprintf(`
 		cache_creation_tokens = EXCLUDED.cache_creation_tokens, cost_usd = EXCLUDED.cost_usd`, dashboardToolSQL, dashboardToolSQL)
 
 func (s *Store) metaGet(ctx context.Context, key string) (string, bool) {
+	v, ok, _ := s.metaLookup(ctx, key)
+	return v, ok
+}
+
+// metaLookup distinguishes a missing row from a database error so callers on
+// the dashboard path can log a real dependency failure instead of treating
+// every failure as "the worker has not reported yet".
+func (s *Store) metaLookup(ctx context.Context, key string) (string, bool, error) {
 	var v string
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM rollup_meta WHERE key = $1`, key).Scan(&v)
-	return v, err == nil
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return v, true, nil
 }
 
 func (s *Store) metaSet(ctx context.Context, key, value string) error {
@@ -260,12 +275,22 @@ func (s *Store) syncParityFromMeta(ctx context.Context, maxAge time.Duration) {
 	if s.RollupsReady() && !readyBefore {
 		slog.Info("rollup readiness synced from rollup_meta")
 	}
-	healthyRaw, _ := s.metaGet(ctx, metaParityHealthy)
-	checkedRaw, ok := s.metaGet(ctx, metaParityCheckedAt)
-	if !ok {
-		slog.Warn("rollup parity checked_at missing — dashboard rollups stay off until the worker reports")
+	healthyRaw, _, healthyErr := s.metaLookup(ctx, metaParityHealthy)
+	if healthyErr != nil {
+		slog.Warn("read rollup parity healthy state failed", "error", healthyErr)
+	}
+	checkedRaw, ok, checkedErr := s.metaLookup(ctx, metaParityCheckedAt)
+	if checkedErr != nil {
+		slog.Warn("read rollup parity checked_at failed", "error", checkedErr)
 		return
 	}
+	if !ok {
+		if s.parityMetaMissing.CompareAndSwap(false, true) {
+			slog.Warn("rollup parity checked_at missing — dashboard rollups stay off until the worker reports")
+		}
+		return
+	}
+	s.parityMetaMissing.Store(false)
 	healthy, checkedAt, parsed := parityStateFromMeta(healthyRaw, checkedRaw, time.Now().UTC(), maxAge)
 	if !parsed {
 		slog.Warn("rollup parity checked_at is unparsable — staying on raw reads", "value", checkedRaw)

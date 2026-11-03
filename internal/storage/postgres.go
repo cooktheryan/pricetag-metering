@@ -123,6 +123,9 @@ type Store struct {
 	liveRollups    atomic.Bool
 	parityHealthy  atomic.Bool
 	servingRollups atomic.Bool
+	// parityMetaMissing suppresses the "worker has not reported yet" warning
+	// after the first occurrence; it resets once a verdict appears.
+	parityMetaMissing atomic.Bool
 	// Unix nanoseconds of the last successful maintenance rebuild. This is
 	// intentionally separate from rollupsReadyNow: ready means backfill has
 	// completed, while this value reports current freshness for eventual

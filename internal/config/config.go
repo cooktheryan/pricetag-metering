@@ -27,9 +27,6 @@ const DefaultMonthlyTokenQuota = 100_000_000
 //     dashboard parity state in sync from rollup_meta.
 //   - rollup: runs maintenance and backfill only; exposes health and metrics,
 //     not the API routes.
-//
-// core and dashboard are reserved for a future finer split and are not
-// accepted yet.
 type MeteringMode string
 
 const (
