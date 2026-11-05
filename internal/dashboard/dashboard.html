@@ -1314,7 +1314,7 @@ function renderCostCenterChart(){
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
     options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
       tooltip:{callbacks:{label:tooltipLabel}}}
-    }}
+    }
   });
   renderPieLegend('cost-center-legend',labels,colors);
 }
