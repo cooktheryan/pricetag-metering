@@ -204,3 +204,23 @@ func TestAdminJsqEncodingIsEntityAndQuoteSafe(t *testing.T) {
 		}
 	}
 }
+
+// The cost-center legend must name both the directory code and its human
+// label, with the share of spend first.
+func TestCostCenterChartShowsPercentAndDirectoryCode(t *testing.T) {
+	data, err := FS.ReadFile("dashboard.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"function costCenterSliceMeta(d,total)",
+		"String(d.item.cost_center||'').trim()",
+		"function costCenterSliceLabel(meta)",
+		"meta.pct+'% — '+id+meta.desc",
+		"'% spent — '",
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("dashboard.html no longer contains %q", want)
+		}
+	}
+}
