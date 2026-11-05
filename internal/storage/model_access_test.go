@@ -1,0 +1,426 @@
+package storage
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+func createTestTenant(t *testing.T, s *Store, ctx context.Context, slug string, isDefault bool) string {
+	t.Helper()
+	id := uuid.NewString()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO policy_tenants (tenant_id, slug, display_name, is_default, status)
+		VALUES ($1, $2, $2, $3, 'active')`, id, slug, isDefault); err != nil {
+		t.Fatalf("create tenant: %v", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO policy_versions (tenant_id, version) VALUES ($1, 1)`, id); err != nil {
+		t.Fatalf("create policy version: %v", err)
+	}
+	return id
+}
+
+func createTestSubject(t *testing.T, s *Store, ctx context.Context, tenantID, principal, external, status string) string {
+	t.Helper()
+	id := uuid.NewString()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO policy_subjects
+			(subject_id, tenant_id, principal_type, external_id, display_name, status, source)
+		VALUES ($1, $2, $3, $4, $4, $5, 'manual')`,
+		id, tenantID, principal, external, status); err != nil {
+		t.Fatalf("create subject: %v", err)
+	}
+	return id
+}
+
+func createTestRole(t *testing.T, s *Store, ctx context.Context, tenantID, name string, isDefault bool, models ...string) string {
+	t.Helper()
+	id := uuid.NewString()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO model_access_roles (role_id, tenant_id, name, is_default, created_by, updated_by)
+		VALUES ($1, $2, $3, $4, 'test', 'test')`, id, tenantID, name, isDefault); err != nil {
+		t.Fatalf("create role: %v", err)
+	}
+	for _, model := range models {
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT INTO model_access_role_models (tenant_id, role_id, model_id, added_by)
+			VALUES ($1, $2, $3, 'test')`, tenantID, id, model); err != nil {
+			t.Fatalf("add role model: %v", err)
+		}
+	}
+	return id
+}
+
+func assignTestRole(t *testing.T, s *Store, ctx context.Context, tenantID, roleID, subjectID string) {
+	t.Helper()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO model_access_role_assignments (tenant_id, role_id, subject_id, assigned_by)
+		VALUES ($1, $2, $3, 'test')`, tenantID, roleID, subjectID); err != nil {
+		t.Fatalf("assign role: %v", err)
+	}
+}
+
+func grantTestModel(t *testing.T, s *Store, ctx context.Context, tenantID, subjectID, model string) {
+	t.Helper()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO model_access_subject_grants (tenant_id, subject_id, model_id, granted_by)
+		VALUES ($1, $2, $3, 'test')`, tenantID, subjectID, model); err != nil {
+		t.Fatalf("grant model: %v", err)
+	}
+}
+
+func restrictTestSubject(t *testing.T, s *Store, ctx context.Context, tenantID, subjectID string, models ...string) {
+	t.Helper()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO model_access_subject_restrictions (tenant_id, subject_id, enabled, updated_by)
+		VALUES ($1, $2, TRUE, 'test')`, tenantID, subjectID); err != nil {
+		t.Fatalf("create restriction: %v", err)
+	}
+	for _, model := range models {
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT INTO model_access_subject_restriction_models (tenant_id, subject_id, model_id)
+			VALUES ($1, $2, $3)`, tenantID, subjectID, model); err != nil {
+			t.Fatalf("add restriction model: %v", err)
+		}
+	}
+}
+
+func excludeTestDefault(t *testing.T, s *Store, ctx context.Context, tenantID, subjectID string, expiresAt *time.Time) {
+	t.Helper()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO model_access_default_exclusions
+			(tenant_id, subject_id, reason, created_by, expires_at)
+		VALUES ($1, $2, 'test', 'test', $3)`, tenantID, subjectID, expiresAt); err != nil {
+		t.Fatalf("exclude default: %v", err)
+	}
+}
+
+func TestModelAccessNoDefaultNoRoles(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, err := s.EnsureDefaultTenant(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+
+	got, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.EffectiveModels) != 0 {
+		t.Fatalf("effective = %v, want empty", got.EffectiveModels)
+	}
+	if got.DefaultRoleID != "" {
+		t.Fatalf("default role = %q, want none", got.DefaultRoleID)
+	}
+}
+
+func TestModelAccessDefaultRoleApplies(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	createTestRole(t, s, ctx, tenant, "Engineer", true, "model-a", "model-b")
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+
+	got, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got.DefaultModels, []string{"model-a", "model-b"}) {
+		t.Fatalf("default models = %v", got.DefaultModels)
+	}
+	if !slices.Equal(got.EffectiveModels, []string{"model-a", "model-b"}) {
+		t.Fatalf("effective = %v", got.EffectiveModels)
+	}
+	if len(got.RoleIDs) != 0 {
+		t.Fatalf("explicit roles = %v, want none", got.RoleIDs)
+	}
+}
+
+func TestModelAccessExplicitRoleAdditive(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	createTestRole(t, s, ctx, tenant, "Engineer", true, "model-a")
+	research := createTestRole(t, s, ctx, tenant, "Research", false, "model-a", "model-b")
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+	assignTestRole(t, s, ctx, tenant, research, subject)
+
+	got, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got.EffectiveModels, []string{"model-a", "model-b"}) {
+		t.Fatalf("effective = %v", got.EffectiveModels)
+	}
+	if !slices.Equal(got.RoleNames, []string{"Research"}) {
+		t.Fatalf("role names = %v", got.RoleNames)
+	}
+}
+
+func TestModelAccessDirectGrant(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	createTestRole(t, s, ctx, tenant, "Engineer", true, "model-a")
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+	grantTestModel(t, s, ctx, tenant, subject, "model-c")
+
+	got, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got.EffectiveModels, []string{"model-a", "model-c"}) {
+		t.Fatalf("effective = %v", got.EffectiveModels)
+	}
+}
+
+func TestModelAccessRestrictionDenyOverrides(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	createTestRole(t, s, ctx, tenant, "Engineer", true, "model-a")
+	research := createTestRole(t, s, ctx, tenant, "Research", false, "model-b")
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+	assignTestRole(t, s, ctx, tenant, research, subject)
+	grantTestModel(t, s, ctx, tenant, subject, "model-c")
+	restrictTestSubject(t, s, ctx, tenant, subject, "model-a")
+
+	got, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got.EffectiveModels, []string{"model-a"}) {
+		t.Fatalf("effective = %v", got.EffectiveModels)
+	}
+	if !got.RestrictionEnabled {
+		t.Fatal("restriction should be enabled")
+	}
+}
+
+func TestModelAccessEmptyRestrictionDeniesAll(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	createTestRole(t, s, ctx, tenant, "Engineer", true, "model-a")
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+	restrictTestSubject(t, s, ctx, tenant, subject)
+
+	got, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.EffectiveModels) != 0 {
+		t.Fatalf("effective = %v, want empty", got.EffectiveModels)
+	}
+}
+
+func TestModelAccessDefaultExclusion(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	createTestRole(t, s, ctx, tenant, "Engineer", true, "model-a")
+	research := createTestRole(t, s, ctx, tenant, "Research", false, "model-b")
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+	assignTestRole(t, s, ctx, tenant, research, subject)
+	excludeTestDefault(t, s, ctx, tenant, subject, nil)
+
+	got, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.DefaultExcluded {
+		t.Fatal("default should be excluded")
+	}
+	if !slices.Equal(got.EffectiveModels, []string{"model-b"}) {
+		t.Fatalf("effective = %v, want research only", got.EffectiveModels)
+	}
+}
+
+func TestModelAccessExpiredExclusionIsIgnored(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	createTestRole(t, s, ctx, tenant, "Engineer", true, "model-a")
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+	past := time.Now().Add(-time.Minute)
+	excludeTestDefault(t, s, ctx, tenant, subject, &past)
+
+	got, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.DefaultExcluded {
+		t.Fatal("expired exclusion should be ignored")
+	}
+	if !slices.Equal(got.EffectiveModels, []string{"model-a"}) {
+		t.Fatalf("effective = %v", got.EffectiveModels)
+	}
+}
+
+func TestModelAccessServiceIdentityDoesNotGetDefault(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	createTestRole(t, s, ctx, tenant, "Engineer", true, "model-a")
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalService, "svc-build", "active")
+
+	got, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.EffectiveModels) != 0 {
+		t.Fatalf("effective = %v, want empty (service gets no default)", got.EffectiveModels)
+	}
+}
+
+func TestModelAccessInactiveSubject(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "inactive")
+
+	if _, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false); !errors.Is(err, ErrModelAccessSubjectInactive) {
+		t.Fatalf("err = %v, want ErrModelAccessSubjectInactive", err)
+	}
+}
+
+func TestModelAccessSuspendedTenant(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE policy_tenants SET status = 'suspended' WHERE tenant_id = $1`, tenant); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false); !errors.Is(err, ErrModelAccessTenantSuspended) {
+		t.Fatalf("err = %v, want ErrModelAccessTenantSuspended", err)
+	}
+}
+
+func TestModelAccessSuperAdminUnrestricted(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+
+	got, err := s.GetEffectiveModelAccess(ctx, tenant, subject, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.SuperAdmin || !got.Unrestricted {
+		t.Fatalf("superadmin = %v unrestricted = %v", got.SuperAdmin, got.Unrestricted)
+	}
+}
+
+func TestModelAccessTenantIsolation(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenantA, _ := s.EnsureDefaultTenant(ctx)
+	tenantB := createTestTenant(t, s, ctx, "tenant-b", false)
+	createTestRole(t, s, ctx, tenantA, "Engineer", true, "model-a")
+	createTestRole(t, s, ctx, tenantB, "Engineer", true, "model-b")
+	subjectA := createTestSubject(t, s, ctx, tenantA, PrincipalPartnerUser, uuid.NewString(), "active")
+	subjectB := createTestSubject(t, s, ctx, tenantB, PrincipalPartnerUser, uuid.NewString(), "active")
+
+	gotA, err := s.GetEffectiveModelAccess(ctx, tenantA, subjectA, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotB, err := s.GetEffectiveModelAccess(ctx, tenantB, subjectB, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(gotA.EffectiveModels, []string{"model-a"}) {
+		t.Fatalf("tenant A effective = %v", gotA.EffectiveModels)
+	}
+	if !slices.Equal(gotB.EffectiveModels, []string{"model-b"}) {
+		t.Fatalf("tenant B effective = %v", gotB.EffectiveModels)
+	}
+}
+
+func TestSyncPartnerUserSubjects(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	createTestRole(t, s, ctx, tenant, "Engineer", true, "model-a")
+	userID := uuid.NewString()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO partner_users (user_id, tags, role, active, created_by, updated_by)
+		VALUES ($1, '{"preferred_username":"alice","email":"alice@example.com"}', 'user', TRUE, 'test', 'test')`,
+		userID); err != nil {
+		t.Fatal(err)
+	}
+
+	count, err := s.SyncPartnerUserSubjects(ctx, tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("synced = %d, want 1", count)
+	}
+	var subjectID, displayName, status string
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT subject_id::text, display_name, status FROM policy_subjects
+		WHERE tenant_id = $1 AND principal_type = $2 AND external_id = $3`,
+		tenant, PrincipalPartnerUser, userID).Scan(&subjectID, &displayName, &status); err != nil {
+		t.Fatal(err)
+	}
+	if displayName != "alice" || status != "active" {
+		t.Fatalf("subject = %q/%q", displayName, status)
+	}
+	got, err := s.GetEffectiveModelAccess(ctx, tenant, subjectID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got.EffectiveModels, []string{"model-a"}) {
+		t.Fatalf("effective = %v", got.EffectiveModels)
+	}
+
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE partner_users SET active = FALSE WHERE user_id = $1`, userID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SyncPartnerUserSubjects(ctx, tenant); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetEffectiveModelAccess(ctx, tenant, subjectID, false); !errors.Is(err, ErrModelAccessSubjectInactive) {
+		t.Fatalf("err = %v, want inactive", err)
+	}
+}
+
+func TestBumpPolicyVersion(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	v1, err := s.BumpPolicyVersion(ctx, tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v2, err := s.BumpPolicyVersion(ctx, tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v2 != v1+1 {
+		t.Fatalf("versions = %d, %d; want consecutive", v1, v2)
+	}
+}
+
+func TestModelAccessDefaultRoleChange(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	role := createTestRole(t, s, ctx, tenant, "Engineer", true, "model-a")
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+
+	got, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got.EffectiveModels, []string{"model-a"}) {
+		t.Fatalf("before = %v", got.EffectiveModels)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO model_access_role_models (tenant_id, role_id, model_id, added_by)
+		VALUES ($1, $2, 'model-b', 'test')`, tenant, role); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got.EffectiveModels, []string{"model-a", "model-b"}) {
+		t.Fatalf("after = %v", got.EffectiveModels)
+	}
+}
