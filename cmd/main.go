@@ -298,6 +298,7 @@ func main() {
 	if meteringMode.ServesAPIRoutes() {
 		eventsHandler := handler.NewEventsHandler(store)
 		entitlementsHandler := handler.NewEntitlementsHandler(store, cfg)
+		modelAccessHandler := handler.NewModelAccessHandler(store)
 		dashboardHandler := handler.NewDashboardHandler(store, cfg)
 
 		// Kubernetes adapter — optional. It stays disabled until model/provider
@@ -369,6 +370,7 @@ func main() {
 		m2mAuth := func(next http.HandlerFunc) http.HandlerFunc { return handler.RequireM2MAuth(cfg, next) }
 		mux.HandleFunc("/api/v1/events", m2mAuth(eventsHandler.HandleEvent))
 		mux.HandleFunc("/api/v1/customers/", m2mAuth(entitlementsHandler.HandleEntitlement))
+		mux.HandleFunc("/api/v2/policy/decide", m2mAuth(modelAccessHandler.HandleDecision))
 		// Partner APIs use endpoint-specific bearer credentials in addition to any
 		// Route/AuthPolicy. This protects direct Service and port-forward access.
 		mux.HandleFunc("/api/v1/usage/users/", handler.RequirePartnerAPIAuthAny(cfg.UsageReportAPISecrets, usageReportHandler.HandleUserUsage))
@@ -376,6 +378,7 @@ func main() {
 		mux.HandleFunc("/api/v1/models", handler.RequirePartnerAPIAuthAny(cfg.ModelCatalogAPISecrets, modelCatalogHandler.Handle))
 		mux.HandleFunc("/api/v1/users", handler.RequirePartnerAPIAuth(cfg.UserManagementAPISecret, partnerUsersHandler.HandleUsers))
 		mux.HandleFunc("/api/v1/users/", handler.RequirePartnerAPIAuth(cfg.UserManagementAPISecret, partnerUsersHandler.HandleUsers))
+		mux.HandleFunc("/api/v2/tenants/", auth(handler.RequirePartnerSuperAdmin(cfg, store, modelAccessHandler.HandleAdmin)))
 		mux.HandleFunc("/api/v1/admin/partner-users/", auth(handler.RequirePartnerSuperAdmin(cfg, store, partnerUsersHandler.HandleAdminAccess)))
 		mux.HandleFunc("/api/v1/admin/partner-users", auth(handler.RequirePartnerSuperAdmin(cfg, store, partnerUsersHandler.HandleAdminUsers)))
 		mux.HandleFunc("/api/v1/model-policies/users/", handler.RequirePartnerAPIAuthAny(cfg.ModelPolicyAPISecrets, userModelPolicyHandler.HandleUserModelPolicy))

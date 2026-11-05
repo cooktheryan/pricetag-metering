@@ -398,6 +398,148 @@ func TestBumpPolicyVersion(t *testing.T) {
 	}
 }
 
+func TestDecideModelAccess(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	createTestRole(t, s, ctx, tenant, "Engineer", true, "model-a")
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+
+	allow, err := s.DecideModelAccess(ctx, tenant, subject, "model-a", "invoke", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allow.Decision != PolicyDecisionAllow || allow.Reason != PolicyReasonAllowed {
+		t.Fatalf("allow = %#v", allow)
+	}
+	if !slices.Equal(allow.AllowedModels, []string{"model-a"}) {
+		t.Fatalf("allowed models = %v", allow.AllowedModels)
+	}
+	if allow.DecisionID == "" {
+		t.Fatal("decision ID is empty")
+	}
+
+	deny, err := s.DecideModelAccess(ctx, tenant, subject, "model-b", "invoke", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deny.Decision != PolicyDecisionDeny || deny.Reason != PolicyReasonModelNotAllowed {
+		t.Fatalf("deny = %#v", deny)
+	}
+
+	var count int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM policy_decisions WHERE tenant_id = $1 AND subject_id = $2`,
+		tenant, subject).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("decision rows = %d, want 2", count)
+	}
+
+	unrestricted, err := s.DecideModelAccess(ctx, tenant, subject, "anything", "invoke", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unrestricted.Decision != PolicyDecisionAllow || unrestricted.AllowedModels != nil {
+		t.Fatalf("superadmin decision = %#v", unrestricted)
+	}
+
+	empty, err := s.DecideModelAccess(ctx, tenant, subject, "", "invoke", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty.Decision != PolicyDecisionDeny {
+		t.Fatalf("empty model decision = %#v", empty)
+	}
+}
+
+func TestModelAccessAdminCRUD(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+
+	role, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Engineer", "baseline", []string{"model-b", "model-a"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !role.IsDefault || !slices.Equal(role.Models, []string{"model-a", "model-b"}) {
+		t.Fatalf("role = %#v", role)
+	}
+	roles, err := s.ListModelAccessRoles(ctx, tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roles) != 1 || roles[0].RoleID != role.RoleID {
+		t.Fatalf("roles = %#v", roles)
+	}
+
+	if err := s.SetModelAccessRoleModels(ctx, tenant, role.RoleID, "admin", []string{"model-c"}); err != nil {
+		t.Fatal(err)
+	}
+	effective, err := s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(effective.EffectiveModels, []string{"model-c"}) {
+		t.Fatalf("effective = %v", effective.EffectiveModels)
+	}
+
+	research, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Research", "", []string{"model-d"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AssignModelAccessRole(ctx, tenant, research.RoleID, subject, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	effective, err = s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(effective.EffectiveModels, []string{"model-c", "model-d"}) {
+		t.Fatalf("effective with role = %v", effective.EffectiveModels)
+	}
+	if err := s.RemoveModelAccessRoleSubject(ctx, tenant, research.RoleID, subject, "admin"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.SetSubjectGrants(ctx, tenant, subject, "admin", []string{"model-e"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetSubjectRestriction(ctx, tenant, subject, "admin", true, []string{"model-c", "model-e"}); err != nil {
+		t.Fatal(err)
+	}
+	effective, err = s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(effective.EffectiveModels, []string{"model-c", "model-e"}) {
+		t.Fatalf("effective with restriction = %v", effective.EffectiveModels)
+	}
+
+	if err := s.ExcludeSubjectFromDefault(ctx, tenant, subject, "admin", "contractor", nil); err != nil {
+		t.Fatal(err)
+	}
+	effective, err = s.GetEffectiveModelAccess(ctx, tenant, subject, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(effective.EffectiveModels, []string{"model-e"}) {
+		t.Fatalf("effective with exclusion = %v", effective.EffectiveModels)
+	}
+
+	svc, err := s.EnsureServiceIdentity(ctx, tenant, "svc-build", "Build service")
+	if err != nil {
+		t.Fatal(err)
+	}
+	subjects, err := s.ListPolicySubjects(ctx, tenant, "build", 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subjects) != 1 || subjects[0].SubjectID != svc {
+		t.Fatalf("subjects = %#v", subjects)
+	}
+}
+
 func TestModelAccessDefaultRoleChange(t *testing.T) {
 	s, ctx := openTestStore(t)
 	tenant, _ := s.EnsureDefaultTenant(ctx)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -451,6 +452,107 @@ func (s *Store) GetEffectiveModelAccess(ctx context.Context, tenantID, subjectID
 		result.EffectiveModels = []string{}
 	}
 	return result, nil
+}
+
+const (
+	PolicyDecisionAllow = "allow"
+	PolicyDecisionDeny  = "deny"
+
+	PolicyReasonAllowed         = "allowed"
+	PolicyReasonModelNotAllowed = "model_not_allowed"
+	PolicyReasonAuthentication  = "authentication_failed"
+	PolicyReasonTenantSuspended = "tenant_suspended"
+	PolicyReasonTenantNotFound  = "tenant_not_found"
+	PolicyReasonUnavailable     = "authorization_unavailable"
+)
+
+// PolicyDecision is the persisted AuthZEN-shaped answer. AllowedModels is an
+// obligation for the router; it is nil when the subject is unrestricted.
+type PolicyDecision struct {
+	DecisionID    string    `json:"decisionId"`
+	TenantID      string    `json:"tenant"`
+	SubjectID     string    `json:"subjectId,omitempty"`
+	PrincipalType string    `json:"principalType,omitempty"`
+	ModelID       string    `json:"modelId,omitempty"`
+	Action        string    `json:"action"`
+	Decision      string    `json:"decision"`
+	Reason        string    `json:"reason"`
+	PolicyVersion int64     `json:"policyVersion"`
+	AllowedModels []string  `json:"allowedModels,omitempty"`
+	LatencyMS     int64     `json:"latencyMs"`
+	EvaluatedAt   time.Time `json:"evaluatedAt"`
+}
+
+// DecideModelAccess resolves and persists one decision. The caller maps
+// resolver errors (unknown/inactive/suspended) to the transport status. The
+// decision row is written for allows and denies; the usage ledger stays a
+// separate, zero-cost denial record.
+func (s *Store) DecideModelAccess(ctx context.Context, tenantID, subjectID, model, action string, superAdmin bool) (PolicyDecision, error) {
+	started := time.Now()
+	action = strings.TrimSpace(action)
+	if action == "" {
+		action = "invoke"
+	}
+	effective, err := s.GetEffectiveModelAccess(ctx, tenantID, subjectID, superAdmin)
+	if err != nil {
+		return PolicyDecision{}, err
+	}
+
+	decision := PolicyDecision{
+		DecisionID:    uuid.NewString(),
+		TenantID:      tenantID,
+		SubjectID:     subjectID,
+		PrincipalType: effective.PrincipalType,
+		ModelID:       model,
+		Action:        action,
+		PolicyVersion: effective.PolicyVersion,
+		EvaluatedAt:   time.Now().UTC(),
+	}
+	if effective.Unrestricted {
+		decision.Decision = PolicyDecisionAllow
+		decision.Reason = PolicyReasonAllowed
+	} else if action == "list" {
+		decision.Decision = PolicyDecisionAllow
+		decision.Reason = PolicyReasonAllowed
+		decision.AllowedModels = effective.EffectiveModels
+	} else if strings.TrimSpace(model) != "" && slicesContain(effective.EffectiveModels, model) {
+		decision.Decision = PolicyDecisionAllow
+		decision.Reason = PolicyReasonAllowed
+		decision.AllowedModels = effective.EffectiveModels
+	} else {
+		decision.Decision = PolicyDecisionDeny
+		decision.Reason = PolicyReasonModelNotAllowed
+		decision.AllowedModels = effective.EffectiveModels
+	}
+	decision.LatencyMS = time.Since(started).Milliseconds()
+
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO policy_decisions
+			(decision_id, tenant_id, subject_id, principal_type, model_id, action,
+			 decision, reason, policy_version, latency_ms, evaluated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		decision.DecisionID, tenantID, subjectID, decision.PrincipalType, nullIfEmpty(model),
+		action, decision.Decision, decision.Reason, decision.PolicyVersion,
+		decision.LatencyMS, decision.EvaluatedAt); err != nil {
+		return PolicyDecision{}, fmt.Errorf("record policy decision: %w", err)
+	}
+	return decision, nil
+}
+
+func slicesContain(haystack []string, needle string) bool {
+	for _, item := range haystack {
+		if item == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func nullIfEmpty(s string) any {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	return s
 }
 
 func (s *Store) modelIDsForRole(ctx context.Context, tenantID, roleID string) ([]string, error) {

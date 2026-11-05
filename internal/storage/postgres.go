@@ -1586,6 +1586,13 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.migrateModelAccess(ctx); err != nil {
 		return err
 	}
+	tenantID, err := s.EnsureDefaultTenant(ctx)
+	if err != nil {
+		return err
+	}
+	if _, err := s.SyncPartnerUserSubjects(ctx, tenantID); err != nil {
+		return err
+	}
 	slog.Info("database migrations complete")
 	return nil
 }
