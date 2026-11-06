@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 
 # API-key login fixtures.
 VALIDATION_IDENTITIES = {
-    "local-noy-key": "nitzikow@redhat.com",
+    "local-admin-key": "local-admin@example.com",
     "local-test-user-key": "local-test-user@example.com",
     "local-returning-key": "returning-user@example.com",
 }

@@ -105,7 +105,7 @@ done
 ADMIN_USER="${MAAS_ADMIN_USER:-}"
 if [[ -z "$ADMIN_USER" ]]; then
     echo "ERROR: MAAS_ADMIN_USER is required (the admin identity maas-api sees)." >&2
-    echo "  export MAAS_ADMIN_USER=you@redhat.com" >&2
+    echo "  export MAAS_ADMIN_USER=you@example.com" >&2
     exit 1
 fi
 ADMIN_GROUP='["ai-eng"]'

@@ -83,7 +83,7 @@ echo "==> starting metering-service"
   MAAS_API_URL=http://localhost:18081 \
   MAAS_VALIDATE_URL=http://localhost:18081/internal/v1/api-keys/validate \
   MAAS_TENANT=models-as-a-service \
-  SUPERADMIN_USERS=nitzikow@redhat.com \
+  SUPERADMIN_USERS=local-admin@example.com \
   go run ./cmd >"$STATE/metering.log" 2>&1 &
   echo $! >"$STATE/metering.pid"
 )
@@ -118,7 +118,7 @@ EnMaaS local demo is running.
   Login             http://localhost:8080/login
   Mock IdP picker   http://localhost:9999/authorize  (shown automatically)
   Account           http://localhost:8080/account
-  API-key login     local-noy-key
+  API-key login     local-admin-key
 
   Personas (Test sign-in or pick at the mock IdP):
     new-user          regular user → My usage + API keys

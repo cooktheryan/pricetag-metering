@@ -1,10 +1,10 @@
 [
-  {"username": "bsalisbu@redhat.com", "first_name": "Brent", "last_name": "Salisbury"},
-  {"username": "jstrunk@redhat.com", "first_name": "John", "last_name": "Strunk"},
-  {"username": "nitzikow@redhat.com", "first_name": "Noy", "last_name": "Itzikowitz"},
-  {"username": "yovadia@redhat.com", "first_name": "Yossi", "last_name": "Ovadia"},
-  {"username": "tcoufal@redhat.com", "first_name": "Tom", "last_name": "Coufal"},
-  {"username": "rhaberma@redhat.com", "first_name": "Ron", "last_name": "Haberman"},
-  {"username": "taagarwa@redhat.com", "first_name": "Taylor", "last_name": "Agarwal"},
-  {"username": "ricmitch@redhat.com", "first_name": "Richard", "last_name": "Mitchell"}
+  {"username": "seeduser1@example.com", "first_name": "Seed", "last_name": "User One"},
+  {"username": "seeduser2@example.com", "first_name": "Seed", "last_name": "User Two"},
+  {"username": "seeduser3@example.com", "first_name": "Seed", "last_name": "User Three"},
+  {"username": "seeduser4@example.com", "first_name": "Seed", "last_name": "User Four"},
+  {"username": "seeduser5@example.com", "first_name": "Seed", "last_name": "User Five"},
+  {"username": "seeduser6@example.com", "first_name": "Seed", "last_name": "User Six"},
+  {"username": "seeduser7@example.com", "first_name": "Seed", "last_name": "User Seven"},
+  {"username": "seeduser8@example.com", "first_name": "Seed", "last_name": "User Eight"}
 ]

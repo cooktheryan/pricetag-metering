@@ -62,9 +62,9 @@ var personas = []persona{
 		Groups: []string{"GE"}, Country: "US", ClaimCountry: "US",
 	},
 	{
-		Key: "admin", Label: "Noy Itzikowitz — super admin", Note: "Existing admin dashboard, unchanged",
+		Key: "admin", Label: "Local Admin — super admin", Note: "Existing admin dashboard, unchanged",
 		Subject: "mock-admin", RhatUUID: "00000000-0000-4000-8000-000000000001",
-		Email: "nitzikow@redhat.com", First: "Noy", Last: "Itzikowitz",
+		Email: "local-admin@example.com", First: "Local", Last: "Admin",
 		Groups: []string{"GE"}, Country: "US", ClaimCountry: "US",
 	},
 }
@@ -89,7 +89,7 @@ func personaProfileFields(p persona) map[string]any {
 	case "manager-user":
 		state, region = "NY", "Americas"
 		center, description = "CC-AI-PLATFORM", "AI Platform Engineering"
-		manager = "uid=nitzikow,cn=users,cn=accounts,dc=ipa,dc=redhat,dc=com"
+		manager = "uid=manager-user,cn=users,cn=accounts,dc=example,dc=com"
 	case "admin":
 		state, region = "CA", "Americas"
 		center, description = "CC-CTO", "Office of the CTO"

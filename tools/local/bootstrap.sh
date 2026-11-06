@@ -12,13 +12,13 @@ docker compose -p "$PROJECT" exec -T postgres psql -U metering -d metering <<'SQ
 INSERT INTO partner_users (user_id, tags, role, active, created_by, updated_by)
 VALUES (
   '00000000-0000-4000-8000-000000000001',
-  '{"email":"nitzikow@redhat.com","first_name":"Noy","last_name":"Itzikowitz","country":"US","kerberos_id":"nitzikow"}',
+  '{"email":"local-admin@example.com","first_name":"Local","last_name":"Admin","country":"US","kerberos_id":"local-admin"}',
   'super_admin', true, 'local-bootstrap', 'local-bootstrap'
 )
 ON CONFLICT (user_id) DO UPDATE SET role='super_admin', active=true;
 
 INSERT INTO partner_user_logins (username, user_id, is_current)
-VALUES ('nitzikow@redhat.com', '00000000-0000-4000-8000-000000000001', true)
+VALUES ('local-admin@example.com', '00000000-0000-4000-8000-000000000001', true)
 ON CONFLICT (username) DO UPDATE SET user_id=EXCLUDED.user_id, is_current=true;
 
 INSERT INTO partner_users (user_id, tags, role, active, created_by, updated_by)
@@ -117,7 +117,7 @@ GROUP BY date_trunc('hour', e.timestamp), e.username, COALESCE(e.group_name, '')
   e.model, e.provider;
 SQL
 
-echo "Local super-admin key: local-noy-key"
+echo "Local super-admin key: local-admin-key"
 echo "Local test-user key: local-test-user-key"
 echo "Test user synthetic month-to-date spend: \$150"
 echo "Dashboard: http://localhost:8080/admin"
