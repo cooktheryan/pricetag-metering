@@ -682,6 +682,52 @@ func TestAssignModelAccessRoleByFilter(t *testing.T) {
 	}
 }
 
+func TestResolvePolicySubjectByUsername(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	userID := uuid.NewString()
+	if _, err := s.CreatePartnerUser(ctx, "partner-m2m", userID, map[string]any{
+		"email": "resolve@example.com", "first_name": "Resolve", "last_name": "User",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	subjectID, principal, err := s.ResolvePolicySubjectByUsername(ctx, tenant, "resolve@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if principal != PrincipalPartnerUser || subjectID == "" {
+		t.Fatalf("resolved = %q/%q", subjectID, principal)
+	}
+	again, _, err := s.ResolvePolicySubjectByUsername(ctx, tenant, "resolve@example.com")
+	if err != nil || again != subjectID {
+		t.Fatalf("second resolve = %q, err %v; want %q", again, err, subjectID)
+	}
+}
+
+func TestMonthlyUsageWithModelAllowedOverride(t *testing.T) {
+	s, ctx := openTestStore(t)
+	userID := uuid.NewString()
+	if _, err := s.CreatePartnerUser(ctx, "partner-m2m", userID, map[string]any{
+		"email": "usage@example.com", "first_name": "Usage", "last_name": "User",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	allowed, err := s.GetMonthlyUsageWithModelAllowed(ctx, "usage@example.com", "model-x", false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !allowed.ModelAllowed || !allowed.HasAccess {
+		t.Fatalf("allowed = %#v", allowed)
+	}
+	denied, err := s.GetMonthlyUsageWithModelAllowed(ctx, "usage@example.com", "model-x", false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if denied.ModelAllowed || denied.HasAccess {
+		t.Fatalf("denied = %#v", denied)
+	}
+}
+
 func TestModelAccessDefaultRoleChange(t *testing.T) {
 	s, ctx := openTestStore(t)
 	tenant, _ := s.EnsureDefaultTenant(ctx)

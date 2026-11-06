@@ -89,6 +89,13 @@ var (
 		Help: "Quota denials recorded via RecordQuotaDenial.",
 	})
 
+	// ModelAccessDecisionsTotal counts role-policy evaluations on the
+	// entitlement path, keyed by enforcement mode and outcome.
+	ModelAccessDecisionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "metering_model_access_decisions_total",
+		Help: "Role-based model access evaluations, keyed by mode and result.",
+	}, []string{"mode", "result"})
+
 	// QosClassDecisionsTotal counts QoS classification decisions by class
 	// and whether the result was served from the process-local cache.
 	QosClassDecisionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -214,6 +221,7 @@ var (
 		DBPoolWaitSecondsTotal,
 		QuotaChecksTotal,
 		QuotaDenialsTotal,
+		ModelAccessDecisionsTotal,
 		QosClassDecisionsTotal,
 		QosWindowTokens,
 		QosClassTransitionsTotal,

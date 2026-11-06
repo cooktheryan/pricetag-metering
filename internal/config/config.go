@@ -95,6 +95,11 @@ type Config struct {
 	// inference. Usage accounting remains active when this is false.
 	QuotaEnforcementEnabled bool
 
+	// ModelAccessEnforcement controls the new role-based model policy on the
+	// legacy entitlement endpoint: off (legacy behavior), observe (evaluate and
+	// log would-deny, do not block), or enforce (use the new policy).
+	ModelAccessEnforcement string
+
 	// DBMaxOpenConns caps open connections in each database pool
 	// (primary and read replica). Raised from the previous hardcoded value
 	// so bursts of distinct-user balance checks no longer queue past the
@@ -421,6 +426,7 @@ func Load() Config {
 		// environment as a deployment-level kill switch while the policy's
 		// enforced field is the normal super-admin control.
 		QuotaEnforcementEnabled:  envBool("QUOTA_ENFORCEMENT_ENABLED", true),
+		ModelAccessEnforcement:   envDefault("MODEL_ACCESS_ENFORCEMENT", "off"),
 		DBMaxOpenConns:           envInt("DB_MAX_OPEN_CONNS", 50),
 		DBMaxIdleConns:           envInt("DB_MAX_IDLE_CONNS", 10),
 		DBConnMaxLifetimeSeconds: envInt("DB_CONN_MAX_LIFETIME_SECONDS", 14400),

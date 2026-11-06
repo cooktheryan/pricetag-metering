@@ -363,6 +363,34 @@ func (s *Store) SyncPartnerUserSubject(ctx context.Context, tenantID, userID str
 	return subjectID, nil
 }
 
+// ResolvePolicySubjectByUsername maps a MaaS login to the stable policy
+// subject. It creates the subject lazily if the startup sync or OIDC login
+// missed it, so the compatibility entitlement path does not cut off a valid
+// partner user. Unlinked usernames return ErrPartnerUserNotFound.
+func (s *Store) ResolvePolicySubjectByUsername(ctx context.Context, tenantID, username string) (string, string, error) {
+	user, err := s.PartnerUserByMaaSUsername(ctx, username)
+	if err != nil {
+		return "", "", err
+	}
+	var subjectID, principalType string
+	err = s.db.QueryRowContext(ctx, `
+		SELECT subject_id::text, principal_type
+		FROM policy_subjects
+		WHERE tenant_id = $1 AND principal_type = $2 AND external_id = $3`,
+		tenantID, PrincipalPartnerUser, user.UserID).Scan(&subjectID, &principalType)
+	if errors.Is(err, sql.ErrNoRows) {
+		subjectID, err = s.SyncPartnerUserSubject(ctx, tenantID, user.UserID)
+		if err != nil {
+			return "", "", err
+		}
+		return subjectID, PrincipalPartnerUser, nil
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("resolve policy subject: %w", err)
+	}
+	return subjectID, principalType, nil
+}
+
 // BumpPolicyVersion increments the tenant's policy version and returns it.
 // Callers invalidate local caches after a successful mutation.
 func (s *Store) BumpPolicyVersion(ctx context.Context, tenantID string) (int64, error) {

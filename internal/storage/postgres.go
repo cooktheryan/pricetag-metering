@@ -514,6 +514,17 @@ func (s *Store) GetTeamUsage(ctx context.Context, groupName string) ([]TeamUserU
 // and admits the request (fail_open) — so a metering outage disables
 // enforcement rather than blocking traffic. That is the accepted tradeoff.
 func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exempt bool) (UsageStats, error) {
+	return s.getMonthlyUsage(ctx, username, model, exempt, nil)
+}
+
+// GetMonthlyUsageWithModelAllowed is the compatibility bridge for the new
+// role policy: quota and accounting are computed exactly as before, but the
+// model gate is supplied by the caller instead of the legacy allowlist.
+func (s *Store) GetMonthlyUsageWithModelAllowed(ctx context.Context, username, model string, exempt bool, modelAllowed bool) (UsageStats, error) {
+	return s.getMonthlyUsage(ctx, username, model, exempt, &modelAllowed)
+}
+
+func (s *Store) getMonthlyUsage(ctx context.Context, username, model string, exempt bool, modelAllowed *bool) (UsageStats, error) {
 	decision, cached, err := s.QuotaDecisionCached(ctx, username, exempt)
 	if err != nil {
 		return UsageStats{}, err
@@ -524,6 +535,9 @@ func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exe
 	stats.SpendUSD = decision.SpentUSD
 	stats.MonthEnds = decision.MonthEnds.UTC().Format(time.RFC3339)
 	stats.ModelAllowed = decision.ModelAllowed(model)
+	if modelAllowed != nil {
+		stats.ModelAllowed = *modelAllowed
+	}
 	allowed := true
 	if enforce {
 		allowed = decision.Allowed()
