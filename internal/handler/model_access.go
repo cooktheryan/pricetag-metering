@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -179,9 +180,48 @@ func (h *ModelAccessHandler) HandleAdmin(w http.ResponseWriter, r *http.Request)
 		h.handleRoles(w, r, tenant, actor, parts[3:])
 	case "subjects":
 		h.handleSubjects(w, r, tenant, actor, parts[3:])
+	case "catalog":
+		h.handleCatalog(w, r, tenant, parts[3:])
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (h *ModelAccessHandler) handleCatalog(w http.ResponseWriter, r *http.Request, tenant string, rest []string) {
+	if len(rest) == 0 {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		models, err := h.store.ListCatalogModels(r.Context(), tenant)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, models)
+		return
+	}
+	if len(rest) == 1 && rest[0] == "sync" {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		path := strings.TrimSpace(os.Getenv("MODEL_CATALOG_FILE"))
+		if path == "" {
+			http.Error(w, "MODEL_CATALOG_FILE is not configured", http.StatusServiceUnavailable)
+			return
+		}
+		count, err := h.store.SyncCatalogFromPraxisConfig(r.Context(), tenant, path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		writeJSON(w, map[string]any{"synced": count})
+		return
+	}
+	http.NotFound(w, r)
 }
 
 func (h *ModelAccessHandler) handleRoles(w http.ResponseWriter, r *http.Request, tenant, actor string, rest []string) {

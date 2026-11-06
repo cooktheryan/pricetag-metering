@@ -130,6 +130,18 @@ func main() {
 		ExemptTagKey:        cfg.QosExemptTagKey,
 		ExemptTagValue:      cfg.QosExemptTagValue,
 	})
+	if path := os.Getenv("MODEL_CATALOG_FILE"); path != "" {
+		tenantID, tenErr := store.EnsureDefaultTenant(context.Background())
+		if tenErr != nil {
+			slog.Warn("model catalog sync: tenant lookup failed", "error", tenErr)
+		} else if n, catErr := store.SyncCatalogFromPraxisConfig(context.Background(), tenantID, path); catErr != nil {
+			slog.Warn("model catalog sync failed", "path", path, "error", catErr)
+		} else {
+			slog.Info("model catalog synced", "models", n, "path", path)
+		}
+	} else {
+		slog.Info("model catalog sync disabled; set MODEL_CATALOG_FILE to import the Praxis model_catalog lists")
+	}
 	if cfg.DashboardUseRollups && !cfg.LiveRollupsEnabled {
 		slog.Warn("dashboard rollups are eventually consistent because live writes are disabled", "refresh_interval_seconds", cfg.RollupRefreshSeconds)
 	} else if cfg.DashboardUseRollups && cfg.LiveRollupsEnabled {
