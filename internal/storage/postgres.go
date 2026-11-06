@@ -698,10 +698,12 @@ type GeoSummary struct {
 	CostUSD     float64 `json:"cost_usd"`
 }
 
-// CostCenterSummary is one cost-center bucket. CostCenterDescription is the
-// human label from the directory (cost_center_description) and falls back to
-// the raw cost_center code, then "Unknown".
+// CostCenterSummary is one cost-center bucket. CostCenter is the directory
+// cost-center code (tags.cost_center); CostCenterDescription is its human
+// label (tags.cost_center_description), falling back to the code and then
+// "Unknown".
 type CostCenterSummary struct {
+	CostCenter            string  `json:"cost_center,omitempty"`
 	CostCenterDescription string  `json:"cost_center_description"`
 	Requests              int     `json:"requests"`
 	TotalTokens           int64   `json:"total_tokens"`
@@ -1333,7 +1335,8 @@ func (s *Store) GetDashboardGeo(ctx context.Context, since, until time.Time, gro
 // description, using the same rollup/raw gate as the other dashboard charts.
 func (s *Store) GetDashboardCostCenters(ctx context.Context, since, until time.Time, group, user, model string) ([]CostCenterSummary, error) {
 	rollup := s.rollupsLive()
-	centerExpr := `COALESCE(NULLIF(BTRIM(pu.tags->>'cost_center_description'), ''),
+	centerExpr := `COALESCE(NULLIF(BTRIM(pu.tags->>'cost_center'), ''), '')`
+	descriptionExpr := `COALESCE(NULLIF(BTRIM(pu.tags->>'cost_center_description'), ''),
 		NULLIF(BTRIM(pu.tags->>'cost_center'), ''), 'Unknown')`
 	from := `usage_events e
 		LEFT JOIN model_pricing p ON e.model = p.model
@@ -1349,14 +1352,14 @@ func (s *Store) GetDashboardCostCenters(ctx context.Context, since, until time.T
 		requests, cost = `COALESCE(SUM(e.requests), 0)`, `COALESCE(ROUND(SUM(e.cost_usd)::numeric, 2), 0)`
 	}
 	query := fmt.Sprintf(`
-		SELECT %s AS cost_center, %s,
+		SELECT %s AS cost_center, %s AS cost_center_description, %s,
 			COALESCE(SUM(e.total_tokens), 0), COUNT(DISTINCT e.username), %s
 		FROM %s
 		WHERE %s AND ($3 = '' OR COALESCE(NULLIF(e.group_name, ''), 'unknown') = $3)
 			AND ($4 = '' OR e.username = ANY(string_to_array($4, ',')))
 			AND ($5 = '' OR e.model = $5)
-		GROUP BY cost_center
-		ORDER BY %s DESC`, centerExpr, requests, cost, from, window, cost)
+		GROUP BY cost_center, cost_center_description
+		ORDER BY %s DESC`, centerExpr, descriptionExpr, requests, cost, from, window, cost)
 	rows, err := s.reader().QueryContext(ctx, query, since, until, group, user, model)
 	if err != nil {
 		return nil, err
@@ -1365,7 +1368,7 @@ func (s *Store) GetDashboardCostCenters(ctx context.Context, since, until time.T
 	var result []CostCenterSummary
 	for rows.Next() {
 		var item CostCenterSummary
-		if err := rows.Scan(&item.CostCenterDescription, &item.Requests, &item.TotalTokens, &item.UserCount, &item.CostUSD); err != nil {
+		if err := rows.Scan(&item.CostCenter, &item.CostCenterDescription, &item.Requests, &item.TotalTokens, &item.UserCount, &item.CostUSD); err != nil {
 			return nil, err
 		}
 		result = append(result, item)

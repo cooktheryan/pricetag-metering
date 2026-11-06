@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -202,5 +204,73 @@ func TestAdminJsqEncodingIsEntityAndQuoteSafe(t *testing.T) {
 				t.Errorf("jsq(%q) left raw %q in the encoded output %q", tc.in, raw, out)
 			}
 		}
+	}
+}
+
+// The cost-center legend must name both the directory code and its human
+// label, with the share of spend first.
+func TestCostCenterChartShowsPercentAndDirectoryCode(t *testing.T) {
+	data, err := FS.ReadFile("dashboard.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"function costCenterSliceMeta(d,total)",
+		"String(d.item.cost_center||'').trim()",
+		"function costCenterSliceLabel(meta)",
+		"meta.pct+'% — '+id+meta.desc",
+		"'% spent — '",
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("dashboard.html no longer contains %q", want)
+		}
+	}
+}
+
+// Structural string checks cannot catch a misplaced brace: one syntax error
+// makes the browser discard the entire inline script, so the dashboard renders
+// its skeletons but never issues a single API request. Parse every inline
+// script with the same engine the page runs in.
+func TestDashboardInlineScriptsParse(t *testing.T) {
+	nodePath, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not available; inline dashboard scripts are parsed in CI where node exists")
+	}
+	data, err := FS.ReadFile("dashboard.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(data)
+	checked := 0
+	for {
+		start := strings.Index(src, "<script")
+		if start < 0 {
+			break
+		}
+		openEnd := strings.Index(src[start:], ">")
+		if openEnd < 0 {
+			t.Fatal("unterminated <script> tag")
+		}
+		openEnd += start
+		closeRel := strings.Index(src[openEnd+1:], "</script>")
+		if closeRel < 0 {
+			t.Fatal("unterminated inline <script> block")
+		}
+		body := src[openEnd+1 : openEnd+1+closeRel]
+		src = src[openEnd+1+closeRel+len("</script>"):]
+		if strings.TrimSpace(body) == "" {
+			continue
+		}
+		path := filepath.Join(t.TempDir(), fmt.Sprintf("inline-%d.js", checked))
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := exec.Command(nodePath, "--check", path).CombinedOutput(); err != nil {
+			t.Fatalf("inline script %d does not parse: %v\n%s", checked, err, out)
+		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatal("dashboard.html has no inline scripts to parse")
 	}
 }

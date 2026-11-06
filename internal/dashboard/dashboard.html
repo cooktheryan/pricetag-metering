@@ -1271,16 +1271,41 @@ function renderToolChart(){
   renderPieLegend('tool-legend',labels,colors);
 }
 
+// Cost-center slices carry both the directory code and its human label. Keep
+// the percentage first so the legend answers "where did the spend go", then
+// the code in parentheses (only when it differs from the label) and the name.
+function costCenterSliceMeta(d,total){
+  const pct=total>0?((d.value/total)*100).toFixed(1):'0';
+  if(!d.item)return {pct:pct,center:'',desc:'Other'};
+  return {
+    pct:pct,
+    center:String(d.item.cost_center||'').trim(),
+    desc:String(d.item.cost_center_description||d.item.cost_center||'Unknown').trim()
+  };
+}
+function costCenterSliceLabel(meta){
+  const id=meta.center&&meta.center!==meta.desc?'('+meta.center+') ':'';
+  return meta.pct+'% — '+id+meta.desc;
+}
+function costCenterTooltipLabel(metas,ctx){
+  const meta=metas[ctx.dataIndex];
+  const id=meta.center&&meta.center!==meta.desc?'('+meta.center+') ':'';
+  return meta.pct+'% spent — '+id+meta.desc+' · '+fmtCostLabel(ctx.raw);
+}
 function renderCostCenterChart(){
-  const data=topFiveItems(cachedCostCenters||[],function(d){return d.cost_usd||0;},function(d){return d.cost_center_description||'Unknown';},9);
+  const items=cachedCostCenters||[];
+  const total=items.reduce(function(sum,d){return sum+(d.cost_usd||0);},0);
+  const data=topFiveItems(items,function(d){return d.cost_usd||0;},function(d){return d.cost_center_description||'Unknown';},9);
   const vals=data.map(d=>d.value);
-  const labels=data.map(d=>`${fmtCostLabel(d.value)} — ${d.label}`);
+  const metas=data.map(function(d){return costCenterSliceMeta(d,total);});
+  const labels=metas.map(costCenterSliceLabel);
   const colors=data.map((d,i)=>d.item===null?OTHER_SLICE_COLOR:COLORS[i%COLORS.length]);
+  const tooltipLabel=function(ctx){return costCenterTooltipLabel(metas,ctx);};
   if(costCenterChart){
     costCenterChart.data.labels=labels;
     costCenterChart.data.datasets[0].data=vals;
     costCenterChart.data.datasets[0].backgroundColor=colors;
-    costCenterChart.options.plugins.tooltip.callbacks.label=function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return fmtCostLabel(ctx.raw)+' — '+data[ctx.dataIndex].label+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';};
+    costCenterChart.options.plugins.tooltip.callbacks.label=tooltipLabel;
     costCenterChart.update();
     renderPieLegend('cost-center-legend',labels,colors);
     return;
@@ -1288,8 +1313,8 @@ function renderCostCenterChart(){
   costCenterChart=new Chart(document.getElementById('cost-center-chart'),{
     type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,radius:100}]},
     options:{responsive:false,width:220,height:220,radius:100,plugins:{legend:{display:false},
-      tooltip:{callbacks:{label:function(ctx){const tot=vals.reduce((a,b)=>a+b,0);return fmtCostLabel(ctx.raw)+' — '+data[ctx.dataIndex].label+' ('+(tot>0?((ctx.raw/tot)*100).toFixed(1):'0')+'%)';}}}
-    }}
+      tooltip:{callbacks:{label:tooltipLabel}}}
+    }
   });
   renderPieLegend('cost-center-legend',labels,colors);
 }
