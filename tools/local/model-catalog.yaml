@@ -1,0 +1,44 @@
+# Local-only model catalog for the PriceTag model-access demo.
+# Same Praxis shape as the mounted praxis-config in ai-gateway-dogfood:
+# static model_catalog lists under filter_chains[].filters[].
+filter_chains:
+  - name: anthropic
+    filters:
+      - filter: model_catalog
+        format: anthropic
+        path: /v1/messages
+        models:
+          - id: claude-sonnet-4-5
+            display_name: Claude Sonnet 4.5
+            owned_by: anthropic
+          - id: claude-opus-4-1
+            display_name: Claude Opus 4.1
+            owned_by: anthropic
+          - id: claude-haiku-4-5
+            display_name: Claude Haiku 4.5
+            owned_by: anthropic
+
+  - name: openai
+    filters:
+      - filter: model_catalog
+        format: openai
+        path: /v1/chat/completions
+        models:
+          - id: gpt-5
+            display_name: GPT-5
+            owned_by: openai
+          - id: gpt-5-mini
+            display_name: GPT-5 mini
+            owned_by: openai
+          - id: qwen3-coder
+            display_name: Qwen3 Coder
+            owned_by: qwen-flash
+          - id: llama-4-scout
+            display_name: Llama 4 Scout
+            owned_by: vllm
+          - id: deepseek-v3
+            display_name: DeepSeek V3
+            owned_by: deepseek
+          - id: gemini-2-5-pro
+            display_name: Gemini 2.5 Pro
+            owned_by: google

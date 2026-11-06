@@ -646,6 +646,13 @@ func (s *Store) GetRoleBudgetUSD(ctx context.Context, tenantID, subjectID string
 			    WHERE e.tenant_id = $1 AND e.subject_id = $2
 			      AND (e.expires_at IS NULL OR e.expires_at > NOW())
 			  )
+			  -- An explicit assignment of the default role is counted once,
+			  -- in the assignment branch below.
+			  AND NOT EXISTS (
+			    SELECT 1 FROM model_access_role_assignments a
+			    WHERE a.tenant_id = r.tenant_id AND a.role_id = r.role_id
+			      AND a.subject_id = $2
+			  )
 			UNION ALL
 			SELECT r.monthly_usd
 			FROM model_access_role_assignments a
