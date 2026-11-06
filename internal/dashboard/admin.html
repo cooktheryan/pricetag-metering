@@ -1273,15 +1273,20 @@ function renderModelAccessSubjects() {
     return;
   }
   var rows = maSubjects.map(function(s) {
+    var groups = s.groups || [];
+    var groupText = groups.slice(0, 2).join(', ') + (groups.length > 2 ? ' +' + (groups.length - 2) : '');
+    var cc = s.cost_center || '';
+    var ccDesc = s.cost_center_description || '';
     return '<tr style="cursor:pointer" onclick="showModelAccessEffective(\'' + esc(s.subject_id) + '\')">' +
-      '<td><strong>' + esc(s.display_name || s.external_id) + '</strong><div class="ts" style="font-size:10px">' + esc(s.external_id) + '</div></td>' +
-      '<td class="ts">' + esc(s.cost_center || '—') + '</td>' +
+      '<td><strong>' + esc(s.display_name || s.external_id) + '</strong><div class="ts" style="font-size:10px">' + esc(s.email || s.external_id) + '</div></td>' +
+      '<td class="ts">' + esc(s.organization || '—') + '</td>' +
+      '<td class="ts">' + esc(cc || '—') + (ccDesc && ccDesc !== cc ? '<div style="font-size:10px">' + esc(ccDesc) + '</div>' : '') + '</td>' +
+      '<td class="ts" title="' + esc(groups.join(', ')) + '">' + (groupText ? esc(groupText) : '—') + '</td>' +
       '<td class="ts">' + esc(s.principal_type) + '</td>' +
       '<td>' + esc(s.status) + '</td>' +
-      '<td class="ts" style="font-family:ui-monospace,monospace;font-size:10px">' + esc(s.subject_id) + '</td>' +
     '</tr>';
   }).join('');
-  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Person</th><th>Cost center</th><th>Type</th><th>Status</th><th>Subject ID</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Person</th><th>Organization</th><th>Cost center</th><th>Groups</th><th>Type</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 function showModelAccessEffective(subjectID) {
@@ -1290,7 +1295,8 @@ function showModelAccessEffective(subjectID) {
     var body = document.getElementById('ma-effective-body');
     var chips = function(arr) { return (arr || []).length ? arr.map(function(m) { return '<span class="tag tag-blu">' + esc(m) + '</span>'; }).join(' ') : '<span class="ts">none</span>'; };
     var sub = maSubjects.filter(function(s) { return s.subject_id === subjectID; })[0] || {};
-    var sso = [sub.email, sub.cost_center, sub.organization, (sub.groups || []).join(', ')].filter(Boolean).join(' · ');
+    var costCenter = [sub.cost_center, sub.cost_center_description].filter(Boolean).join(' — ');
+    var sso = [sub.email, sub.organization, costCenter, sub.job_title, sub.employee_type, (sub.groups || []).join(', ')].filter(Boolean).join(' · ');
     var roleChips = (e.role_refs || []).length ? e.role_refs.map(function(ref) {
       return '<span class="tag tag-blu">' + esc(ref.name) + ' <button class="btn" style="padding:0;background:none;color:inherit;font-weight:700" title="Remove role" onclick="removeRoleFromEffective(\'' + esc(ref.role_id) + '\')">&times;</button></span>';
     }).join(' ') : '<span class="ts">none</span>';

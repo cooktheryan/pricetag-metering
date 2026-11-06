@@ -37,19 +37,22 @@ type ModelAccessRole struct {
 }
 
 type PolicySubjectRecord struct {
-	SubjectID     string    `json:"subject_id"`
-	TenantID      string    `json:"tenant_id"`
-	PrincipalType string    `json:"principal_type"`
-	ExternalID    string    `json:"external_id"`
-	DisplayName   string    `json:"display_name"`
-	Status        string    `json:"status"`
-	Source        string    `json:"source"`
-	Email         string    `json:"email,omitempty"`
-	CostCenter    string    `json:"cost_center,omitempty"`
-	Organization  string    `json:"organization,omitempty"`
-	Groups        []string  `json:"groups,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	SubjectID             string    `json:"subject_id"`
+	TenantID              string    `json:"tenant_id"`
+	PrincipalType         string    `json:"principal_type"`
+	ExternalID            string    `json:"external_id"`
+	DisplayName           string    `json:"display_name"`
+	Status                string    `json:"status"`
+	Source                string    `json:"source"`
+	Email                 string    `json:"email,omitempty"`
+	CostCenter            string    `json:"cost_center,omitempty"`
+	CostCenterDescription string    `json:"cost_center_description,omitempty"`
+	Organization          string    `json:"organization,omitempty"`
+	JobTitle              string    `json:"job_title,omitempty"`
+	EmployeeType          string    `json:"employee_type,omitempty"`
+	Groups                []string  `json:"groups,omitempty"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
 }
 
 func normalizeRoleModels(models []string) ([]string, error) {
@@ -327,7 +330,10 @@ func (s *Store) ListModelAccessRoleSubjects(ctx context.Context, tenantID, roleI
 		       s.display_name, s.status, s.source,
 		       COALESCE(pu.tags->>'email', ''),
 		       COALESCE(pu.tags->>'cost_center', ''),
+		       COALESCE(pu.tags->>'cost_center_description', ''),
 		       COALESCE(pu.tags->>'organization', ''),
+		       COALESCE(pu.tags->>'job_title', ''),
+		       COALESCE(pu.tags->>'employee_type', ''),
 		       COALESCE(ARRAY(SELECT jsonb_array_elements_text(pu.tags->'groups')), '{}')::text[],
 		       s.created_at, s.updated_at
 		FROM model_access_role_assignments a
@@ -346,7 +352,8 @@ func (s *Store) ListModelAccessRoleSubjects(ctx context.Context, tenantID, roleI
 		var s PolicySubjectRecord
 		if err := rows.Scan(&s.SubjectID, &s.TenantID, &s.PrincipalType, &s.ExternalID,
 			&s.DisplayName, &s.Status, &s.Source, &s.Email, &s.CostCenter,
-			&s.Organization, pq.Array(&s.Groups), &s.CreatedAt, &s.UpdatedAt); err != nil {
+			&s.CostCenterDescription, &s.Organization, &s.JobTitle, &s.EmployeeType,
+			pq.Array(&s.Groups), &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -366,7 +373,10 @@ func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, 
 		       s.display_name, s.status, s.source,
 		       COALESCE(pu.tags->>'email', ''),
 		       COALESCE(pu.tags->>'cost_center', ''),
+		       COALESCE(pu.tags->>'cost_center_description', ''),
 		       COALESCE(pu.tags->>'organization', ''),
+		       COALESCE(pu.tags->>'job_title', ''),
+		       COALESCE(pu.tags->>'employee_type', ''),
 		       COALESCE(ARRAY(SELECT jsonb_array_elements_text(pu.tags->'groups')), '{}')::text[],
 		       s.created_at, s.updated_at
 		FROM policy_subjects s
@@ -377,7 +387,10 @@ func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, 
 		       OR s.external_id ILIKE '%' || $2 || '%'
 		       OR COALESCE(pu.tags->>'email', '') ILIKE '%' || $2 || '%'
 		       OR COALESCE(pu.tags->>'cost_center', '') ILIKE '%' || $2 || '%'
+		       OR COALESCE(pu.tags->>'cost_center_description', '') ILIKE '%' || $2 || '%'
 		       OR COALESCE(pu.tags->>'organization', '') ILIKE '%' || $2 || '%'
+		       OR COALESCE(pu.tags->>'job_title', '') ILIKE '%' || $2 || '%'
+		       OR COALESCE(pu.tags->>'employee_type', '') ILIKE '%' || $2 || '%'
 		       OR COALESCE(pu.tags->>'groups', '') ILIKE '%' || $2 || '%')
 		ORDER BY s.display_name, s.external_id
 		LIMIT $3 OFFSET $4`, tenantID, strings.TrimSpace(query), limit, offset)
@@ -390,7 +403,8 @@ func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, 
 		var s PolicySubjectRecord
 		if err := rows.Scan(&s.SubjectID, &s.TenantID, &s.PrincipalType, &s.ExternalID,
 			&s.DisplayName, &s.Status, &s.Source, &s.Email, &s.CostCenter,
-			&s.Organization, pq.Array(&s.Groups), &s.CreatedAt, &s.UpdatedAt); err != nil {
+			&s.CostCenterDescription, &s.Organization, &s.JobTitle, &s.EmployeeType,
+			pq.Array(&s.Groups), &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, s)

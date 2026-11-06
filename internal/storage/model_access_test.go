@@ -340,7 +340,7 @@ func TestSyncPartnerUserSubjects(t *testing.T) {
 	userID := uuid.NewString()
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO partner_users (user_id, tags, role, active, created_by, updated_by)
-		VALUES ($1, '{"preferred_username":"alice","email":"alice@example.com","cost_center":"cc-42","groups":["ai-eng"]}', 'user', TRUE, 'test', 'test')`,
+		VALUES ($1, '{"preferred_username":"alice","email":"alice@example.com","cost_center":"cc-42","cost_center_description":"Platform","organization":"AI Engineering","job_title":"Staff Engineer","employee_type":"employee","groups":["ai-eng"]}', 'user', TRUE, 'test', 'test')`,
 		userID); err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +397,12 @@ func TestSyncPartnerUserSubjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(subjects) != 1 || subjects[0].CostCenter != "cc-42" || !slices.Equal(subjects[0].Groups, []string{"ai-eng"}) {
+	if len(subjects) != 1 || subjects[0].CostCenter != "cc-42" ||
+		subjects[0].CostCenterDescription != "Platform" ||
+		subjects[0].Organization != "AI Engineering" ||
+		subjects[0].JobTitle != "Staff Engineer" ||
+		subjects[0].EmployeeType != "employee" ||
+		!slices.Equal(subjects[0].Groups, []string{"ai-eng"}) {
 		t.Fatalf("subject tags = %#v", subjects)
 	}
 }
