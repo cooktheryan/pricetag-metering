@@ -258,17 +258,24 @@ func (h *ModelAccessHandler) handleRoles(w http.ResponseWriter, r *http.Request,
 
 	roleID := rest[0]
 	if len(rest) == 1 {
-		if r.Method != http.MethodGet {
-			w.Header().Set("Allow", "GET")
+		switch r.Method {
+		case http.MethodGet:
+			role, err := h.store.GetModelAccessRole(r.Context(), tenant, roleID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			writeJSON(w, role)
+		case http.MethodDelete:
+			if err := h.store.RetireModelAccessRole(r.Context(), tenant, roleID, actor); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.Header().Set("Allow", "GET, DELETE")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
 		}
-		role, err := h.store.GetModelAccessRole(r.Context(), tenant, roleID)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		writeJSON(w, role)
 		return
 	}
 
