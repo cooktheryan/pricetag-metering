@@ -506,16 +506,18 @@ const (
 // PolicyDecision is the persisted AuthZEN-shaped answer. AllowedModels is an
 // obligation for the router; it is nil when the subject is unrestricted.
 type PolicyDecision struct {
-	DecisionID    string    `json:"decisionId"`
-	TenantID      string    `json:"tenant"`
-	SubjectID     string    `json:"subjectId,omitempty"`
-	PrincipalType string    `json:"principalType,omitempty"`
-	ModelID       string    `json:"modelId,omitempty"`
-	Action        string    `json:"action"`
-	Decision      string    `json:"decision"`
-	Reason        string    `json:"reason"`
-	PolicyVersion int64     `json:"policyVersion"`
-	AllowedModels []string  `json:"allowedModels,omitempty"`
+	DecisionID    string `json:"decisionId"`
+	TenantID      string `json:"tenant"`
+	SubjectID     string `json:"subjectId,omitempty"`
+	PrincipalType string `json:"principalType,omitempty"`
+	ModelID       string `json:"modelId,omitempty"`
+	Action        string `json:"action"`
+	Decision      string `json:"decision"`
+	Reason        string `json:"reason"`
+	PolicyVersion int64  `json:"policyVersion"`
+	// nil = unrestricted; [] = restricted with nothing allowed. Do not
+	// omitempty: the gateway must distinguish those two cases.
+	AllowedModels []string  `json:"allowedModels"`
 	LatencyMS     int64     `json:"latencyMs"`
 	EvaluatedAt   time.Time `json:"evaluatedAt"`
 }
