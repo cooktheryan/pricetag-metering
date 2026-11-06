@@ -564,7 +564,7 @@ td .tag{white-space:nowrap}
 
 <!-- Console tabs -->
 <div class="vtabs">
-  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button><button class="vtab" id="vtab-model-access" onclick="showTab('model-access')">Model access</button><button class="vtab" id="vtab-safety-net" onclick="showTab('safety-net')">Safety Net</button><button class="vtab" id="vtab-pricing-discounts" onclick="showTab('pricing-discounts')">Pricing Discounts</button><button class="vtab" id="vtab-model-restrictions" onclick="showTab('model-restrictions')">Model Restrictions</button>
+  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button><button class="vtab" id="vtab-model-access" onclick="showTab('model-access')">Model access</button><button class="vtab" id="vtab-safety-net" onclick="showTab('safety-net')">Safety Net</button><button class="vtab" id="vtab-pricing-discounts" onclick="showTab('pricing-discounts')">Pricing Discounts</button><button class="vtab" id="vtab-model-restrictions" onclick="showTab('model-restrictions')">Legacy restrictions</button>
   <div class="vtab-tools">
     <span id="last-updated"></span>
     <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="refreshTab(activeTab,true)">Refresh</button>
@@ -725,8 +725,9 @@ td .tag{white-space:nowrap}
 <!-- ============ TAB: Model Restrictions ============ -->
 <div class="tab-panel" id="tab-model-restrictions">
   <div class="card">
-    <div class="card-hdr"><div><span class="card-title">External Model Restrictions</span><span class="card-count" id="model-restrictions-count"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelRestrictions()">Refresh</button></div>
-    <div class="ts" style="margin-bottom:14px">Read-only view of users restricted by the external model-policy API. An empty allowed-model list means deny-all.</div>
+    <div class="card-hdr"><div><span class="card-title">Legacy external restrictions</span><span class="card-count" id="model-restrictions-count"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelRestrictions()">Refresh</button></div>
+    <div class="warning" style="margin-bottom:14px"><span class="icon">!</span><div>This tab is a read-only view of the old external model-policy API. To create roles, assign people, or add restrictions, use <strong>Model access</strong>. <button class="btn btn-outline" style="padding:3px 8px;font-size:10px;margin-left:6px" onclick="showTab('model-access')">Open Model access</button></div></div>
+    <div class="ts" style="margin-bottom:14px">An empty allowed-model list means deny-all. New restrictions are created from a person in Model access.</div>
     <div id="model-restrictions-list"><div class="loading"><div class="spinner"></div>Loading model restrictions...</div></div>
     <div class="partner-users-pager"><button id="model-restrictions-prev" onclick="changeModelRestrictionsPage(-1)">Previous</button><span id="model-restrictions-page-label">Page 1</span><button id="model-restrictions-next" onclick="changeModelRestrictionsPage(1)">Next</button></div>
   </div>
