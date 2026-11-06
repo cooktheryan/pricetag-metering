@@ -254,6 +254,15 @@ func (h *ModelAccessHandler) handleRoles(w http.ResponseWriter, r *http.Request,
 		}
 		writeJSON(w, role)
 	case "subjects":
+		if len(rest) == 2 && r.Method == http.MethodGet {
+			subjects, err := h.store.ListModelAccessRoleSubjects(r.Context(), tenant, roleID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, subjects)
+			return
+		}
 		if len(rest) == 2 && r.Method == http.MethodPost {
 			var body assignModelAccessRoleRequest
 			if !decodeJSON(w, r, &body) {
@@ -349,8 +358,16 @@ func (h *ModelAccessHandler) handleSubjects(w http.ResponseWriter, r *http.Reque
 		}
 		w.WriteHeader(http.StatusNoContent)
 	case "exclude-default":
+		if r.Method == http.MethodDelete {
+			if err := h.store.ClearDefaultExclusion(r.Context(), tenant, subjectID, actor); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		if r.Method != http.MethodPost {
-			w.Header().Set("Allow", "POST")
+			w.Header().Set("Allow", "POST, DELETE")
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}

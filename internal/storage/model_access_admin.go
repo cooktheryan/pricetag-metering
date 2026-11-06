@@ -270,6 +270,31 @@ func (s *Store) RemoveModelAccessRoleSubject(ctx context.Context, tenantID, role
 	return tx.Commit()
 }
 
+func (s *Store) ListModelAccessRoleSubjects(ctx context.Context, tenantID, roleID string) ([]PolicySubjectRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT s.subject_id::text, s.tenant_id::text, s.principal_type, s.external_id,
+		       s.display_name, s.status, s.source, s.created_at, s.updated_at
+		FROM model_access_role_assignments a
+		JOIN policy_subjects s
+		  ON s.subject_id = a.subject_id AND s.tenant_id = a.tenant_id
+		WHERE a.tenant_id = $1 AND a.role_id = $2
+		ORDER BY s.display_name, s.external_id`, tenantID, roleID)
+	if err != nil {
+		return nil, fmt.Errorf("list role subjects: %w", err)
+	}
+	defer rows.Close()
+	out := []PolicySubjectRecord{}
+	for rows.Next() {
+		var s PolicySubjectRecord
+		if err := rows.Scan(&s.SubjectID, &s.TenantID, &s.PrincipalType, &s.ExternalID,
+			&s.DisplayName, &s.Status, &s.Source, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, limit, offset int) ([]PolicySubjectRecord, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
@@ -421,6 +446,26 @@ func (s *Store) ExcludeSubjectFromDefault(ctx context.Context, tenantID, subject
 	if err := s.auditTx(ctx, tx, actor, "model_access.default_exclusion", subjectID, map[string]any{
 		"reason": reason, "expires_at": expiresAt,
 	}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ClearDefaultExclusion(ctx context.Context, tenantID, subjectID, actor string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM model_access_default_exclusions
+		WHERE tenant_id = $1 AND subject_id = $2`, tenantID, subjectID); err != nil {
+		return err
+	}
+	if err := s.bumpPolicyVersionTx(ctx, tx, tenantID); err != nil {
+		return err
+	}
+	if err := s.auditTx(ctx, tx, actor, "model_access.default_exclusion_clear", subjectID, nil); err != nil {
 		return err
 	}
 	return tx.Commit()
