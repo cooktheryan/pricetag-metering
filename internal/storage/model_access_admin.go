@@ -86,8 +86,20 @@ func (s *Store) ListModelAccessRoles(ctx context.Context, tenantID string) ([]Mo
 		       COALESCE(r.owner_subject_id::text, ''), r.is_default,
 		       COALESCE(array_agg(rm.model_id ORDER BY rm.model_id)
 		                FILTER (WHERE rm.model_id IS NOT NULL), '{}')::text[],
-		       (SELECT COUNT(*) FROM model_access_role_assignments a
-		         WHERE a.tenant_id = r.tenant_id AND a.role_id = r.role_id),
+		       CASE WHEN r.is_default THEN (
+		         SELECT COUNT(*) FROM policy_subjects s
+		         WHERE s.tenant_id = r.tenant_id
+		           AND s.principal_type = 'partner_user'
+		           AND s.status = 'active'
+		           AND NOT EXISTS (
+		             SELECT 1 FROM model_access_default_exclusions e
+		             WHERE e.tenant_id = s.tenant_id AND e.subject_id = s.subject_id
+		               AND (e.expires_at IS NULL OR e.expires_at > NOW())
+		           )
+		       ) ELSE (
+		         SELECT COUNT(*) FROM model_access_role_assignments a
+		         WHERE a.tenant_id = r.tenant_id AND a.role_id = r.role_id
+		       ) END,
 		       r.retired_at, r.created_at, r.updated_at
 		FROM model_access_roles r
 		LEFT JOIN model_access_role_models rm

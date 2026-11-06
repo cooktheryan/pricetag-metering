@@ -575,6 +575,33 @@ func TestModelAccessAdminCRUD(t *testing.T) {
 	}
 }
 
+func TestDefaultRoleSubjectCount(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	role, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Engineer", "", []string{"model-a"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alice := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+	createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
+	createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "inactive")
+	excludeTestDefault(t, s, ctx, tenant, alice, nil)
+
+	roles, err := s.ListModelAccessRoles(ctx, tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got ModelAccessRole
+	for _, r := range roles {
+		if r.RoleID == role.RoleID {
+			got = r
+		}
+	}
+	if got.SubjectCount != 1 {
+		t.Fatalf("default role people = %d, want 1 active non-excluded partner user", got.SubjectCount)
+	}
+}
+
 func TestModelAccessDefaultRoleChange(t *testing.T) {
 	s, ctx := openTestStore(t)
 	tenant, _ := s.EnsureDefaultTenant(ctx)

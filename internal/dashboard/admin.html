@@ -1192,7 +1192,7 @@ function selectModelAccessRole(roleID) {
     var subjects = res[1] || [];
     document.getElementById('ma-role-card').style.display = '';
     document.getElementById('ma-role-title').textContent = maRole.name;
-    document.getElementById('ma-role-meta').textContent = maRole.is_default ? 'default role' : (maRole.subject_count || 0) + ' people';
+    document.getElementById('ma-role-meta').textContent = maRole.is_default ? 'default role · ' + (maRole.subject_count || 0) + ' active people' : (maRole.subject_count || 0) + ' people';
     maRoleModels = (maRole.models || []).slice();
     renderModelSummary('role');
     var el = document.getElementById('ma-role-subjects');
