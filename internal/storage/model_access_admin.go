@@ -301,6 +301,71 @@ func (s *Store) AssignModelAccessRole(ctx context.Context, tenantID, roleID, sub
 	return tx.Commit()
 }
 
+// AssignModelAccessRoleSubjects assigns an explicit, pre-resolved set of
+// subjects to a role. It is the bulk path behind the admin picker; it never
+// creates a dynamic group/organization binding.
+func (s *Store) AssignModelAccessRoleSubjects(ctx context.Context, tenantID, roleID string, subjectIDs []string, actor string) (int, error) {
+	unique := make([]string, 0, len(subjectIDs))
+	seen := map[string]struct{}{}
+	for _, id := range subjectIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+	if len(unique) == 0 {
+		return 0, nil
+	}
+	if len(unique) > 5000 {
+		return 0, fmt.Errorf("at most 5000 subjects per assignment")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var exists bool
+	if err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS (SELECT 1 FROM model_access_roles
+		 WHERE tenant_id = $1 AND role_id = $2 AND retired_at IS NULL)`,
+		tenantID, roleID).Scan(&exists); err != nil {
+		return 0, err
+	}
+	if !exists {
+		return 0, ErrModelAccessRoleNotFound
+	}
+	assigned := 0
+	for _, subjectID := range unique {
+		result, err := tx.ExecContext(ctx, `
+			INSERT INTO model_access_role_assignments (tenant_id, role_id, subject_id, assigned_by)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (role_id, subject_id) DO NOTHING`,
+			tenantID, roleID, subjectID, actor)
+		if err != nil {
+			return assigned, fmt.Errorf("assign subject %s: %w", subjectID, err)
+		}
+		n, _ := result.RowsAffected()
+		assigned += int(n)
+	}
+	if err := s.bumpPolicyVersionTx(ctx, tx, tenantID); err != nil {
+		return assigned, err
+	}
+	if err := s.auditTx(ctx, tx, actor, "model_access.assignment_bulk", roleID, map[string]any{
+		"requested": len(unique), "assigned": assigned,
+	}); err != nil {
+		return assigned, err
+	}
+	if err := tx.Commit(); err != nil {
+		return assigned, err
+	}
+	return assigned, nil
+}
+
 func (s *Store) RemoveModelAccessRoleSubject(ctx context.Context, tenantID, roleID, subjectID, actor string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -410,6 +475,136 @@ func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, 
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+func policySubjectFilterClause(field, placeholder string) (string, error) {
+	switch field {
+	case "cost_center":
+		return `COALESCE(pu.tags->>'cost_center', '') = ` + placeholder, nil
+	case "organization":
+		return `COALESCE(pu.tags->>'organization', '') = ` + placeholder, nil
+	case "group":
+		return `EXISTS (SELECT 1 FROM jsonb_array_elements_text(pu.tags->'groups') g WHERE g = ` + placeholder + `)`, nil
+	default:
+		return "", fmt.Errorf("unsupported subject filter %q", field)
+	}
+}
+
+func (s *Store) ListPolicySubjectsByFilter(ctx context.Context, tenantID, field, value string, limit int) ([]PolicySubjectRecord, error) {
+	clause, err := policySubjectFilterClause(field, "$2")
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 20
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT s.subject_id::text, s.tenant_id::text, s.principal_type, s.external_id,
+		       s.display_name, s.status, s.source,
+		       COALESCE(pu.tags->>'email', ''),
+		       COALESCE(pu.tags->>'cost_center', ''),
+		       COALESCE(pu.tags->>'cost_center_description', ''),
+		       COALESCE(pu.tags->>'organization', ''),
+		       COALESCE(pu.tags->>'job_title', ''),
+		       COALESCE(pu.tags->>'employee_type', ''),
+		       COALESCE(ARRAY(SELECT jsonb_array_elements_text(pu.tags->'groups')), '{}')::text[],
+		       s.created_at, s.updated_at
+		FROM policy_subjects s
+		LEFT JOIN partner_users pu
+		  ON s.principal_type = 'partner_user' AND pu.user_id::text = s.external_id
+		WHERE s.tenant_id = $1 AND s.principal_type = 'partner_user' AND s.status = 'active'
+		  AND `+clause+`
+		ORDER BY s.display_name, s.external_id
+		LIMIT $3`, tenantID, strings.TrimSpace(value), limit)
+	if err != nil {
+		return nil, fmt.Errorf("list policy subjects by filter: %w", err)
+	}
+	defer rows.Close()
+	out := []PolicySubjectRecord{}
+	for rows.Next() {
+		var s PolicySubjectRecord
+		if err := rows.Scan(&s.SubjectID, &s.TenantID, &s.PrincipalType, &s.ExternalID,
+			&s.DisplayName, &s.Status, &s.Source, &s.Email, &s.CostCenter,
+			&s.CostCenterDescription, &s.Organization, &s.JobTitle, &s.EmployeeType,
+			pq.Array(&s.Groups), &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) CountPolicySubjectsByFilter(ctx context.Context, tenantID, field, value string) (int, error) {
+	clause, err := policySubjectFilterClause(field, "$2")
+	if err != nil {
+		return 0, err
+	}
+	var count int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM policy_subjects s
+		LEFT JOIN partner_users pu
+		  ON s.principal_type = 'partner_user' AND pu.user_id::text = s.external_id
+		WHERE s.tenant_id = $1 AND s.principal_type = 'partner_user' AND s.status = 'active'
+		  AND `+clause, tenantID, strings.TrimSpace(value)).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count policy subjects by filter: %w", err)
+	}
+	return count, nil
+}
+
+// AssignModelAccessRoleByFilter assigns every currently matching person to a
+// role. It resolves the match at apply time and writes explicit assignment
+// rows; it does not create a dynamic organization/group binding.
+func (s *Store) AssignModelAccessRoleByFilter(ctx context.Context, tenantID, roleID, field, value, actor string) (int, error) {
+	clause, err := policySubjectFilterClause(field, "$3")
+	if err != nil {
+		return 0, err
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, fmt.Errorf("filter value is required")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var exists bool
+	if err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS (SELECT 1 FROM model_access_roles
+		 WHERE tenant_id = $1 AND role_id = $2 AND retired_at IS NULL)`,
+		tenantID, roleID).Scan(&exists); err != nil {
+		return 0, err
+	}
+	if !exists {
+		return 0, ErrModelAccessRoleNotFound
+	}
+	result, err := tx.ExecContext(ctx, `
+		INSERT INTO model_access_role_assignments (tenant_id, role_id, subject_id, assigned_by)
+		SELECT $1, $2, s.subject_id, $4
+		FROM policy_subjects s
+		LEFT JOIN partner_users pu
+		  ON s.principal_type = 'partner_user' AND pu.user_id::text = s.external_id
+		WHERE s.tenant_id = $1 AND s.principal_type = 'partner_user' AND s.status = 'active'
+		  AND `+clause+`
+		ON CONFLICT (role_id, subject_id) DO NOTHING`,
+		tenantID, roleID, value, actor)
+	if err != nil {
+		return 0, fmt.Errorf("assign role by filter: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	if err := s.bumpPolicyVersionTx(ctx, tx, tenantID); err != nil {
+		return int(n), err
+	}
+	if err := s.auditTx(ctx, tx, actor, "model_access.assignment_filter", roleID, map[string]any{
+		"field": field, "value": value, "assigned": n,
+	}); err != nil {
+		return int(n), err
+	}
+	if err := tx.Commit(); err != nil {
+		return int(n), err
+	}
+	return int(n), nil
 }
 
 func (s *Store) EnsureServiceIdentity(ctx context.Context, tenantID, externalID, displayName string) (string, error) {

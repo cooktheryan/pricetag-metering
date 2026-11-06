@@ -691,11 +691,23 @@ td .tag{white-space:nowrap}
       <button class="btn btn-grn" onclick="saveModelAccessRoleModels()">Save models</button>
     </div>
     <div style="margin-top:16px;border-top:1px solid var(--bdr);padding-top:14px">
-      <label class="field-label">Assign a subject by ID</label>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <input id="ma-assign-subject" class="tbl-input" placeholder="subject UUID (from People below)" style="flex:1;min-width:280px;padding:7px 10px;font-size:12px">
-        <button class="btn btn-outline" onclick="assignModelAccessSubject()">Assign</button>
+      <label class="field-label">Assign people</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <input id="ma-person-search" class="tbl-input" placeholder="Search name, email, org, cost center, or group" oninput="renderRolePersonPicker()" style="flex:1;min-width:240px;padding:7px 10px;font-size:12px">
+        <select id="ma-person-select" size="4" style="flex:1;min-width:260px;background:var(--c2);color:var(--t);border:1px solid var(--bdr);border-radius:6px;padding:5px;font-size:12px;font-family:inherit;outline:none"></select>
+        <button class="btn btn-outline" style="align-self:flex-start" onclick="assignSelectedRolePerson()">Assign selected</button>
       </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+        <select id="ma-filter-field" style="background:var(--c2);color:var(--t);border:1px solid var(--bdr);border-radius:6px;padding:7px 8px;font-size:12px;font-family:inherit;outline:none">
+          <option value="cost_center">Cost center</option>
+          <option value="organization">Organization</option>
+          <option value="group">Group</option>
+        </select>
+        <input id="ma-filter-value" class="tbl-input" placeholder="Exact value, e.g. CC-100 / AI Engineering / ai-eng" style="flex:1;min-width:240px;padding:7px 10px;font-size:12px">
+        <button class="btn btn-outline" onclick="previewRoleFilter()">Preview</button>
+        <button class="btn btn-grn" onclick="assignRoleFilter()">Assign filter</button>
+      </div>
+      <div id="ma-filter-preview" class="ts" style="margin-top:8px"></div>
       <div id="ma-role-subjects" style="margin-top:12px"></div>
     </div>
   </div>
@@ -1195,6 +1207,9 @@ function selectModelAccessRole(roleID) {
     document.getElementById('ma-role-meta').textContent = maRole.is_default ? 'default role · ' + (maRole.subject_count || 0) + ' active people' : (maRole.subject_count || 0) + ' people';
     maRoleModels = (maRole.models || []).slice();
     renderModelSummary('role');
+    renderRolePersonPicker();
+    document.getElementById('ma-filter-preview').innerHTML = '';
+    maFilterPreview = null;
     var el = document.getElementById('ma-role-subjects');
     if (!subjects.length) {
       el.innerHTML = '<div class="ts">No explicit assignments. ' + (maRole.is_default ? 'Everyone active receives this role automatically.' : 'Assign a subject by ID above.') + '</div>';
@@ -1236,17 +1251,66 @@ function saveModelAccessRoleModels() {
     }).catch(function(err) { showToast('Save failed: ' + err.message, 'error'); });
 }
 
-function assignModelAccessSubject() {
+var maFilterPreview = null;
+
+function renderRolePersonPicker() {
+  var q = ((document.getElementById('ma-person-search') || {}).value || '').toLowerCase();
+  var sel = document.getElementById('ma-person-select');
+  if (!sel) return;
+  var matches = maSubjects.filter(function(s) {
+    var hay = [s.display_name, s.email, s.external_id, s.organization, s.cost_center, s.cost_center_description, (s.groups || []).join(' ')].join(' ').toLowerCase();
+    return !q || hay.indexOf(q) >= 0;
+  });
+  sel.innerHTML = matches.length ? matches.map(function(s) {
+    return '<option value="' + esc(s.subject_id) + '">' + esc(s.display_name || s.external_id) +
+      (s.email ? ' — ' + esc(s.email) : '') +
+      (s.organization ? ' · ' + esc(s.organization) : '') +
+      (s.cost_center ? ' · ' + esc(s.cost_center) : '') + '</option>';
+  }).join('') : '<option value="">No matching people</option>';
+}
+
+function assignSelectedRolePerson() {
   if (!maRole) return;
-  var subjectID = (document.getElementById('ma-assign-subject').value || '').trim();
-  if (!subjectID) { showToast('Subject ID is required', 'error'); return; }
+  var sel = document.getElementById('ma-person-select');
+  var subjectID = sel ? sel.value : '';
+  if (!subjectID) { showToast('Select a person first', 'error'); return; }
   sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/subjects'), 'POST', {subject_id: subjectID})
     .then(function() {
-      document.getElementById('ma-assign-subject').value = '';
-      showToast('Assigned', 'success');
-      selectModelAccessRole(maRole.role_id);
-      loadModelAccess();
+      showToast('Person assigned', 'success');
+      loadModelAccess().then(function() { selectModelAccessRole(maRole.role_id); });
     }).catch(function(err) { showToast('Assign failed: ' + err.message, 'error'); });
+}
+
+function previewRoleFilter() {
+  if (!maRole) return;
+  var field = document.getElementById('ma-filter-field').value;
+  var value = (document.getElementById('ma-filter-value').value || '').trim();
+  if (!value) { showToast('Enter an exact filter value', 'error'); return; }
+  sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/subjects/preview'), 'POST', {field: field, value: value})
+    .then(function(res) {
+      maFilterPreview = {field: field, value: value, count: res.count || 0};
+      var names = (res.sample || []).map(function(s) { return s.display_name || s.external_id; }).slice(0, 8).join(', ');
+      document.getElementById('ma-filter-preview').innerHTML = (res.count || 0) +
+        ' active people match <strong>' + esc(field) + ' = ' + esc(value) + '</strong>' +
+        (names ? '<br><span class="ts">' + esc(names) + ((res.count || 0) > 8 ? '…' : '') + '</span>' : '');
+    }).catch(function(err) { showToast('Preview failed: ' + err.message, 'error'); });
+}
+
+function assignRoleFilter() {
+  if (!maRole) return;
+  var field = document.getElementById('ma-filter-field').value;
+  var value = (document.getElementById('ma-filter-value').value || '').trim();
+  if (!value) { showToast('Enter an exact filter value', 'error'); return; }
+  var countText = maFilterPreview && maFilterPreview.field === field && maFilterPreview.value === value
+    ? maFilterPreview.count + ' matching people' : 'all currently matching people';
+  if (!confirm('Assign role "' + maRole.name + '" to ' + countText + '? Future changes to this ' + field + ' are not automatic.')) return;
+  sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/subjects/filter'), 'POST', {field: field, value: value})
+    .then(function(res) {
+      showToast('Assigned ' + res.assigned + ' people', 'success');
+      document.getElementById('ma-filter-preview').innerHTML = '';
+      maFilterPreview = null;
+      loadModelAccess().then(function() { selectModelAccessRole(maRole.role_id); });
+    }).catch(function(err) { showToast('Filter assign failed: ' + err.message, 'error'); });
 }
 
 function removeModelAccessSubject(roleID, subjectID) {

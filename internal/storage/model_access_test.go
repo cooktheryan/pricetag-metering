@@ -607,6 +607,81 @@ func TestDefaultRoleSubjectCount(t *testing.T) {
 	}
 }
 
+func TestAssignModelAccessRoleSubjects(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	role, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Research", "", []string{"model-a"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := []string{
+		createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active"),
+		createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active"),
+		createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active"),
+	}
+	assigned, err := s.AssignModelAccessRoleSubjects(ctx, tenant, role.RoleID, append(ids, ids[0]), "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if assigned != 3 {
+		t.Fatalf("assigned = %d, want 3", assigned)
+	}
+	assigned, err = s.AssignModelAccessRoleSubjects(ctx, tenant, role.RoleID, ids, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if assigned != 0 {
+		t.Fatalf("repeat assigned = %d, want 0", assigned)
+	}
+	subjects, err := s.ListModelAccessRoleSubjects(ctx, tenant, role.RoleID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subjects) != 3 {
+		t.Fatalf("role subjects = %d, want 3", len(subjects))
+	}
+}
+
+func TestAssignModelAccessRoleByFilter(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	role, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Cost center role", "", []string{"model-a"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range []struct{ id, cc string }{
+		{uuid.NewString(), "CC-1"},
+		{uuid.NewString(), "CC-1"},
+		{uuid.NewString(), "CC-2"},
+	} {
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT INTO partner_users (user_id, tags, role, active, created_by, updated_by)
+			VALUES ($1, jsonb_build_object('email', $2::text, 'cost_center', $3::text), 'user', TRUE, 'test', 'test')`,
+			u.id, u.id+"@example.com", u.cc); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.SyncPartnerUserSubjects(ctx, tenant); err != nil {
+		t.Fatal(err)
+	}
+	count, err := s.CountPolicySubjectsByFilter(ctx, tenant, "cost_center", "CC-1")
+	if err != nil || count != 2 {
+		t.Fatalf("count = %d, err %v", count, err)
+	}
+	assigned, err := s.AssignModelAccessRoleByFilter(ctx, tenant, role.RoleID, "cost_center", "CC-1", "admin")
+	if err != nil || assigned != 2 {
+		t.Fatalf("assigned = %d, err %v", assigned, err)
+	}
+	assigned, err = s.AssignModelAccessRoleByFilter(ctx, tenant, role.RoleID, "cost_center", "CC-1", "admin")
+	if err != nil || assigned != 0 {
+		t.Fatalf("repeat assigned = %d, err %v", assigned, err)
+	}
+	subjects, err := s.ListModelAccessRoleSubjects(ctx, tenant, role.RoleID)
+	if err != nil || len(subjects) != 2 {
+		t.Fatalf("role subjects = %d, err %v", len(subjects), err)
+	}
+}
+
 func TestModelAccessDefaultRoleChange(t *testing.T) {
 	s, ctx := openTestStore(t)
 	tenant, _ := s.EnsureDefaultTenant(ctx)

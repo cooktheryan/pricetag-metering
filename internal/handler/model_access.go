@@ -140,6 +140,15 @@ type assignModelAccessRoleRequest struct {
 	SubjectID string `json:"subject_id"`
 }
 
+type assignModelAccessRoleSubjectsRequest struct {
+	SubjectIDs []string `json:"subject_ids"`
+}
+
+type policySubjectFilterRequest struct {
+	Field string `json:"field"`
+	Value string `json:"value"`
+}
+
 type setSubjectModelsRequest struct {
 	Models []string `json:"models"`
 }
@@ -308,6 +317,50 @@ func (h *ModelAccessHandler) handleRoles(w http.ResponseWriter, r *http.Request,
 				return
 			}
 			writeJSON(w, subjects)
+			return
+		}
+		if len(rest) == 3 && rest[2] == "bulk" && r.Method == http.MethodPost {
+			var body assignModelAccessRoleSubjectsRequest
+			if !decodeJSON(w, r, &body) {
+				return
+			}
+			assigned, err := h.store.AssignModelAccessRoleSubjects(r.Context(), tenant, roleID, body.SubjectIDs, actor)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			writeJSON(w, map[string]any{"assigned": assigned, "requested": len(body.SubjectIDs)})
+			return
+		}
+		if len(rest) == 3 && rest[2] == "preview" && r.Method == http.MethodPost {
+			var body policySubjectFilterRequest
+			if !decodeJSON(w, r, &body) {
+				return
+			}
+			count, err := h.store.CountPolicySubjectsByFilter(r.Context(), tenant, body.Field, body.Value)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			sample, err := h.store.ListPolicySubjectsByFilter(r.Context(), tenant, body.Field, body.Value, 20)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			writeJSON(w, map[string]any{"count": count, "sample": sample})
+			return
+		}
+		if len(rest) == 3 && rest[2] == "filter" && r.Method == http.MethodPost {
+			var body policySubjectFilterRequest
+			if !decodeJSON(w, r, &body) {
+				return
+			}
+			assigned, err := h.store.AssignModelAccessRoleByFilter(r.Context(), tenant, roleID, body.Field, body.Value, actor)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			writeJSON(w, map[string]any{"assigned": assigned, "field": body.Field, "value": body.Value})
 			return
 		}
 		if len(rest) == 2 && r.Method == http.MethodPost {
