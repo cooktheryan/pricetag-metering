@@ -1341,10 +1341,13 @@ function renderModelAccessSubjects() {
     var groupText = groups.slice(0, 2).join(', ') + (groups.length > 2 ? ' +' + (groups.length - 2) : '');
     var cc = s.cost_center || '';
     var ccDesc = s.cost_center_description || '';
+    var ccText = cc ? (ccDesc && ccDesc !== cc ? cc + ' — ' + ccDesc : cc) : (ccDesc || '—');
+    var personName = s.display_name || s.email || s.external_id;
+    var personSub = s.email && s.email !== personName ? s.email : '';
     return '<tr style="cursor:pointer" onclick="showModelAccessEffective(\'' + esc(s.subject_id) + '\')">' +
-      '<td><strong>' + esc(s.display_name || s.external_id) + '</strong><div class="ts" style="font-size:10px">' + esc(s.email || s.external_id) + '</div></td>' +
+      '<td><strong>' + esc(personName) + '</strong>' + (personSub ? '<div class="ts" style="font-size:10px">' + esc(personSub) + '</div>' : '') + '</td>' +
       '<td class="ts">' + esc(s.organization || '—') + '</td>' +
-      '<td class="ts">' + esc(cc || '—') + (ccDesc && ccDesc !== cc ? '<div style="font-size:10px">' + esc(ccDesc) + '</div>' : '') + '</td>' +
+      '<td class="ts">' + esc(ccText) + '</td>' +
       '<td class="ts" title="' + esc(groups.join(', ')) + '">' + (groupText ? esc(groupText) : '—') + '</td>' +
       '<td class="ts">' + esc(s.principal_type) + '</td>' +
       '<td>' + esc(s.status) + '</td>' +
