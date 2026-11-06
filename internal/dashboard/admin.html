@@ -655,14 +655,21 @@ td .tag{white-space:nowrap}
   <div class="card">
     <div class="card-hdr">
       <div><span class="card-title">Model access roles</span><span class="card-count" id="ma-roles-count"></span></div>
-      <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelAccess()">Refresh</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="syncModelAccessCatalog()">Import catalog</button>
+        <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelAccess()">Refresh</button>
+      </div>
     </div>
     <div class="ts" style="margin-bottom:12px">Roles grant exact public model IDs. At most one role is the tenant default and applies automatically to every active person. Roles never grant money; budgets are separate.</div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+    <div id="ma-catalog-note" class="ts" style="margin-bottom:10px"></div>
+    <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:14px">
       <input id="ma-new-name" class="tbl-input" placeholder="New role name" style="min-width:180px;padding:7px 10px;font-size:12px">
-      <input id="ma-new-models" class="tbl-input" placeholder="model-a, model-b" style="flex:1;min-width:240px;padding:7px 10px;font-size:12px">
-      <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:6px"><input type="checkbox" id="ma-new-default" style="width:auto"> Default role</label>
-      <button class="btn btn-grn" onclick="createModelAccessRole()">Create role</button>
+      <div style="flex:1;min-width:300px">
+        <select id="ma-new-models" multiple size="6" style="width:100%;background:var(--c2);color:var(--t);border:1px solid var(--bdr);border-radius:6px;padding:6px;font-size:12px;font-family:inherit;outline:none"></select>
+        <input id="ma-new-extra" class="tbl-input" placeholder="Extra exact IDs not in the catalog (comma-separated)" style="width:100%;margin-top:6px;padding:7px 10px;font-size:11px">
+      </div>
+      <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:6px;margin-top:8px"><input type="checkbox" id="ma-new-default" style="width:auto"> Default role</label>
+      <button class="btn btn-grn" style="margin-top:8px" onclick="createModelAccessRole()">Create role</button>
     </div>
     <div id="ma-roles"><div class="loading"><div class="spinner"></div>Loading roles...</div></div>
   </div>
@@ -672,8 +679,9 @@ td .tag{white-space:nowrap}
       <div><span class="card-title" id="ma-role-title">Role</span><span class="card-count" id="ma-role-meta"></span></div>
       <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="closeModelAccessRole()">Close</button>
     </div>
-    <label class="field-label">Exact model IDs (one per line)</label>
-    <textarea id="ma-role-models" rows="7" style="width:100%;background:var(--c2);color:var(--t);border:1px solid var(--bdr);border-radius:6px;padding:10px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;outline:none"></textarea>
+    <label class="field-label">Catalog models (multi-select; Ctrl/Cmd-click)</label>
+    <select id="ma-role-models" multiple size="10" style="width:100%;background:var(--c2);color:var(--t);border:1px solid var(--bdr);border-radius:6px;padding:6px;font-size:12px;font-family:inherit;outline:none"></select>
+    <input id="ma-role-extra" class="tbl-input" placeholder="Extra exact IDs not in the catalog (comma-separated)" style="width:100%;margin-top:6px;padding:7px 10px;font-size:11px">
     <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn btn-grn" onclick="saveModelAccessRoleModels()">Save models</button>
     </div>
@@ -975,7 +983,7 @@ function setTabBadge(tab, n, alert) {
 /* ================================================================
    Model access
    ================================================================ */
-var maRoles = [], maRole = null, maSubjects = [], maEffectiveSubject = null;
+var maRoles = [], maRole = null, maSubjects = [], maCatalog = [], maEffectiveSubject = null;
 
 function maURL(path) { return '/api/v2/tenants/default/model-access' + path; }
 
@@ -1000,16 +1008,69 @@ function splitModels(value) {
 function loadModelAccess() {
   Promise.all([
     fetchJSON(maURL('/roles')),
-    fetchJSON(maURL('/subjects?limit=200'))
+    fetchJSON(maURL('/subjects?limit=200')),
+    fetchJSON(maURL('/catalog')).catch(function() { return []; })
   ]).then(function(res) {
     maRoles = res[0] || [];
     maSubjects = res[1] || [];
+    maCatalog = res[2] || [];
     renderModelAccessRoles();
     renderModelAccessSubjects();
+    renderModelAccessCatalog([], 'ma-new-models', 'ma-new-extra', []);
+    if (maRole) renderModelAccessCatalog(maRole.models || [], 'ma-role-models', 'ma-role-extra', maRole.models || []);
   }).catch(function(err) {
     var el = document.getElementById('ma-roles');
     if (el) el.innerHTML = '<div class="err-msg">' + esc(err.message) + '</div>';
   });
+}
+
+function renderModelAccessCatalog(selected, selectID, extraID, roleModels) {
+  var sel = document.getElementById(selectID);
+  if (!sel) return;
+  var groups = {};
+  maCatalog.forEach(function(m) {
+    var provider = m.provider || 'other';
+    if (!groups[provider]) groups[provider] = [];
+    groups[provider].push(m);
+  });
+  var html = Object.keys(groups).sort().map(function(provider) {
+    return '<optgroup label="' + esc(provider) + '">' + groups[provider].map(function(m) {
+      var label = m.id + (m.display_name ? ' — ' + m.display_name : '');
+      return '<option value="' + esc(m.id) + '"' + (selected.indexOf(m.id) >= 0 ? ' selected' : '') + '>' + esc(label) + '</option>';
+    }).join('') + '</optgroup>';
+  }).join('');
+  sel.innerHTML = html;
+  var extraInput = document.getElementById(extraID);
+  if (extraInput) {
+    var known = {};
+    maCatalog.forEach(function(m) { known[m.id] = true; });
+    extraInput.value = (roleModels || []).filter(function(m) { return !known[m]; }).join(', ');
+  }
+  var note = document.getElementById('ma-catalog-note');
+  if (note) {
+    note.innerHTML = maCatalog.length
+      ? maCatalog.length + ' catalog models available. Multi-select with Ctrl/Cmd-click; use the extra field for IDs not in the catalog.'
+      : '<span style="color:var(--amb)">Catalog is empty. Click “Import catalog” or add exact IDs in the extra field.</span>';
+  }
+}
+
+function selectedModelIDs(selectID, extraID) {
+  var sel = document.getElementById(selectID);
+  var models = [];
+  if (sel) {
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].selected) models.push(sel.options[i].value);
+    }
+  }
+  var extra = document.getElementById(extraID);
+  return models.concat(splitModels(extra ? extra.value : '')).filter(function(m, i, arr) { return arr.indexOf(m) === i; });
+}
+
+function syncModelAccessCatalog() {
+  sendJSON(maURL('/catalog/sync'), 'POST').then(function(res) {
+    showToast('Catalog imported: ' + ((res && res.synced) || 0) + ' models', 'success');
+    loadModelAccess();
+  }).catch(function(err) { showToast('Catalog import failed: ' + err.message, 'error'); });
 }
 
 function renderModelAccessRoles() {
@@ -1034,14 +1095,15 @@ function renderModelAccessRoles() {
 
 function createModelAccessRole() {
   var name = (document.getElementById('ma-new-name').value || '').trim();
-  var models = splitModels(document.getElementById('ma-new-models').value);
+  var models = selectedModelIDs('ma-new-models', 'ma-new-extra');
   var isDefault = document.getElementById('ma-new-default').checked;
   if (!name) { showToast('Role name is required', 'error'); return; }
   sendJSON(maURL('/roles'), 'POST', {name: name, description: '', models: models, is_default: isDefault})
     .then(function(role) {
       showToast('Role created', 'success');
       document.getElementById('ma-new-name').value = '';
-      document.getElementById('ma-new-models').value = '';
+      document.getElementById('ma-new-extra').value = '';
+      renderModelAccessCatalog([], 'ma-new-models', 'ma-new-extra', []);
       document.getElementById('ma-new-default').checked = false;
       loadModelAccess();
       selectModelAccessRole(role.role_id);
@@ -1058,7 +1120,7 @@ function selectModelAccessRole(roleID) {
     document.getElementById('ma-role-card').style.display = '';
     document.getElementById('ma-role-title').textContent = maRole.name;
     document.getElementById('ma-role-meta').textContent = maRole.is_default ? 'default role' : (maRole.subject_count || 0) + ' people';
-    document.getElementById('ma-role-models').value = (maRole.models || []).join('\n');
+    renderModelAccessCatalog(maRole.models || [], 'ma-role-models', 'ma-role-extra', maRole.models || []);
     var el = document.getElementById('ma-role-subjects');
     if (!subjects.length) {
       el.innerHTML = '<div class="ts">No explicit assignments. ' + (maRole.is_default ? 'Everyone active receives this role automatically.' : 'Assign a subject by ID above.') + '</div>';
@@ -1080,7 +1142,7 @@ function closeModelAccessRole() {
 
 function saveModelAccessRoleModels() {
   if (!maRole) return;
-  var models = splitModels(document.getElementById('ma-role-models').value);
+  var models = selectedModelIDs('ma-role-models', 'ma-role-extra');
   sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/models'), 'PUT', {models: models})
     .then(function() {
       showToast('Role models saved', 'success');
