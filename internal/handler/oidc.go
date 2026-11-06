@@ -404,6 +404,18 @@ func (h *AuthHandler) HandleOIDCCallback(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "SSO profile could not be saved", http.StatusInternalServerError)
 		return
 	}
+	// Keep the policy subject in step with the directory. Without this,
+	// someone who logs in after the startup sync would not receive the
+	// tenant default role until the next pod restart. A failure is logged
+	// but does not block login; the next request or restart retries.
+	if h.orgStore != nil {
+		if tenantID, err := h.orgStore.EnsureDefaultTenant(r.Context()); err != nil {
+			slog.Warn("policy tenant lookup after OIDC login failed", "error", err)
+		} else if _, err := h.orgStore.SyncPartnerUserSubject(r.Context(), tenantID, user.UserID); err != nil {
+			slog.Warn("policy subject sync after OIDC login failed", "user_id", user.UserID, "error", err)
+		}
+	}
+
 	// The patch above can move the current partner_user_logins row (for
 	// example when the IdP email changed the email tag). Re-resolve the
 	// canonical login by the same verified UUID before writing the session,

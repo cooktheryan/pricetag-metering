@@ -319,6 +319,43 @@ func (s *Store) SyncPartnerUserSubjects(ctx context.Context, tenantID string) (i
 	return count, nil
 }
 
+// SyncPartnerUserSubject materializes one partner user as a policy subject.
+// OIDC login calls this after profile persistence so a person who logs in
+// after startup is immediately eligible for the default role. It is
+// idempotent: the subject ID is stable for an existing (tenant, type,
+// external_id) row.
+func (s *Store) SyncPartnerUserSubject(ctx context.Context, tenantID, userID string) (string, error) {
+	var active bool
+	var displayName string
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT active,
+		       COALESCE(NULLIF(tags->>'preferred_username', ''), NULLIF(tags->>'email', ''), user_id::text)
+		FROM partner_users WHERE user_id = $1`, userID).Scan(&active, &displayName); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrPartnerUserNotFound
+		}
+		return "", fmt.Errorf("partner user subject lookup: %w", err)
+	}
+	status := "inactive"
+	if active {
+		status = "active"
+	}
+	var subjectID string
+	if err := s.db.QueryRowContext(ctx, `
+		INSERT INTO policy_subjects
+			(subject_id, tenant_id, principal_type, external_id, display_name, status, source)
+		VALUES ($1, $2, $3, $4, $5, $6, 'partner')
+		ON CONFLICT (tenant_id, principal_type, external_id) DO UPDATE SET
+			display_name = EXCLUDED.display_name,
+			status = EXCLUDED.status,
+			updated_at = NOW()
+		RETURNING subject_id::text`,
+		uuid.NewString(), tenantID, PrincipalPartnerUser, userID, displayName, status).Scan(&subjectID); err != nil {
+		return "", fmt.Errorf("partner user subject upsert: %w", err)
+	}
+	return subjectID, nil
+}
+
 // BumpPolicyVersion increments the tenant's policy version and returns it.
 // Callers invalidate local caches after a successful mutation.
 func (s *Store) BumpPolicyVersion(ctx context.Context, tenantID string) (int64, error) {

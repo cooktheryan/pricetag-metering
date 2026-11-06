@@ -380,6 +380,19 @@ func TestSyncPartnerUserSubjects(t *testing.T) {
 	if _, err := s.GetEffectiveModelAccess(ctx, tenant, subjectID, false); !errors.Is(err, ErrModelAccessSubjectInactive) {
 		t.Fatalf("err = %v, want inactive", err)
 	}
+
+	// Single-user sync is idempotent and returns the same subject ID.
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE partner_users SET active = TRUE WHERE user_id = $1`, userID); err != nil {
+		t.Fatal(err)
+	}
+	again, err := s.SyncPartnerUserSubject(ctx, tenant, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != subjectID {
+		t.Fatalf("subject id changed: %s -> %s", subjectID, again)
+	}
 }
 
 func TestBumpPolicyVersion(t *testing.T) {

@@ -564,7 +564,7 @@ td .tag{white-space:nowrap}
 
 <!-- Console tabs -->
 <div class="vtabs">
-  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button><button class="vtab" id="vtab-safety-net" onclick="showTab('safety-net')">Safety Net</button><button class="vtab" id="vtab-pricing-discounts" onclick="showTab('pricing-discounts')">Pricing Discounts</button><button class="vtab" id="vtab-model-restrictions" onclick="showTab('model-restrictions')">Model Restrictions</button>
+  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button><button class="vtab" id="vtab-model-access" onclick="showTab('model-access')">Model access</button><button class="vtab" id="vtab-safety-net" onclick="showTab('safety-net')">Safety Net</button><button class="vtab" id="vtab-pricing-discounts" onclick="showTab('pricing-discounts')">Pricing Discounts</button><button class="vtab" id="vtab-model-restrictions" onclick="showTab('model-restrictions')">Model Restrictions</button>
   <div class="vtab-tools">
     <span id="last-updated"></span>
     <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="refreshTab(activeTab,true)">Refresh</button>
@@ -648,6 +648,60 @@ td .tag{white-space:nowrap}
 
 
 
+</div>
+
+<!-- ============ TAB: Model access ============ -->
+<div class="tab-panel" id="tab-model-access">
+  <div class="card">
+    <div class="card-hdr">
+      <div><span class="card-title">Model access roles</span><span class="card-count" id="ma-roles-count"></span></div>
+      <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelAccess()">Refresh</button>
+    </div>
+    <div class="ts" style="margin-bottom:12px">Roles grant exact public model IDs. At most one role is the tenant default and applies automatically to every active person. Roles never grant money; budgets are separate.</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+      <input id="ma-new-name" class="tbl-input" placeholder="New role name" style="min-width:180px;padding:7px 10px;font-size:12px">
+      <input id="ma-new-models" class="tbl-input" placeholder="model-a, model-b" style="flex:1;min-width:240px;padding:7px 10px;font-size:12px">
+      <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:6px"><input type="checkbox" id="ma-new-default" style="width:auto"> Default role</label>
+      <button class="btn btn-grn" onclick="createModelAccessRole()">Create role</button>
+    </div>
+    <div id="ma-roles"><div class="loading"><div class="spinner"></div>Loading roles...</div></div>
+  </div>
+
+  <div class="card" id="ma-role-card" style="display:none">
+    <div class="card-hdr">
+      <div><span class="card-title" id="ma-role-title">Role</span><span class="card-count" id="ma-role-meta"></span></div>
+      <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="closeModelAccessRole()">Close</button>
+    </div>
+    <label class="field-label">Exact model IDs (one per line)</label>
+    <textarea id="ma-role-models" rows="7" style="width:100%;background:var(--c2);color:var(--t);border:1px solid var(--bdr);border-radius:6px;padding:10px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;outline:none"></textarea>
+    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-grn" onclick="saveModelAccessRoleModels()">Save models</button>
+    </div>
+    <div style="margin-top:16px;border-top:1px solid var(--bdr);padding-top:14px">
+      <label class="field-label">Assign a subject by ID</label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <input id="ma-assign-subject" class="tbl-input" placeholder="subject UUID (from People below)" style="flex:1;min-width:280px;padding:7px 10px;font-size:12px">
+        <button class="btn btn-outline" onclick="assignModelAccessSubject()">Assign</button>
+      </div>
+      <div id="ma-role-subjects" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hdr">
+      <div><span class="card-title">People &amp; service identities</span><span class="card-count" id="ma-subjects-count"></span></div>
+      <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelAccessSubjects()">Refresh</button>
+    </div>
+    <div style="margin-bottom:10px"><input id="ma-subject-search" class="tbl-input" placeholder="Search name or external ID" oninput="loadModelAccessSubjects()" style="width:100%;padding:7px 10px;font-size:12px"></div>
+    <div id="ma-subjects"><div class="loading"><div class="spinner"></div>Loading subjects...</div></div>
+  </div>
+</div>
+
+<div class="partner-detail-ov" id="ma-effective-ov" onclick="if(event.target===this)closeModelAccessEffective()">
+  <section class="partner-detail-card" role="dialog" aria-modal="true" aria-labelledby="ma-effective-title">
+    <div class="partner-detail-head"><h2 id="ma-effective-title">Effective model access</h2><button class="partner-detail-close" onclick="closeModelAccessEffective()">×</button></div>
+    <div class="partner-detail-body" id="ma-effective-body"></div>
+  </section>
 </div>
 
 <!-- ============ TAB: Safety Net ============ -->
@@ -866,7 +920,7 @@ function resolveModelName(crdName) {
 /* ================================================================
    Tabs — one panel visible, lazy load on first open, deep-linkable
    ================================================================ */
-var TABS = ['people', 'safety-net', 'pricing-discounts', 'model-restrictions'];
+var TABS = ['people', 'model-access', 'safety-net', 'pricing-discounts', 'model-restrictions'];
 
 function showTab(name, pushHash) {
   if (TABS.indexOf(name) < 0) name = 'people';
@@ -888,6 +942,8 @@ function showTab(name, pushHash) {
 function refreshTab(name, manual) {
   if (name === 'people') {
     loadPartnerUsers();
+  } else if (name === 'model-access') {
+    loadModelAccess();
   } else if (name === 'safety-net') {
     loadSafetyNet();
   } else if (name === 'pricing-discounts') {
@@ -913,6 +969,237 @@ function setTabBadge(tab, n, alert) {
   } else {
     b.style.display = 'none';
   }
+}
+
+/* ================================================================
+   Model access
+   ================================================================ */
+var maRoles = [], maRole = null, maSubjects = [], maEffectiveSubject = null;
+
+function maURL(path) { return '/api/v2/tenants/default/model-access' + path; }
+
+function sendJSON(url, method, body) {
+  return fetch(url, {
+    method: method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  }).then(function(r) {
+    if (!r.ok) {
+      return r.text().then(function(t) { throw new Error(t.trim() || (r.status + ' ' + r.statusText)); });
+    }
+    if (r.status === 204) return null;
+    return r.json();
+  });
+}
+
+function splitModels(value) {
+  return String(value || '').split(/[\n,]+/).map(function(s) { return s.trim(); }).filter(Boolean);
+}
+
+function loadModelAccess() {
+  Promise.all([
+    fetchJSON(maURL('/roles')),
+    fetchJSON(maURL('/subjects?limit=200'))
+  ]).then(function(res) {
+    maRoles = res[0] || [];
+    maSubjects = res[1] || [];
+    renderModelAccessRoles();
+    renderModelAccessSubjects();
+  }).catch(function(err) {
+    var el = document.getElementById('ma-roles');
+    if (el) el.innerHTML = '<div class="err-msg">' + esc(err.message) + '</div>';
+  });
+}
+
+function renderModelAccessRoles() {
+  var count = document.getElementById('ma-roles-count');
+  if (count) count.textContent = maRoles.length ? '(' + maRoles.length + ')' : '';
+  var el = document.getElementById('ma-roles');
+  if (!el) return;
+  if (!maRoles.length) {
+    el.innerHTML = '<div class="ts">No roles yet. Create one above; set “Default role” for the baseline everyone receives.</div>';
+    return;
+  }
+  var rows = maRoles.map(function(r) {
+    return '<tr style="cursor:pointer" onclick="selectModelAccessRole(\'' + esc(r.role_id) + '\')">' +
+      '<td><strong>' + esc(r.name) + '</strong>' + (r.is_default ? ' <span class="badge badge-grn">default</span>' : '') + '</td>' +
+      '<td>' + (r.models || []).length + '</td>' +
+      '<td>' + (r.subject_count || 0) + '</td>' +
+      '<td class="ts">' + esc((r.models || []).slice(0, 4).join(', ')) + ((r.models || []).length > 4 ? '…' : '') + '</td>' +
+    '</tr>';
+  }).join('');
+  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Role</th><th>Models</th><th>People</th><th>Sample models</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function createModelAccessRole() {
+  var name = (document.getElementById('ma-new-name').value || '').trim();
+  var models = splitModels(document.getElementById('ma-new-models').value);
+  var isDefault = document.getElementById('ma-new-default').checked;
+  if (!name) { showToast('Role name is required', 'error'); return; }
+  sendJSON(maURL('/roles'), 'POST', {name: name, description: '', models: models, is_default: isDefault})
+    .then(function(role) {
+      showToast('Role created', 'success');
+      document.getElementById('ma-new-name').value = '';
+      document.getElementById('ma-new-models').value = '';
+      document.getElementById('ma-new-default').checked = false;
+      loadModelAccess();
+      selectModelAccessRole(role.role_id);
+    }).catch(function(err) { showToast('Create failed: ' + err.message, 'error'); });
+}
+
+function selectModelAccessRole(roleID) {
+  Promise.all([
+    fetchJSON(maURL('/roles/' + encodeURIComponent(roleID))),
+    fetchJSON(maURL('/roles/' + encodeURIComponent(roleID) + '/subjects'))
+  ]).then(function(res) {
+    maRole = res[0];
+    var subjects = res[1] || [];
+    document.getElementById('ma-role-card').style.display = '';
+    document.getElementById('ma-role-title').textContent = maRole.name;
+    document.getElementById('ma-role-meta').textContent = maRole.is_default ? 'default role' : (maRole.subject_count || 0) + ' people';
+    document.getElementById('ma-role-models').value = (maRole.models || []).join('\n');
+    var el = document.getElementById('ma-role-subjects');
+    if (!subjects.length) {
+      el.innerHTML = '<div class="ts">No explicit assignments. ' + (maRole.is_default ? 'Everyone active receives this role automatically.' : 'Assign a subject by ID above.') + '</div>';
+    } else {
+      el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Person</th><th>Type</th><th></th></tr></thead><tbody>' +
+        subjects.map(function(s) {
+          return '<tr><td>' + esc(s.display_name || s.external_id) + '</td><td class="ts">' + esc(s.principal_type) + '</td>' +
+            '<td><button class="btn btn-outline" style="padding:3px 8px;font-size:10px" onclick="removeModelAccessSubject(\'' + esc(maRole.role_id) + '\',\'' + esc(s.subject_id) + '\')">Remove</button></td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }
+    document.getElementById('ma-role-card').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }).catch(function(err) { showToast('Load role failed: ' + err.message, 'error'); });
+}
+
+function closeModelAccessRole() {
+  maRole = null;
+  document.getElementById('ma-role-card').style.display = 'none';
+}
+
+function saveModelAccessRoleModels() {
+  if (!maRole) return;
+  var models = splitModels(document.getElementById('ma-role-models').value);
+  sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/models'), 'PUT', {models: models})
+    .then(function() {
+      showToast('Role models saved', 'success');
+      loadModelAccess();
+      selectModelAccessRole(maRole.role_id);
+    }).catch(function(err) { showToast('Save failed: ' + err.message, 'error'); });
+}
+
+function assignModelAccessSubject() {
+  if (!maRole) return;
+  var subjectID = (document.getElementById('ma-assign-subject').value || '').trim();
+  if (!subjectID) { showToast('Subject ID is required', 'error'); return; }
+  sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/subjects'), 'POST', {subject_id: subjectID})
+    .then(function() {
+      document.getElementById('ma-assign-subject').value = '';
+      showToast('Assigned', 'success');
+      selectModelAccessRole(maRole.role_id);
+      loadModelAccess();
+    }).catch(function(err) { showToast('Assign failed: ' + err.message, 'error'); });
+}
+
+function removeModelAccessSubject(roleID, subjectID) {
+  sendJSON(maURL('/roles/' + encodeURIComponent(roleID) + '/subjects/' + encodeURIComponent(subjectID)), 'DELETE')
+    .then(function() { showToast('Removed', 'success'); selectModelAccessRole(roleID); loadModelAccess(); })
+    .catch(function(err) { showToast('Remove failed: ' + err.message, 'error'); });
+}
+
+function loadModelAccessSubjects() {
+  var q = (document.getElementById('ma-subject-search') || {}).value || '';
+  fetchJSON(maURL('/subjects?limit=200&q=' + encodeURIComponent(q))).then(function(subjects) {
+    maSubjects = subjects || [];
+    renderModelAccessSubjects();
+  }).catch(function(err) { showToast('Subjects failed: ' + err.message, 'error'); });
+}
+
+function renderModelAccessSubjects() {
+  var count = document.getElementById('ma-subjects-count');
+  if (count) count.textContent = maSubjects.length ? '(' + maSubjects.length + ')' : '';
+  var el = document.getElementById('ma-subjects');
+  if (!el) return;
+  if (!maSubjects.length) {
+    el.innerHTML = '<div class="ts">No subjects yet. People appear after SSO login or partner-user sync; service identities need an explicit subject.</div>';
+    return;
+  }
+  var rows = maSubjects.map(function(s) {
+    return '<tr style="cursor:pointer" onclick="showModelAccessEffective(\'' + esc(s.subject_id) + '\')">' +
+      '<td><strong>' + esc(s.display_name || s.external_id) + '</strong><div class="ts" style="font-size:10px">' + esc(s.external_id) + '</div></td>' +
+      '<td class="ts">' + esc(s.principal_type) + '</td>' +
+      '<td>' + esc(s.status) + '</td>' +
+      '<td class="ts" style="font-family:ui-monospace,monospace;font-size:10px">' + esc(s.subject_id) + '</td>' +
+    '</tr>';
+  }).join('');
+  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Person</th><th>Type</th><th>Status</th><th>Subject ID</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function showModelAccessEffective(subjectID) {
+  maEffectiveSubject = subjectID;
+  fetchJSON(maURL('/subjects/' + encodeURIComponent(subjectID) + '/effective')).then(function(e) {
+    var body = document.getElementById('ma-effective-body');
+    var chips = function(arr) { return (arr || []).length ? arr.map(function(m) { return '<span class="tag tag-blu">' + esc(m) + '</span>'; }).join(' ') : '<span class="ts">none</span>'; };
+    body.innerHTML =
+      '<div style="margin-bottom:10px"><strong>Effective:</strong> ' + (e.unrestricted ? '<span class="badge badge-grn">full catalog (super-admin)</span>' : chips(e.effective_models)) + '</div>' +
+      '<div class="ts" style="margin-bottom:4px">Default role: ' + (e.default_role_id ? esc(e.default_role_id) : 'none') + (e.default_excluded ? ' <span class="badge badge-red">excluded</span>' : '') + '</div>' +
+      '<div class="ts" style="margin-bottom:4px">Explicit roles: ' + chips(e.role_names) + '</div>' +
+      '<div class="ts" style="margin-bottom:4px">Direct grants: ' + chips(e.direct_models) + '</div>' +
+      '<div class="ts" style="margin-bottom:10px">Restriction: ' + (e.restriction_enabled ? chips(e.restriction_models) : 'none') + '</div>' +
+      '<div class="ts" style="margin-bottom:14px">Policy version: ' + esc(String(e.policy_version || 0)) + '</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn btn-outline" onclick="editModelAccessGrants()">Edit direct grants</button>' +
+        '<button class="btn btn-outline" onclick="editModelAccessRestriction(true)">Set restriction</button>' +
+        '<button class="btn btn-outline" onclick="editModelAccessRestriction(false)">Remove restriction</button>' +
+        '<button class="btn btn-outline" onclick="excludeModelAccessDefault()">Exclude from default</button>' +
+        (e.default_excluded ? '<button class="btn btn-outline" onclick="clearModelAccessDefaultExclusion()">Clear default exclusion</button>' : '') +
+      '</div>';
+    document.getElementById('ma-effective-ov').classList.add('show');
+  }).catch(function(err) { showToast('Effective access failed: ' + err.message, 'error'); });
+}
+
+function closeModelAccessEffective() {
+  document.getElementById('ma-effective-ov').classList.remove('show');
+}
+
+function editModelAccessGrants() {
+  if (!maEffectiveSubject) return;
+  var value = prompt('Direct grants: comma-separated exact model IDs (empty clears grants)', '');
+  if (value === null) return;
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/grants'), 'PUT', {models: splitModels(value)})
+    .then(function() { showToast('Grants saved', 'success'); showModelAccessEffective(maEffectiveSubject); })
+    .catch(function(err) { showToast('Grants failed: ' + err.message, 'error'); });
+}
+
+function editModelAccessRestriction(enable) {
+  if (!maEffectiveSubject) return;
+  if (!enable) {
+    sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/restriction'), 'PUT', {enabled: false, models: []})
+      .then(function() { showToast('Restriction removed', 'success'); showModelAccessEffective(maEffectiveSubject); })
+      .catch(function(err) { showToast('Restriction failed: ' + err.message, 'error'); });
+    return;
+  }
+  var value = prompt('Restrict to these exact model IDs. Leave empty to deny all models.', '');
+  if (value === null) return;
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/restriction'), 'PUT', {enabled: true, models: splitModels(value)})
+    .then(function() { showToast('Restriction saved', 'success'); showModelAccessEffective(maEffectiveSubject); })
+    .catch(function(err) { showToast('Restriction failed: ' + err.message, 'error'); });
+}
+
+function clearModelAccessDefaultExclusion() {
+  if (!maEffectiveSubject) return;
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/exclude-default'), 'DELETE')
+    .then(function() { showToast('Default exclusion cleared', 'success'); showModelAccessEffective(maEffectiveSubject); })
+    .catch(function(err) { showToast('Clear failed: ' + err.message, 'error'); });
+}
+
+function excludeModelAccessDefault() {
+  if (!maEffectiveSubject) return;
+  var reason = prompt('Reason for excluding this subject from the default role', '');
+  if (!reason) return;
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/exclude-default'), 'POST', {reason: reason})
+    .then(function() { showToast('Excluded from default', 'success'); showModelAccessEffective(maEffectiveSubject); })
+    .catch(function(err) { showToast('Exclude failed: ' + err.message, 'error'); });
 }
 
 var safetyNetPolicy = null, safetyNetModels = [], safetyNetDraft = null;
@@ -1074,7 +1361,7 @@ refreshTimer = setInterval(function() {
   if (document.querySelector('.modal-overlay.open, .confirm-overlay.open')) return;
   var ae = document.activeElement;
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return;
-  if (activeTab === 'people' || activeTab === 'safety-net') return; // editable tabs use explicit refresh/save
+  if (activeTab === 'people' || activeTab === 'model-access' || activeTab === 'safety-net') return; // editable tabs use explicit refresh/save
   refreshTab(activeTab, false);
 }, REFRESH_INTERVAL);
 
