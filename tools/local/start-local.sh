@@ -75,6 +75,7 @@ echo "==> starting metering-service"
   OIDC_REDIRECT_URL=http://localhost:8080/oauth/callback \
   OIDC_SCOPES="openid profile email" \
   OIDC_CLAIMS_DEBUG=false \
+  OIDC_DEVELOPMENT_MODE=true \
   OIDC_TEST_LOGIN=true \
   DEFAULT_KEY_EXPIRY_HOURS=2160 \
   MAX_KEY_EXPIRY_HOURS=8760 \
