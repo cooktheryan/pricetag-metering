@@ -36,6 +36,7 @@ func TestSyncCatalogFromPraxisConfig(t *testing.T) {
           - id: gpt-6.1-sol
             display_name: GPT 6.1 Sol
             owned_by: openai
+          - bare-string-model
           - id: shared-model
             display_name: Shared
             owned_by: cb-glm
@@ -47,14 +48,14 @@ func TestSyncCatalogFromPraxisConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count != 3 {
-		t.Fatalf("synced = %d, want 3", count)
+	if count != 4 {
+		t.Fatalf("synced = %d, want 4", count)
 	}
 	models, err := s.ListCatalogModels(ctx, tenant)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(models) != 3 {
+	if len(models) != 4 {
 		t.Fatalf("catalog = %#v", models)
 	}
 	var shared CatalogModel
@@ -75,11 +76,11 @@ func TestSyncCatalogFromPraxisConfig(t *testing.T) {
 
 	// Re-sync is idempotent.
 	count, err = s.SyncCatalogFromPraxisConfig(ctx, tenant, path)
-	if err != nil || count != 3 {
+	if err != nil || count != 4 {
 		t.Fatalf("resync = %d, err %v", count, err)
 	}
 	models, err = s.ListCatalogModels(ctx, tenant)
-	if err != nil || len(models) != 3 {
+	if err != nil || len(models) != 4 {
 		t.Fatalf("catalog after resync = %#v, err %v", models, err)
 	}
 }
