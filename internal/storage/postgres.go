@@ -55,9 +55,12 @@ type UsageStats struct {
 	// Dollar quota (see quota.go). QuotaUSD is the effective monthly limit
 	// including grants; SpendUSD the month-to-date spend on the same basis
 	// the dashboard shows. MonthEnds is when the month's budget resets.
-	QuotaUSD  float64 `json:"quotaUsd"`
-	SpendUSD  float64 `json:"spendUsd"`
-	MonthEnds string  `json:"monthEnds"`
+	QuotaUSD      float64 `json:"quotaUsd"`
+	RoleBudgetUSD float64 `json:"roleBudgetUsd,omitempty"`
+	CreditUSD     float64 `json:"creditUsd,omitempty"`
+	BudgetSource  string  `json:"budgetSource,omitempty"`
+	SpendUSD      float64 `json:"spendUsd"`
+	MonthEnds     string  `json:"monthEnds"`
 
 	// OverLimitModel marks that this request passed via the post-cap model
 	// allowance (issue #22) rather than being under budget. Additive for
@@ -532,6 +535,9 @@ func (s *Store) getMonthlyUsage(ctx context.Context, username, model string, exe
 	stats := computeUsageStats(decision.TokensUsed, s.tokenQuota)
 	enforce := s.quotaEnforcement.Load()
 	stats.QuotaUSD = decision.LimitUSD
+	stats.RoleBudgetUSD = decision.RoleBudgetUSD
+	stats.CreditUSD = decision.CreditUSD
+	stats.BudgetSource = decision.BudgetSource
 	stats.SpendUSD = decision.SpentUSD
 	stats.MonthEnds = decision.MonthEnds.UTC().Format(time.RFC3339)
 	stats.ModelAllowed = decision.ModelAllowed(model)

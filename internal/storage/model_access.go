@@ -98,6 +98,7 @@ func (s *Store) migrateModelAccess(ctx context.Context) error {
 			description TEXT NOT NULL DEFAULT '',
 			owner_subject_id UUID NULL REFERENCES policy_subjects(subject_id) ON DELETE SET NULL,
 			is_default BOOLEAN NOT NULL DEFAULT FALSE,
+			monthly_usd NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (monthly_usd >= 0),
 			created_by TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_by TEXT NOT NULL DEFAULT '',
@@ -106,6 +107,7 @@ func (s *Store) migrateModelAccess(ctx context.Context) error {
 			UNIQUE (tenant_id, name),
 			UNIQUE (role_id, tenant_id)
 		)`,
+		`ALTER TABLE model_access_roles ADD COLUMN IF NOT EXISTS monthly_usd NUMERIC(12,2) NOT NULL DEFAULT 0`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS model_access_roles_one_default ON model_access_roles (tenant_id) WHERE is_default AND retired_at IS NULL`,
 		`CREATE INDEX IF NOT EXISTS model_access_roles_tenant_idx ON model_access_roles (tenant_id, retired_at)`,
 
@@ -170,6 +172,21 @@ func (s *Store) migrateModelAccess(ctx context.Context) error {
 			PRIMARY KEY (tenant_id, subject_id),
 			FOREIGN KEY (subject_id, tenant_id) REFERENCES policy_subjects(subject_id, tenant_id) ON DELETE CASCADE
 		)`,
+
+		`CREATE TABLE IF NOT EXISTS quota_credits (
+			credit_id UUID PRIMARY KEY,
+			tenant_id UUID NOT NULL REFERENCES policy_tenants(tenant_id) ON DELETE CASCADE,
+			subject_id UUID NOT NULL,
+			amount_usd NUMERIC(12,2) NOT NULL CHECK (amount_usd > 0),
+			expires_at TIMESTAMPTZ NULL,
+			reason TEXT NOT NULL,
+			created_by TEXT NOT NULL DEFAULT '',
+			approved_by TEXT NULL,
+			request_id TEXT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			FOREIGN KEY (subject_id, tenant_id) REFERENCES policy_subjects(subject_id, tenant_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS quota_credits_subject_idx ON quota_credits (tenant_id, subject_id, expires_at)`,
 
 		`CREATE TABLE IF NOT EXISTS catalog_models (
 			tenant_id UUID NOT NULL REFERENCES policy_tenants(tenant_id) ON DELETE CASCADE,

@@ -660,18 +660,9 @@ td .tag{white-space:nowrap}
         <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelAccess()">Refresh</button>
       </div>
     </div>
-    <div class="ts" style="margin-bottom:12px">Roles grant exact public model IDs. At most one role is the tenant default and applies automatically to every active person. Roles never grant money; budgets are separate.</div>
+    <div class="ts" style="margin-bottom:12px">Roles grant exact public model IDs and may add a per-member monthly budget. At most one role is the tenant default and applies automatically to every active person. Multiple role budgets add up; model access and budget are still enforced separately.</div>
     <div id="ma-catalog-note" class="ts" style="margin-bottom:10px"></div>
-    <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:14px">
-      <input id="ma-new-name" class="tbl-input" placeholder="New role name" style="min-width:180px;padding:7px 10px;font-size:12px">
-      <div style="flex:1;min-width:300px">
-        <div id="ma-new-models-summary" class="ts" style="margin-bottom:4px">No models selected</div>
-        <button class="btn btn-outline" style="padding:5px 12px;font-size:11px" onclick="openModelPicker('new')">Choose models</button>
-        <input id="ma-new-extra" class="tbl-input" placeholder="Extra exact IDs not in the catalog (comma-separated)" style="width:100%;margin-top:6px;padding:7px 10px;font-size:11px">
-      </div>
-      <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:6px;margin-top:8px"><input type="checkbox" id="ma-new-default" style="width:auto"> Default role</label>
-      <button class="btn btn-grn" style="margin-top:8px" onclick="createModelAccessRole()">Create role</button>
-    </div>
+    <div style="margin-bottom:14px"><button class="btn btn-grn" onclick="openRoleWizard()">Create role…</button> <span class="ts">Guided: name → default → models → people → budget → review.</span></div>
     <div id="ma-roles"><div class="loading"><div class="spinner"></div>Loading roles...</div></div>
   </div>
 
@@ -687,8 +678,11 @@ td .tag{white-space:nowrap}
     <div id="ma-role-models-summary" class="ts" style="margin-bottom:6px">No models selected</div>
     <button class="btn btn-outline" style="padding:5px 12px;font-size:11px" onclick="openModelPicker('role')">Edit models</button>
     <input id="ma-role-extra" class="tbl-input" placeholder="Extra exact IDs not in the catalog (comma-separated)" style="width:100%;margin-top:6px;padding:7px 10px;font-size:11px">
-    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-grn" onclick="saveModelAccessRoleModels()">Save models</button>
+      <label class="field-label" style="margin:0">$ / person / month</label>
+      <input id="ma-role-budget" type="number" min="0" step="1" class="tbl-input" style="width:120px;padding:7px 10px;font-size:12px" title="Adds to the member's budget; 0 falls back to the global default">
+      <button class="btn btn-outline" onclick="saveModelAccessRoleBudget()">Save budget</button>
     </div>
     <div style="margin-top:16px;border-top:1px solid var(--bdr);padding-top:14px">
       <label class="field-label">Assign people</label>
@@ -727,6 +721,70 @@ td .tag{white-space:nowrap}
     <div class="partner-detail-head"><h2 id="ma-effective-title">Effective model access</h2><button class="partner-detail-close" onclick="closeModelAccessEffective()">×</button></div>
     <div class="partner-detail-body" id="ma-effective-body"></div>
   </section>
+</div>
+
+<div class="modal-overlay" id="ma-role-wizard">
+  <div class="modal" style="max-width:640px">
+    <button class="modal-close" onclick="closeRoleWizard()">&times;</button>
+    <div class="modal-title">Create model-access role</div>
+
+    <div id="ma-wizard-step1">
+      <div class="ts" style="margin-bottom:10px">Step 1 of 6</div>
+      <div class="field"><label>Role name</label><input type="text" id="ma-new-name" placeholder="e.g. Research"></div>
+    </div>
+
+    <div id="ma-wizard-step2" style="display:none">
+      <div class="ts" style="margin-bottom:10px">Step 2 of 6</div>
+      <label style="font-size:12px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="ma-new-default" style="width:auto" onchange="renderRoleWizard()"> Make this the default role (applies to every active person)</label>
+      <div class="ts" style="margin-top:6px">The default role is the baseline every active person receives. Only one default role can exist.</div>
+      <div id="ma-wizard-replace-wrap" style="display:none;margin-top:10px">
+        <div class="warning"><span class="icon">!</span><div id="ma-wizard-replace-text"></div></div>
+        <label style="font-size:12px;display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="ma-wizard-replace" style="width:auto"> Replace the existing default role</label>
+      </div>
+    </div>
+
+    <div id="ma-wizard-step3" style="display:none">
+      <div class="ts" style="margin-bottom:10px">Step 3 of 6</div>
+      <div class="field"><label>Models</label><div id="ma-new-models-summary" class="ts">No models selected</div></div>
+      <button class="btn btn-outline" onclick="openModelPicker('new')">Choose models</button>
+      <input id="ma-new-extra" class="tbl-input" placeholder="Extra exact IDs not in the catalog (comma-separated)" style="width:100%;margin-top:8px;padding:7px 10px;font-size:11px">
+      <div class="ts" style="margin-top:8px">A role with no models grants no access. Default-role models are the baseline everyone receives.</div>
+    </div>
+
+    <div id="ma-wizard-step4" style="display:none">
+      <div class="ts" style="margin-bottom:10px">Step 4 of 6</div>
+      <div id="ma-wizard-people" class="field">
+        <label>Assign people (optional)</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <select id="ma-wizard-filter-field" style="background:var(--c2);color:var(--t);border:1px solid var(--bdr);border-radius:6px;padding:7px 8px;font-size:12px;font-family:inherit;outline:none">
+            <option value="">No filter</option>
+            <option value="cost_center">Cost center</option>
+            <option value="organization">Organization</option>
+            <option value="group">Group</option>
+          </select>
+          <input id="ma-wizard-filter-value" class="tbl-input" placeholder="Exact value" style="flex:1;min-width:180px;padding:7px 10px;font-size:12px">
+        </div>
+        <div class="ts" style="margin-top:6px">Assignment is a one-time snapshot of the people matching now; future directory changes are not automatic. You can also assign people later from the role card.</div>
+      </div>
+    </div>
+
+    <div id="ma-wizard-step5" style="display:none">
+      <div class="ts" style="margin-bottom:10px">Step 5 of 6</div>
+      <div class="field"><label>Monthly budget per member (USD, optional)</label><input type="number" id="ma-new-budget" min="0" step="1" placeholder="e.g. 300"><div class="ts">Adds to the member's budget across roles. Empty/0 falls back to the global default. Temporary extra credits are added per person later.</div></div>
+    </div>
+
+    <div id="ma-wizard-step6" style="display:none">
+      <div class="ts" style="margin-bottom:10px">Step 6 of 6</div>
+      <div id="ma-wizard-review" class="ts"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="ma-wizard-back" onclick="roleWizardBack()" style="padding:7px 18px;font-size:11px">Back</button>
+      <button class="btn btn-outline" onclick="closeRoleWizard()" style="padding:7px 18px;font-size:11px">Cancel</button>
+      <button class="btn btn-grn" id="ma-wizard-next" onclick="roleWizardNext()">Next</button>
+      <button class="btn btn-grn" id="ma-wizard-create" onclick="createModelAccessRole()" style="display:none">Create role</button>
+    </div>
+  </div>
 </div>
 
 <div class="modal-overlay" id="ma-models-modal">
@@ -1147,6 +1205,7 @@ function saveModelPicker() {
   var models = Array.from(maPickerSelection);
   if (maPickerTarget === 'new') maNewModels = models; else maRoleModels = models;
   renderModelSummary(maPickerTarget);
+  if (maPickerTarget === 'new' && document.getElementById('ma-role-wizard').classList.contains('open')) renderRoleWizard();
   closeModelPicker();
 }
 
@@ -1170,29 +1229,128 @@ function renderModelAccessRoles() {
     return '<tr style="cursor:pointer" onclick="selectModelAccessRole(\'' + esc(r.role_id) + '\')">' +
       '<td><strong>' + esc(r.name) + '</strong>' + (r.is_default ? ' <span class="badge badge-grn">default</span>' : '') + '</td>' +
       '<td>' + (r.models || []).length + '</td>' +
+      '<td>' + (r.monthly_usd ? '$' + r.monthly_usd + '/person' : '—') + '</td>' +
       '<td>' + (r.subject_count || 0) + '</td>' +
       '<td class="ts">' + esc((r.models || []).slice(0, 4).join(', ')) + ((r.models || []).length > 4 ? '…' : '') + '</td>' +
     '</tr>';
   }).join('');
-  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Role</th><th>Models</th><th>People</th><th>Sample models</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Role</th><th>Models</th><th>Budget</th><th>People</th><th>Sample models</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+var maWizardStep = 1;
+
+function openRoleWizard() {
+  maWizardStep = 1;
+  maNewModels = [];
+  document.getElementById('ma-new-name').value = '';
+  document.getElementById('ma-new-extra').value = '';
+  document.getElementById('ma-new-budget').value = '';
+  document.getElementById('ma-new-default').checked = false;
+  document.getElementById('ma-wizard-replace').checked = false;
+  document.getElementById('ma-wizard-filter-field').value = '';
+  document.getElementById('ma-wizard-filter-value').value = '';
+  renderModelSummary('new');
+  renderRoleWizard();
+  document.getElementById('ma-role-wizard').classList.add('open');
+}
+
+function closeRoleWizard() {
+  document.getElementById('ma-role-wizard').classList.remove('open');
+}
+
+function renderRoleWizard() {
+  var step = maWizardStep;
+  for (var i = 1; i <= 6; i++) {
+    var el = document.getElementById('ma-wizard-step' + i);
+    if (el) el.style.display = i === step ? '' : 'none';
+  }
+  var isDefault = document.getElementById('ma-new-default').checked;
+  var existingDefault = maRoles.filter(function(r) { return r.is_default; })[0];
+  var replaceWrap = document.getElementById('ma-wizard-replace-wrap');
+  if (replaceWrap) {
+    replaceWrap.style.display = isDefault && existingDefault ? '' : 'none';
+    document.getElementById('ma-wizard-replace-text').textContent = existingDefault
+      ? 'A default role already exists: "' + existingDefault.name + '". Creating another default replaces it.'
+      : '';
+  }
+  if (document.getElementById('ma-wizard-people')) {
+    document.getElementById('ma-wizard-people').style.display = isDefault ? 'none' : '';
+  }
+  if (step === 3) renderModelSummary('new');
+  if (step === 6) {
+    var models = maNewModels.concat(splitModels(document.getElementById('ma-new-extra').value));
+    var filterField = document.getElementById('ma-wizard-filter-field').value;
+    var filterValue = (document.getElementById('ma-wizard-filter-value').value || '').trim();
+    var budget = parseFloat(document.getElementById('ma-new-budget').value || '0') || 0;
+    document.getElementById('ma-wizard-review').innerHTML =
+      '<div><strong>Name:</strong> ' + esc(document.getElementById('ma-new-name').value || '') + '</div>' +
+      '<div><strong>Default:</strong> ' + (isDefault ? 'yes — all active people' + (existingDefault ? ' (replaces ' + esc(existingDefault.name) + ')' : '') : 'no') + '</div>' +
+      '<div><strong>Models:</strong> ' + (models.length ? esc(models.join(', ')) : 'none (grants no access)') + '</div>' +
+      '<div><strong>People:</strong> ' + (isDefault ? 'all active people' : (filterField && filterValue ? esc(filterField) + ' = ' + esc(filterValue) + ' (one-time snapshot)' : 'none yet — assign later')) + '</div>' +
+      '<div><strong>Budget:</strong> ' + (budget > 0 ? '$' + budget + '/person/month' : 'no role budget — inherits global default') + '</div>';
+  }
+  document.getElementById('ma-wizard-back').style.display = step === 1 ? 'none' : '';
+  document.getElementById('ma-wizard-next').style.display = step === 6 ? 'none' : '';
+  document.getElementById('ma-wizard-create').style.display = step === 6 ? '' : 'none';
+}
+
+function roleWizardNext() {
+  var name = (document.getElementById('ma-new-name').value || '').trim();
+  var isDefault = document.getElementById('ma-new-default').checked;
+  var existingDefault = maRoles.filter(function(r) { return r.is_default; })[0];
+  if (maWizardStep === 1) {
+    if (!name) { showToast('Role name is required', 'error'); return; }
+  }
+  if (maWizardStep === 2) {
+    if (isDefault && existingDefault && !document.getElementById('ma-wizard-replace').checked) {
+      showToast('Confirm replacing the existing default role', 'error'); return;
+    }
+  }
+  if (maWizardStep === 3) {
+    var models = maNewModels.concat(splitModels(document.getElementById('ma-new-extra').value));
+    if (!models.length && !confirm('This role has no models and will grant no access. Continue?')) return;
+  }
+  if (maWizardStep === 4 && !isDefault) {
+    var field = document.getElementById('ma-wizard-filter-field').value;
+    var value = (document.getElementById('ma-wizard-filter-value').value || '').trim();
+    if ((field && !value) || (!field && value)) { showToast('Choose a filter field and value, or leave both empty', 'error'); return; }
+  }
+  if (maWizardStep === 5) {
+    var budget = parseFloat(document.getElementById('ma-new-budget').value || '0');
+    if (isNaN(budget) || budget < 0) { showToast('Budget must be zero or positive', 'error'); return; }
+  }
+  maWizardStep++;
+  renderRoleWizard();
+}
+
+function roleWizardBack() {
+  if (maWizardStep > 1) { maWizardStep--; renderRoleWizard(); }
 }
 
 function createModelAccessRole() {
   var name = (document.getElementById('ma-new-name').value || '').trim();
   var models = maNewModels.concat(splitModels(document.getElementById('ma-new-extra').value));
   var isDefault = document.getElementById('ma-new-default').checked;
+  var monthlyUSD = parseFloat(document.getElementById('ma-new-budget').value || '0') || 0;
   if (!name) { showToast('Role name is required', 'error'); return; }
-  sendJSON(maURL('/roles'), 'POST', {name: name, description: '', models: models, is_default: isDefault})
-    .then(function(role) {
-      showToast('Role created', 'success');
-      document.getElementById('ma-new-name').value = '';
-      document.getElementById('ma-new-extra').value = '';
-      maNewModels = [];
-      renderModelSummary('new');
-      document.getElementById('ma-new-default').checked = false;
-      loadModelAccess();
-      selectModelAccessRole(role.role_id);
-    }).catch(function(err) { showToast('Create failed: ' + err.message, 'error'); });
+  var existingDefault = maRoles.filter(function(r) { return r.is_default; })[0];
+  var replaceDefault = isDefault && existingDefault && document.getElementById('ma-wizard-replace').checked;
+  var filterField = document.getElementById('ma-wizard-filter-field').value;
+  var filterValue = (document.getElementById('ma-wizard-filter-value').value || '').trim();
+  sendJSON(maURL('/roles'), 'POST', {
+    name: name, description: '', models: models, is_default: isDefault,
+    replace_default: !!replaceDefault, monthly_usd: monthlyUSD
+  }).then(function(role) {
+    var applyPeople = !isDefault && filterField && filterValue
+      ? sendJSON(maURL('/roles/' + encodeURIComponent(role.role_id) + '/subjects/filter'), 'POST', {field: filterField, value: filterValue})
+      : Promise.resolve(null);
+    return applyPeople.then(function() { return role; });
+  }).then(function(role) {
+    showToast('Role created', 'success');
+    closeRoleWizard();
+    loadModelAccess();
+    selectModelAccessRole(role.role_id);
+  }).catch(function(err) { showToast('Create failed: ' + err.message, 'error'); });
 }
 
 function selectModelAccessRole(roleID) {
@@ -1204,7 +1362,8 @@ function selectModelAccessRole(roleID) {
     var subjects = res[1] || [];
     document.getElementById('ma-role-card').style.display = '';
     document.getElementById('ma-role-title').textContent = maRole.name;
-    document.getElementById('ma-role-meta').textContent = maRole.is_default ? 'default role · ' + (maRole.subject_count || 0) + ' active people' : (maRole.subject_count || 0) + ' people';
+    document.getElementById('ma-role-meta').textContent = (maRole.is_default ? 'default role · ' + (maRole.subject_count || 0) + ' active people' : (maRole.subject_count || 0) + ' people') + (maRole.monthly_usd ? ' · $' + maRole.monthly_usd + '/person' : '');
+    document.getElementById('ma-role-budget').value = maRole.monthly_usd || '';
     maRoleModels = (maRole.models || []).slice();
     renderModelSummary('role');
     renderRolePersonPicker();
@@ -1238,6 +1397,17 @@ function retireModelAccessRole() {
       closeModelAccessRole();
       loadModelAccess();
     }).catch(function(err) { showToast('Retire failed: ' + err.message, 'error'); });
+}
+
+function saveModelAccessRoleBudget() {
+  if (!maRole) return;
+  var amount = parseFloat(document.getElementById('ma-role-budget').value || '0') || 0;
+  sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/budget'), 'PUT', {monthly_usd: amount})
+    .then(function(role) {
+      maRole = role;
+      showToast('Role budget saved', 'success');
+      loadModelAccess().then(function() { selectModelAccessRole(role.role_id); });
+    }).catch(function(err) { showToast('Budget save failed: ' + err.message, 'error'); });
 }
 
 function saveModelAccessRoleModels() {
@@ -1380,6 +1550,14 @@ function showModelAccessEffective(subjectID) {
       (options ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><select id="ma-add-role" class="tbl-input" style="min-width:220px;padding:6px 8px;font-size:12px"><option value="">Add a role…</option>' + options + '</select><button class="btn btn-outline" onclick="addRoleToEffective()">Add role</button></div>' : '<div class="ts" style="margin-bottom:10px">All roles assigned.</div>') +
       '<div class="ts" style="margin-bottom:4px">Direct grants: ' + chips(e.direct_models) + '</div>' +
       '<div class="ts" style="margin-bottom:10px">Restriction: ' + (e.restriction_enabled ? chips(e.restriction_models) : 'none') + '</div>' +
+      '<div class="ts" style="margin-bottom:4px">Extra budget credits</div>' +
+      '<div id="ma-credit-list" class="ts" style="margin-bottom:6px">Loading…</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
+        '<input id="ma-credit-amount" type="number" min="1" step="1" class="tbl-input" placeholder="$" style="width:80px;padding:6px 8px;font-size:12px">' +
+        '<input id="ma-credit-expiry" type="date" class="tbl-input" style="padding:6px 8px;font-size:12px">' +
+        '<input id="ma-credit-reason" class="tbl-input" placeholder="Reason" style="flex:1;min-width:150px;padding:6px 8px;font-size:12px">' +
+        '<button class="btn btn-outline" onclick="addModelAccessCredit()">Add credit</button>' +
+      '</div>' +
       '<div class="ts" style="margin-bottom:14px">Policy version: ' + esc(String(e.policy_version || 0)) + '</div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
         '<button class="btn btn-outline" onclick="editModelAccessGrants()">Edit direct grants</button>' +
@@ -1388,8 +1566,54 @@ function showModelAccessEffective(subjectID) {
         '<button class="btn btn-outline" onclick="excludeModelAccessDefault()">Exclude from default</button>' +
         (e.default_excluded ? '<button class="btn btn-outline" onclick="clearModelAccessDefaultExclusion()">Clear default exclusion</button>' : '') +
       '</div>';
+    var expiry = document.getElementById('ma-credit-expiry');
+    if (expiry && !expiry.value) {
+      var now = new Date();
+      var eom = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      expiry.value = eom.toISOString().slice(0, 10);
+    }
     document.getElementById('ma-effective-ov').classList.add('show');
+    loadModelAccessCredits(subjectID);
   }).catch(function(err) { showToast('Effective access failed: ' + err.message, 'error'); });
+}
+
+function loadModelAccessCredits(subjectID) {
+  fetchJSON(maURL('/subjects/' + encodeURIComponent(subjectID) + '/credits')).then(function(credits) {
+    var el = document.getElementById('ma-credit-list');
+    if (!el) return;
+    if (!credits.length) { el.textContent = 'No extra credits.'; return; }
+    el.innerHTML = credits.map(function(c) {
+      return '<div style="display:flex;gap:8px;align-items:center;margin:2px 0">' +
+        '<span class="tag tag-blu">$' + esc(String(c.amount_usd)) + '</span>' +
+        '<span>' + (c.expires_at ? 'expires ' + esc(String(c.expires_at).slice(0, 10)) : 'no expiry') + '</span>' +
+        '<span class="ts">' + esc(c.reason) + '</span>' +
+        '<button class="btn btn-outline" style="padding:2px 6px;font-size:10px" onclick="removeModelAccessCredit(\'' + esc(c.credit_id) + '\')">Remove</button>' +
+      '</div>';
+    }).join('');
+  }).catch(function() { var el = document.getElementById('ma-credit-list'); if (el) el.textContent = 'Credits unavailable.'; });
+}
+
+function addModelAccessCredit() {
+  if (!maEffectiveSubject) return;
+  var amount = parseFloat(document.getElementById('ma-credit-amount').value || '0');
+  var reason = (document.getElementById('ma-credit-reason').value || '').trim();
+  var date = document.getElementById('ma-credit-expiry').value;
+  if (!(amount > 0) || !reason) { showToast('Amount and reason are required', 'error'); return; }
+  var expires = date ? new Date(date + 'T23:59:59Z').toISOString() : null;
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/credits'), 'POST', {amount_usd: amount, expires_at: expires, reason: reason})
+    .then(function() {
+      showToast('Credit added', 'success');
+      document.getElementById('ma-credit-amount').value = '';
+      document.getElementById('ma-credit-reason').value = '';
+      loadModelAccessCredits(maEffectiveSubject);
+    }).catch(function(err) { showToast('Credit failed: ' + err.message, 'error'); });
+}
+
+function removeModelAccessCredit(creditID) {
+  if (!maEffectiveSubject) return;
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/credits/' + encodeURIComponent(creditID)), 'DELETE')
+    .then(function() { showToast('Credit removed', 'success'); loadModelAccessCredits(maEffectiveSubject); })
+    .catch(function(err) { showToast('Remove credit failed: ' + err.message, 'error'); });
 }
 
 function addRoleToEffective() {

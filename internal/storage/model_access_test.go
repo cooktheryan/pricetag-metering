@@ -483,7 +483,7 @@ func TestModelAccessAdminCRUD(t *testing.T) {
 	tenant, _ := s.EnsureDefaultTenant(ctx)
 	subject := createTestSubject(t, s, ctx, tenant, PrincipalPartnerUser, uuid.NewString(), "active")
 
-	role, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Engineer", "baseline", []string{"model-b", "model-a"}, true)
+	role, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Engineer", "baseline", []string{"model-b", "model-a"}, true, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -512,7 +512,7 @@ func TestModelAccessAdminCRUD(t *testing.T) {
 		t.Fatalf("default role name = %q", effective.DefaultRoleName)
 	}
 
-	research, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Research", "", []string{"model-d"}, false)
+	research, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Research", "", []string{"model-d"}, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -583,7 +583,7 @@ func TestModelAccessAdminCRUD(t *testing.T) {
 func TestDefaultRoleSubjectCount(t *testing.T) {
 	s, ctx := openTestStore(t)
 	tenant, _ := s.EnsureDefaultTenant(ctx)
-	role, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Engineer", "", []string{"model-a"}, true)
+	role, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Engineer", "", []string{"model-a"}, true, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -610,7 +610,7 @@ func TestDefaultRoleSubjectCount(t *testing.T) {
 func TestAssignModelAccessRoleSubjects(t *testing.T) {
 	s, ctx := openTestStore(t)
 	tenant, _ := s.EnsureDefaultTenant(ctx)
-	role, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Research", "", []string{"model-a"}, false)
+	role, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Research", "", []string{"model-a"}, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +645,7 @@ func TestAssignModelAccessRoleSubjects(t *testing.T) {
 func TestAssignModelAccessRoleByFilter(t *testing.T) {
 	s, ctx := openTestStore(t)
 	tenant, _ := s.EnsureDefaultTenant(ctx)
-	role, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Cost center role", "", []string{"model-a"}, false)
+	role, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Cost center role", "", []string{"model-a"}, false, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -725,6 +725,75 @@ func TestMonthlyUsageWithModelAllowedOverride(t *testing.T) {
 	}
 	if denied.ModelAllowed || denied.HasAccess {
 		t.Fatalf("denied = %#v", denied)
+	}
+}
+
+func TestRoleBudgetAndCredits(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	if _, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Engineer", "", nil, true, 300); err != nil {
+		t.Fatal(err)
+	}
+	super, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Super users", "", nil, false, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	username := "budget@example.com"
+	userID := uuid.NewString()
+	if _, err := s.CreatePartnerUser(ctx, "test", userID, map[string]any{
+		"email": username, "first_name": "Budget", "last_name": "User",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SyncPartnerUserSubjects(ctx, tenant); err != nil {
+		t.Fatal(err)
+	}
+	subjectID, _, err := s.ResolvePolicySubjectByUsername(ctx, tenant, username)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AssignModelAccessRole(ctx, tenant, super.RoleID, subjectID, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.GetRoleBudgetUSD(ctx, tenant, subjectID); err != nil || got != 500 {
+		t.Fatalf("role budget = %v, err %v; want 500", got, err)
+	}
+	defaultRole, err := s.GetDefaultModelAccessRole(ctx, tenant)
+	if err != nil || defaultRole.MonthlyUSD != 300 {
+		t.Fatalf("default role budget = %#v, err %v", defaultRole, err)
+	}
+
+	future := time.Now().Add(24 * time.Hour)
+	past := time.Now().Add(-time.Hour)
+	if _, err := s.AddQuotaCredit(ctx, tenant, subjectID, 50, &future, "launch", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddQuotaCredit(ctx, tenant, subjectID, 100, &past, "expired", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.GetActiveCreditUSD(ctx, tenant, subjectID); err != nil || got != 50 {
+		t.Fatalf("credits = %v, err %v; want 50", got, err)
+	}
+	decision, _, err := s.QuotaDecisionCached(ctx, username, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.BaseUSD != 500 || decision.LimitUSD != 550 || decision.BudgetSource != "role" {
+		t.Fatalf("quota decision = %#v", decision)
+	}
+	if err := s.SetModelAccessRoleBudget(ctx, tenant, super.RoleID, "admin", 250); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.GetRoleBudgetUSD(ctx, tenant, subjectID); err != nil || got != 550 {
+		t.Fatalf("role budget after update = %v, err %v; want 550", got, err)
+	}
+
+	// Excluding the subject from the default drops its $300 contribution.
+	if err := s.ExcludeSubjectFromDefault(ctx, tenant, subjectID, "admin", "test", nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.GetRoleBudgetUSD(ctx, tenant, subjectID); err != nil || got != 250 {
+		t.Fatalf("excluded role budget = %v, err %v; want 250", got, err)
 	}
 }
 

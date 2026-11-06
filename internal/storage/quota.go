@@ -292,8 +292,11 @@ type QuotaDecision struct {
 	// decision; the dedicated model-policy endpoint owns its public schema.
 	ModelPolicyActive bool     `json:"-"`
 	UserAllowedModels []string `json:"-"`
-	BaseUSD           float64  `json:"base_usd"`  // user override or policy default
-	LimitUSD          float64  `json:"limit_usd"` // effective monthly limit
+	BaseUSD           float64  `json:"base_usd"` // user override, role budget, or policy default
+	RoleBudgetUSD     float64  `json:"role_budget_usd,omitempty"`
+	CreditUSD         float64  `json:"credit_usd,omitempty"`
+	BudgetSource      string   `json:"budget_source,omitempty"` // user_override | role | default
+	LimitUSD          float64  `json:"limit_usd"`               // effective monthly limit
 	SpentUSD          float64  `json:"spent_usd"`
 	TokensUsed        int64    `json:"-"`
 	// Subject is the canonical partner user UUID behind the requested
@@ -391,14 +394,34 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 		return d, fmt.Errorf("quota policy lookup: %w", err)
 	}
 
-	// Resolution order: user override → policy default.
-	// -1 marks "no override row" (NUMERIC is never negative for a real row).
-	if userOv >= 0 {
-		d.BaseUSD = userOv
-	} else {
-		d.BaseUSD = defaultUSD
+	// Role budgets are additive across all active roles (default + explicit).
+	// A per-person permanent override replaces the role sum; temporary credits
+	// add on top. If no role has a budget, fall back to the global policy.
+	var roleBudget, creditUSD float64
+	if tenantID, tenantErr := s.EnsureDefaultTenant(ctx); tenantErr == nil {
+		if subjectID, _, subjectErr := s.ResolvePolicySubjectByUsername(ctx, tenantID, username); subjectErr == nil {
+			if roleBudget, err = s.GetRoleBudgetUSD(ctx, tenantID, subjectID); err != nil {
+				return d, err
+			}
+			if creditUSD, err = s.GetActiveCreditUSD(ctx, tenantID, subjectID); err != nil {
+				return d, err
+			}
+		}
 	}
-	d.LimitUSD = d.BaseUSD
+	d.RoleBudgetUSD = roleBudget
+	d.CreditUSD = creditUSD
+	switch {
+	case userOv >= 0:
+		d.BaseUSD = userOv
+		d.BudgetSource = "user_override"
+	case roleBudget > 0:
+		d.BaseUSD = roleBudget
+		d.BudgetSource = "role"
+	default:
+		d.BaseUSD = defaultUSD
+		d.BudgetSource = "default"
+	}
+	d.LimitUSD = d.BaseUSD + creditUSD
 
 	if s.monthSpendEnabled.Load() {
 		err = s.db.QueryRowContext(ctx, `

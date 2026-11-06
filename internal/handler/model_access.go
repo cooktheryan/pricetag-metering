@@ -126,10 +126,12 @@ func writeJSONStatus(w http.ResponseWriter, status int, v any) {
 }
 
 type createModelAccessRoleRequest struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Models      []string `json:"models"`
-	IsDefault   bool     `json:"is_default"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	Models         []string `json:"models"`
+	IsDefault      bool     `json:"is_default"`
+	ReplaceDefault bool     `json:"replace_default"`
+	MonthlyUSD     float64  `json:"monthly_usd"`
 }
 
 type setModelAccessRoleModelsRequest struct {
@@ -156,6 +158,16 @@ type setSubjectModelsRequest struct {
 type setSubjectRestrictionRequest struct {
 	Enabled bool     `json:"enabled"`
 	Models  []string `json:"models"`
+}
+
+type setRoleBudgetRequest struct {
+	MonthlyUSD float64 `json:"monthly_usd"`
+}
+
+type addQuotaCreditRequest struct {
+	AmountUSD float64    `json:"amount_usd"`
+	ExpiresAt *time.Time `json:"expires_at"`
+	Reason    string     `json:"reason"`
 }
 
 type excludeDefaultRequest struct {
@@ -251,8 +263,19 @@ func (h *ModelAccessHandler) handleRoles(w http.ResponseWriter, r *http.Request,
 			if !decodeJSON(w, r, &body) {
 				return
 			}
+			if body.IsDefault && !body.ReplaceDefault {
+				existing, err := h.store.GetDefaultModelAccessRole(r.Context(), tenant)
+				if err == nil {
+					http.Error(w, "default role already exists: "+existing.Name+"; confirm replace_default to replace it", http.StatusConflict)
+					return
+				}
+				if !errors.Is(err, storage.ErrModelAccessRoleNotFound) {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+			}
 			role, err := h.store.CreateModelAccessRole(r.Context(), tenant, actor,
-				body.Name, body.Description, body.Models, body.IsDefault)
+				body.Name, body.Description, body.Models, body.IsDefault, body.MonthlyUSD)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
@@ -289,6 +312,26 @@ func (h *ModelAccessHandler) handleRoles(w http.ResponseWriter, r *http.Request,
 	}
 
 	switch rest[1] {
+	case "budget":
+		if r.Method != http.MethodPut {
+			w.Header().Set("Allow", "PUT")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var body setRoleBudgetRequest
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		if err := h.store.SetModelAccessRoleBudget(r.Context(), tenant, roleID, actor, body.MonthlyUSD); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		role, err := h.store.GetModelAccessRole(r.Context(), tenant, roleID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, role)
 	case "models":
 		if r.Method != http.MethodPut {
 			w.Header().Set("Allow", "PUT")
@@ -457,6 +500,38 @@ func (h *ModelAccessHandler) handleSubjects(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	case "credits":
+		if len(rest) == 2 && r.Method == http.MethodGet {
+			credits, err := h.store.ListQuotaCredits(r.Context(), tenant, subjectID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, credits)
+			return
+		}
+		if len(rest) == 2 && r.Method == http.MethodPost {
+			var body addQuotaCreditRequest
+			if !decodeJSON(w, r, &body) {
+				return
+			}
+			credit, err := h.store.AddQuotaCredit(r.Context(), tenant, subjectID, body.AmountUSD, body.ExpiresAt, body.Reason, actor)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			writeJSONStatus(w, http.StatusCreated, credit)
+			return
+		}
+		if len(rest) == 3 && r.Method == http.MethodDelete {
+			if err := h.store.DeleteQuotaCredit(r.Context(), tenant, subjectID, rest[2], actor); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	case "exclude-default":
 		if r.Method == http.MethodDelete {
 			if err := h.store.ClearDefaultExclusion(r.Context(), tenant, subjectID, actor); err != nil {

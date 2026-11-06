@@ -101,7 +101,7 @@ func TestEntitlementModelAccessModes(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CreateModelAccessRole(ctx, tenant, "test", "Engineering", "", []string{"model-a"}, true); err != nil {
+	if _, err := store.CreateModelAccessRole(ctx, tenant, "test", "Engineering", "", []string{"model-a"}, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SyncPartnerUserSubjects(ctx, tenant); err != nil {

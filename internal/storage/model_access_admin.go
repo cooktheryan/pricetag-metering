@@ -29,6 +29,7 @@ type ModelAccessRole struct {
 	Description    string     `json:"description"`
 	OwnerSubjectID string     `json:"owner_subject_id,omitempty"`
 	IsDefault      bool       `json:"is_default"`
+	MonthlyUSD     float64    `json:"monthly_usd"`
 	Models         []string   `json:"models"`
 	SubjectCount   int        `json:"subject_count"`
 	RetiredAt      *time.Time `json:"retired_at,omitempty"`
@@ -86,7 +87,7 @@ func normalizeExactModels(models []string, max int) ([]string, error) {
 func (s *Store) ListModelAccessRoles(ctx context.Context, tenantID string) ([]ModelAccessRole, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT r.role_id::text, r.tenant_id::text, r.name, r.description,
-		       COALESCE(r.owner_subject_id::text, ''), r.is_default,
+		       COALESCE(r.owner_subject_id::text, ''), r.is_default, r.monthly_usd,
 		       COALESCE(array_agg(rm.model_id ORDER BY rm.model_id)
 		                FILTER (WHERE rm.model_id IS NOT NULL), '{}')::text[],
 		       CASE WHEN r.is_default THEN (
@@ -120,7 +121,7 @@ func (s *Store) ListModelAccessRoles(ctx context.Context, tenantID string) ([]Mo
 		var models []string
 		var retired sql.NullTime
 		if err := rows.Scan(&role.RoleID, &role.TenantID, &role.Name, &role.Description,
-			&role.OwnerSubjectID, &role.IsDefault, pq.Array(&models), &role.SubjectCount,
+			&role.OwnerSubjectID, &role.IsDefault, &role.MonthlyUSD, pq.Array(&models), &role.SubjectCount,
 			&retired, &role.CreatedAt, &role.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -137,6 +138,20 @@ func (s *Store) ListModelAccessRoles(ctx context.Context, tenantID string) ([]Mo
 	return out, rows.Err()
 }
 
+func (s *Store) GetDefaultModelAccessRole(ctx context.Context, tenantID string) (ModelAccessRole, error) {
+	var roleID string
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT role_id::text FROM model_access_roles
+		WHERE tenant_id = $1 AND is_default AND retired_at IS NULL
+		LIMIT 1`, tenantID).Scan(&roleID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ModelAccessRole{}, ErrModelAccessRoleNotFound
+		}
+		return ModelAccessRole{}, err
+	}
+	return s.GetModelAccessRole(ctx, tenantID, roleID)
+}
+
 func (s *Store) GetModelAccessRole(ctx context.Context, tenantID, roleID string) (ModelAccessRole, error) {
 	roles, err := s.ListModelAccessRoles(ctx, tenantID)
 	if err != nil {
@@ -150,10 +165,13 @@ func (s *Store) GetModelAccessRole(ctx context.Context, tenantID, roleID string)
 	return ModelAccessRole{}, ErrModelAccessRoleNotFound
 }
 
-func (s *Store) CreateModelAccessRole(ctx context.Context, tenantID, actor, name, description string, models []string, isDefault bool) (ModelAccessRole, error) {
+func (s *Store) CreateModelAccessRole(ctx context.Context, tenantID, actor, name, description string, models []string, isDefault bool, monthlyUSD float64) (ModelAccessRole, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 120 {
 		return ModelAccessRole{}, fmt.Errorf("%w: name required, max 120 bytes", ErrInvalidModelAccessRole)
+	}
+	if monthlyUSD < 0 {
+		return ModelAccessRole{}, fmt.Errorf("%w: monthly_usd must be >= 0", ErrInvalidModelAccessRole)
 	}
 	clean, err := normalizeRoleModels(models)
 	if err != nil {
@@ -174,9 +192,9 @@ func (s *Store) CreateModelAccessRole(ctx context.Context, tenantID, actor, name
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO model_access_roles
-			(role_id, tenant_id, name, description, is_default, created_by, updated_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $6)`,
-		roleID, tenantID, name, strings.TrimSpace(description), isDefault, actor); err != nil {
+			(role_id, tenant_id, name, description, is_default, monthly_usd, created_by, updated_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
+		roleID, tenantID, name, strings.TrimSpace(description), isDefault, monthlyUSD, actor); err != nil {
 		return ModelAccessRole{}, fmt.Errorf("create role: %w", err)
 	}
 	for _, model := range clean {
@@ -190,7 +208,7 @@ func (s *Store) CreateModelAccessRole(ctx context.Context, tenantID, actor, name
 		return ModelAccessRole{}, err
 	}
 	if err := s.auditTx(ctx, tx, actor, "model_access.role_create", roleID, map[string]any{
-		"name": name, "models": clean, "is_default": isDefault,
+		"name": name, "models": clean, "is_default": isDefault, "monthly_usd": monthlyUSD,
 	}); err != nil {
 		return ModelAccessRole{}, err
 	}
@@ -232,6 +250,137 @@ func (s *Store) RetireModelAccessRole(ctx context.Context, tenantID, roleID, act
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *Store) SetModelAccessRoleBudget(ctx context.Context, tenantID, roleID, actor string, monthlyUSD float64) error {
+	if monthlyUSD < 0 {
+		return fmt.Errorf("%w: monthly_usd must be >= 0", ErrInvalidModelAccessRole)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `
+		UPDATE model_access_roles
+		SET monthly_usd = $3, updated_by = $4, updated_at = NOW()
+		WHERE tenant_id = $1 AND role_id = $2 AND retired_at IS NULL`,
+		tenantID, roleID, monthlyUSD, actor)
+	if err != nil {
+		return err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return ErrModelAccessRoleNotFound
+	}
+	if err := s.bumpPolicyVersionTx(ctx, tx, tenantID); err != nil {
+		return err
+	}
+	if err := s.auditTx(ctx, tx, actor, "model_access.role_budget_set", roleID, map[string]any{
+		"monthly_usd": monthlyUSD,
+	}); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.invalidateQuotaCache()
+	return nil
+}
+
+type QuotaCredit struct {
+	CreditID   string     `json:"credit_id"`
+	TenantID   string     `json:"tenant_id"`
+	SubjectID  string     `json:"subject_id"`
+	AmountUSD  float64    `json:"amount_usd"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	Reason     string     `json:"reason"`
+	CreatedBy  string     `json:"created_by"`
+	ApprovedBy string     `json:"approved_by,omitempty"`
+	RequestID  string     `json:"request_id,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+}
+
+func (s *Store) AddQuotaCredit(ctx context.Context, tenantID, subjectID string, amountUSD float64, expiresAt *time.Time, reason, actor string) (QuotaCredit, error) {
+	if amountUSD <= 0 {
+		return QuotaCredit{}, fmt.Errorf("credit amount must be > 0")
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return QuotaCredit{}, fmt.Errorf("reason is required")
+	}
+	credit := QuotaCredit{
+		CreditID:  uuid.NewString(),
+		TenantID:  tenantID,
+		SubjectID: subjectID,
+		AmountUSD: amountUSD,
+		ExpiresAt: expiresAt,
+		Reason:    reason,
+		CreatedBy: actor,
+		CreatedAt: time.Now().UTC(),
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO quota_credits
+			(credit_id, tenant_id, subject_id, amount_usd, expires_at, reason, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		credit.CreditID, tenantID, subjectID, amountUSD, expiresAt, reason, actor); err != nil {
+		return QuotaCredit{}, fmt.Errorf("add quota credit: %w", err)
+	}
+	if err := s.Audit(ctx, actor, "model_access.credit_add", subjectID, map[string]any{
+		"amount_usd": amountUSD, "expires_at": expiresAt, "reason": reason,
+	}); err != nil {
+		return QuotaCredit{}, err
+	}
+	s.invalidateQuotaCache()
+	return credit, nil
+}
+
+func (s *Store) ListQuotaCredits(ctx context.Context, tenantID, subjectID string) ([]QuotaCredit, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT credit_id::text, tenant_id::text, subject_id::text, amount_usd,
+		       expires_at, reason, created_by, COALESCE(approved_by, ''),
+		       COALESCE(request_id, ''), created_at
+		FROM quota_credits
+		WHERE tenant_id = $1 AND subject_id = $2
+		ORDER BY created_at DESC`, tenantID, subjectID)
+	if err != nil {
+		return nil, fmt.Errorf("list quota credits: %w", err)
+	}
+	defer rows.Close()
+	out := []QuotaCredit{}
+	for rows.Next() {
+		var c QuotaCredit
+		var expires sql.NullTime
+		if err := rows.Scan(&c.CreditID, &c.TenantID, &c.SubjectID, &c.AmountUSD,
+			&expires, &c.Reason, &c.CreatedBy, &c.ApprovedBy, &c.RequestID, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		if expires.Valid {
+			t := expires.Time
+			c.ExpiresAt = &t
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeleteQuotaCredit(ctx context.Context, tenantID, subjectID, creditID, actor string) error {
+	result, err := s.db.ExecContext(ctx, `
+		DELETE FROM quota_credits
+		WHERE tenant_id = $1 AND subject_id = $2 AND credit_id = $3`,
+		tenantID, subjectID, creditID)
+	if err != nil {
+		return err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return fmt.Errorf("quota credit not found")
+	}
+	if err := s.Audit(ctx, actor, "model_access.credit_delete", subjectID, map[string]any{
+		"credit_id": creditID,
+	}); err != nil {
+		return err
+	}
+	s.invalidateQuotaCache()
+	return nil
 }
 
 func (s *Store) SetModelAccessRoleModels(ctx context.Context, tenantID, roleID, actor string, models []string) error {
@@ -475,6 +624,54 @@ func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, 
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// GetRoleBudgetUSD sums the per-member budget contributions of the roles
+// currently assigned to a subject. The default role contributes only to
+// partner users and only when the subject is not excluded. A zero result
+// means "no role budget configured"; quota falls back to the global default.
+func (s *Store) GetRoleBudgetUSD(ctx context.Context, tenantID, subjectID string) (float64, error) {
+	var budget float64
+	if err := s.db.QueryRowContext(ctx, `
+		WITH assigned AS (
+			SELECT r.monthly_usd
+			FROM model_access_roles r
+			WHERE r.tenant_id = $1 AND r.is_default AND r.retired_at IS NULL
+			  AND EXISTS (
+			    SELECT 1 FROM policy_subjects s
+			    WHERE s.tenant_id = $1 AND s.subject_id = $2 AND s.principal_type = 'partner_user'
+			  )
+			  AND NOT EXISTS (
+			    SELECT 1 FROM model_access_default_exclusions e
+			    WHERE e.tenant_id = $1 AND e.subject_id = $2
+			      AND (e.expires_at IS NULL OR e.expires_at > NOW())
+			  )
+			UNION ALL
+			SELECT r.monthly_usd
+			FROM model_access_role_assignments a
+			JOIN model_access_roles r
+			  ON r.role_id = a.role_id AND r.tenant_id = a.tenant_id
+			WHERE a.tenant_id = $1 AND a.subject_id = $2 AND r.retired_at IS NULL
+		)
+		SELECT COALESCE(SUM(monthly_usd), 0) FROM assigned`,
+		tenantID, subjectID).Scan(&budget); err != nil {
+		return 0, fmt.Errorf("role budget lookup: %w", err)
+	}
+	return budget, nil
+}
+
+// GetActiveCreditUSD sums non-expired temporary per-person credits.
+func (s *Store) GetActiveCreditUSD(ctx context.Context, tenantID, subjectID string) (float64, error) {
+	var credits float64
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COALESCE(SUM(amount_usd), 0)
+		FROM quota_credits
+		WHERE tenant_id = $1 AND subject_id = $2
+		  AND (expires_at IS NULL OR expires_at > NOW())`,
+		tenantID, subjectID).Scan(&credits); err != nil {
+		return 0, fmt.Errorf("quota credit lookup: %w", err)
+	}
+	return credits, nil
 }
 
 func policySubjectFilterClause(field, placeholder string) (string, error) {
@@ -754,10 +951,15 @@ func (s *Store) ClearDefaultExclusion(ctx context.Context, tenantID, subjectID, 
 
 func (s *Store) bumpPolicyVersionTx(ctx context.Context, ex execer, tenantID string) error {
 	var version int64
-	return ex.QueryRowContext(ctx, `
+	if err := ex.QueryRowContext(ctx, `
 		INSERT INTO policy_versions (tenant_id, version)
 		VALUES ($1, 1)
 		ON CONFLICT (tenant_id) DO UPDATE SET
 			version = policy_versions.version + 1, updated_at = NOW()
-		RETURNING version`, tenantID).Scan(&version)
+		RETURNING version`, tenantID).Scan(&version); err != nil {
+		return err
+	}
+	// Role membership and budget changes affect the cached quota decision.
+	s.invalidateQuotaCache()
+	return nil
 }
