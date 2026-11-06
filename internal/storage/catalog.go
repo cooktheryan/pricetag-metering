@@ -27,17 +27,43 @@ type CatalogModel struct {
 	CostClass      string   `json:"cost_class,omitempty"`
 }
 
+type praxisCatalogModel struct {
+	ID          string
+	DisplayName string
+	OwnedBy     string
+}
+
+// UnmarshalYAML accepts both catalog forms used across deployments:
+//   - id: claude-sonnet-4-5
+//     display_name: Claude Sonnet 4.5
+//     owned_by: vertex
+//   - claude-sonnet-4-5
+func (m *praxisCatalogModel) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		m.ID = strings.TrimSpace(value.Value)
+		return nil
+	}
+	var raw struct {
+		ID          string `yaml:"id"`
+		DisplayName string `yaml:"display_name"`
+		OwnedBy     string `yaml:"owned_by"`
+	}
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+	m.ID = strings.TrimSpace(raw.ID)
+	m.DisplayName = strings.TrimSpace(raw.DisplayName)
+	m.OwnedBy = strings.TrimSpace(raw.OwnedBy)
+	return nil
+}
+
 type praxisCatalogConfig struct {
 	FilterChains []struct {
 		Filters []struct {
-			Filter string `yaml:"filter"`
-			Format string `yaml:"format"`
-			Path   string `yaml:"path"`
-			Models []struct {
-				ID          string `yaml:"id"`
-				DisplayName string `yaml:"display_name"`
-				OwnedBy     string `yaml:"owned_by"`
-			} `yaml:"models"`
+			Filter string               `yaml:"filter"`
+			Format string               `yaml:"format"`
+			Path   string               `yaml:"path"`
+			Models []praxisCatalogModel `yaml:"models"`
 		} `yaml:"filters"`
 	} `yaml:"filter_chains"`
 }
