@@ -17,6 +17,7 @@ var (
 	ErrModelAccessRoleNotFound = errors.New("model access role not found")
 	ErrInvalidModelAccessRole  = errors.New("invalid model access role")
 	ErrInvalidModelAccessModel = errors.New("invalid model identifier")
+	ErrCannotRetireDefaultRole = errors.New("cannot retire the default role; create or assign another default first")
 )
 
 const modelAccessRoleMaxModels = 500
@@ -43,6 +44,10 @@ type PolicySubjectRecord struct {
 	DisplayName   string    `json:"display_name"`
 	Status        string    `json:"status"`
 	Source        string    `json:"source"`
+	Email         string    `json:"email,omitempty"`
+	CostCenter    string    `json:"cost_center,omitempty"`
+	Organization  string    `json:"organization,omitempty"`
+	Groups        []string  `json:"groups,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
@@ -180,6 +185,40 @@ func (s *Store) CreateModelAccessRole(ctx context.Context, tenantID, actor, name
 	return s.GetModelAccessRole(ctx, tenantID, roleID)
 }
 
+func (s *Store) RetireModelAccessRole(ctx context.Context, tenantID, roleID, actor string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var isDefault bool
+	if err := tx.QueryRowContext(ctx, `
+		SELECT is_default FROM model_access_roles
+		WHERE tenant_id = $1 AND role_id = $2 AND retired_at IS NULL
+		FOR UPDATE`, tenantID, roleID).Scan(&isDefault); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrModelAccessRoleNotFound
+		}
+		return err
+	}
+	if isDefault {
+		return ErrCannotRetireDefaultRole
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE model_access_roles
+		SET retired_at = NOW(), updated_at = NOW(), updated_by = $3
+		WHERE tenant_id = $1 AND role_id = $2`, tenantID, roleID, actor); err != nil {
+		return err
+	}
+	if err := s.bumpPolicyVersionTx(ctx, tx, tenantID); err != nil {
+		return err
+	}
+	if err := s.auditTx(ctx, tx, actor, "model_access.role_retire", roleID, nil); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) SetModelAccessRoleModels(ctx context.Context, tenantID, roleID, actor string, models []string) error {
 	clean, err := normalizeRoleModels(models)
 	if err != nil {
@@ -273,10 +312,17 @@ func (s *Store) RemoveModelAccessRoleSubject(ctx context.Context, tenantID, role
 func (s *Store) ListModelAccessRoleSubjects(ctx context.Context, tenantID, roleID string) ([]PolicySubjectRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.subject_id::text, s.tenant_id::text, s.principal_type, s.external_id,
-		       s.display_name, s.status, s.source, s.created_at, s.updated_at
+		       s.display_name, s.status, s.source,
+		       COALESCE(pu.tags->>'email', ''),
+		       COALESCE(pu.tags->>'cost_center', ''),
+		       COALESCE(pu.tags->>'organization', ''),
+		       COALESCE(ARRAY(SELECT jsonb_array_elements_text(pu.tags->'groups')), '{}')::text[],
+		       s.created_at, s.updated_at
 		FROM model_access_role_assignments a
 		JOIN policy_subjects s
 		  ON s.subject_id = a.subject_id AND s.tenant_id = a.tenant_id
+		LEFT JOIN partner_users pu
+		  ON s.principal_type = 'partner_user' AND pu.user_id::text = s.external_id
 		WHERE a.tenant_id = $1 AND a.role_id = $2
 		ORDER BY s.display_name, s.external_id`, tenantID, roleID)
 	if err != nil {
@@ -287,7 +333,8 @@ func (s *Store) ListModelAccessRoleSubjects(ctx context.Context, tenantID, roleI
 	for rows.Next() {
 		var s PolicySubjectRecord
 		if err := rows.Scan(&s.SubjectID, &s.TenantID, &s.PrincipalType, &s.ExternalID,
-			&s.DisplayName, &s.Status, &s.Source, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			&s.DisplayName, &s.Status, &s.Source, &s.Email, &s.CostCenter,
+			&s.Organization, pq.Array(&s.Groups), &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -303,12 +350,24 @@ func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, 
 		offset = 0
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT subject_id::text, tenant_id::text, principal_type, external_id,
-		       display_name, status, source, created_at, updated_at
-		FROM policy_subjects
-		WHERE tenant_id = $1
-		  AND ($2 = '' OR display_name ILIKE '%' || $2 || '%' OR external_id ILIKE '%' || $2 || '%')
-		ORDER BY display_name, external_id
+		SELECT s.subject_id::text, s.tenant_id::text, s.principal_type, s.external_id,
+		       s.display_name, s.status, s.source,
+		       COALESCE(pu.tags->>'email', ''),
+		       COALESCE(pu.tags->>'cost_center', ''),
+		       COALESCE(pu.tags->>'organization', ''),
+		       COALESCE(ARRAY(SELECT jsonb_array_elements_text(pu.tags->'groups')), '{}')::text[],
+		       s.created_at, s.updated_at
+		FROM policy_subjects s
+		LEFT JOIN partner_users pu
+		  ON s.principal_type = 'partner_user' AND pu.user_id::text = s.external_id
+		WHERE s.tenant_id = $1
+		  AND ($2 = '' OR s.display_name ILIKE '%' || $2 || '%'
+		       OR s.external_id ILIKE '%' || $2 || '%'
+		       OR COALESCE(pu.tags->>'email', '') ILIKE '%' || $2 || '%'
+		       OR COALESCE(pu.tags->>'cost_center', '') ILIKE '%' || $2 || '%'
+		       OR COALESCE(pu.tags->>'organization', '') ILIKE '%' || $2 || '%'
+		       OR COALESCE(pu.tags->>'groups', '') ILIKE '%' || $2 || '%')
+		ORDER BY s.display_name, s.external_id
 		LIMIT $3 OFFSET $4`, tenantID, strings.TrimSpace(query), limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list policy subjects: %w", err)
@@ -318,7 +377,8 @@ func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, 
 	for rows.Next() {
 		var s PolicySubjectRecord
 		if err := rows.Scan(&s.SubjectID, &s.TenantID, &s.PrincipalType, &s.ExternalID,
-			&s.DisplayName, &s.Status, &s.Source, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			&s.DisplayName, &s.Status, &s.Source, &s.Email, &s.CostCenter,
+			&s.Organization, pq.Array(&s.Groups), &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, s)

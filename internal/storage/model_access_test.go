@@ -340,7 +340,7 @@ func TestSyncPartnerUserSubjects(t *testing.T) {
 	userID := uuid.NewString()
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO partner_users (user_id, tags, role, active, created_by, updated_by)
-		VALUES ($1, '{"preferred_username":"alice","email":"alice@example.com"}', 'user', TRUE, 'test', 'test')`,
+		VALUES ($1, '{"preferred_username":"alice","email":"alice@example.com","cost_center":"cc-42","groups":["ai-eng"]}', 'user', TRUE, 'test', 'test')`,
 		userID); err != nil {
 		t.Fatal(err)
 	}
@@ -392,6 +392,13 @@ func TestSyncPartnerUserSubjects(t *testing.T) {
 	}
 	if again != subjectID {
 		t.Fatalf("subject id changed: %s -> %s", subjectID, again)
+	}
+	subjects, err := s.ListPolicySubjects(ctx, tenant, "cc-42", 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subjects) != 1 || subjects[0].CostCenter != "cc-42" || !slices.Equal(subjects[0].Groups, []string{"ai-eng"}) {
+		t.Fatalf("subject tags = %#v", subjects)
 	}
 }
 
@@ -496,6 +503,9 @@ func TestModelAccessAdminCRUD(t *testing.T) {
 	if !slices.Equal(effective.EffectiveModels, []string{"model-c"}) {
 		t.Fatalf("effective = %v", effective.EffectiveModels)
 	}
+	if effective.DefaultRoleName != "Engineer" {
+		t.Fatalf("default role name = %q", effective.DefaultRoleName)
+	}
 
 	research, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Research", "", []string{"model-d"}, false)
 	if err != nil {
@@ -513,6 +523,18 @@ func TestModelAccessAdminCRUD(t *testing.T) {
 	}
 	if err := s.RemoveModelAccessRoleSubject(ctx, tenant, research.RoleID, subject, "admin"); err != nil {
 		t.Fatal(err)
+	}
+	if err := s.RetireModelAccessRole(ctx, tenant, research.RoleID, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	roles, err = s.ListModelAccessRoles(ctx, tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range roles {
+		if r.RoleID == research.RoleID {
+			t.Fatal("retired role still listed")
+		}
 	}
 
 	if err := s.SetSubjectGrants(ctx, tenant, subject, "admin", []string{"model-e"}); err != nil {

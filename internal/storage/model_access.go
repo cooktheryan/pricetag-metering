@@ -36,24 +36,31 @@ var (
 // EffectiveModelAccess is the resolved model-access view for one subject in
 // one tenant. It separates the sources so the admin UI can explain "why?"
 // without reimplementing policy. EffectiveModels is the hot-path answer.
+type ModelAccessRoleRef struct {
+	RoleID string `json:"role_id"`
+	Name   string `json:"name"`
+}
+
 type EffectiveModelAccess struct {
-	TenantID           string   `json:"tenant_id"`
-	SubjectID          string   `json:"subject_id"`
-	PrincipalType      string   `json:"principal_type"`
-	Active             bool     `json:"active"`
-	SuperAdmin         bool     `json:"super_admin"`
-	Unrestricted       bool     `json:"unrestricted"`
-	DefaultRoleID      string   `json:"default_role_id,omitempty"`
-	DefaultExcluded    bool     `json:"default_excluded"`
-	RoleIDs            []string `json:"role_ids,omitempty"`
-	RoleNames          []string `json:"role_names,omitempty"`
-	DefaultModels      []string `json:"default_models,omitempty"`
-	RoleModels         []string `json:"role_models,omitempty"`
-	DirectModels       []string `json:"direct_models,omitempty"`
-	RestrictionEnabled bool     `json:"restriction_enabled"`
-	RestrictionModels  []string `json:"restriction_models,omitempty"`
-	EffectiveModels    []string `json:"effective_models"`
-	PolicyVersion      int64    `json:"policy_version"`
+	TenantID           string               `json:"tenant_id"`
+	SubjectID          string               `json:"subject_id"`
+	PrincipalType      string               `json:"principal_type"`
+	Active             bool                 `json:"active"`
+	SuperAdmin         bool                 `json:"super_admin"`
+	Unrestricted       bool                 `json:"unrestricted"`
+	DefaultRoleID      string               `json:"default_role_id,omitempty"`
+	DefaultRoleName    string               `json:"default_role_name,omitempty"`
+	DefaultExcluded    bool                 `json:"default_excluded"`
+	RoleIDs            []string             `json:"role_ids,omitempty"`
+	RoleNames          []string             `json:"role_names,omitempty"`
+	RoleRefs           []ModelAccessRoleRef `json:"role_refs,omitempty"`
+	DefaultModels      []string             `json:"default_models,omitempty"`
+	RoleModels         []string             `json:"role_models,omitempty"`
+	DirectModels       []string             `json:"direct_models,omitempty"`
+	RestrictionEnabled bool                 `json:"restriction_enabled"`
+	RestrictionModels  []string             `json:"restriction_models,omitempty"`
+	EffectiveModels    []string             `json:"effective_models"`
+	PolicyVersion      int64                `json:"policy_version"`
 }
 
 func (s *Store) migrateModelAccess(ctx context.Context) error {
@@ -425,11 +432,11 @@ func (s *Store) GetEffectiveModelAccess(ctx context.Context, tenantID, subjectID
 	}
 
 	// Default role (zero or one).
-	var defaultRoleID string
+	var defaultRoleID, defaultRoleName string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT role_id FROM model_access_roles
+		SELECT role_id, name FROM model_access_roles
 		WHERE tenant_id = $1 AND is_default AND retired_at IS NULL
-		LIMIT 1`, tenantID).Scan(&defaultRoleID)
+		LIMIT 1`, tenantID).Scan(&defaultRoleID, &defaultRoleName)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return result, fmt.Errorf("default role lookup: %w", err)
 	}
@@ -438,6 +445,7 @@ func (s *Store) GetEffectiveModelAccess(ctx context.Context, tenantID, subjectID
 	// assignments; otherwise automation would inherit the broad baseline.
 	if defaultRoleID != "" && result.PrincipalType == PrincipalPartnerUser {
 		result.DefaultRoleID = defaultRoleID
+		result.DefaultRoleName = defaultRoleName
 		var excluded bool
 		if err := s.db.QueryRowContext(ctx, `
 			SELECT EXISTS (
@@ -458,12 +466,15 @@ func (s *Store) GetEffectiveModelAccess(ctx context.Context, tenantID, subjectID
 	}
 
 	// Explicit roles (additive).
-	roleIDs, roleNames, roleModels, err := s.explicitRoleModels(ctx, tenantID, subjectID)
+	roleRefs, roleModels, err := s.explicitRoleModels(ctx, tenantID, subjectID)
 	if err != nil {
 		return result, err
 	}
-	result.RoleIDs = roleIDs
-	result.RoleNames = roleNames
+	result.RoleRefs = roleRefs
+	for _, ref := range roleRefs {
+		result.RoleIDs = append(result.RoleIDs, ref.RoleID)
+		result.RoleNames = append(result.RoleNames, ref.Name)
+	}
 	result.RoleModels = roleModels
 
 	direct, err := s.subjectGrantModels(ctx, tenantID, subjectID)
@@ -606,7 +617,7 @@ func (s *Store) modelIDsForRole(ctx context.Context, tenantID, roleID string) ([
 	return scanStrings(rows)
 }
 
-func (s *Store) explicitRoleModels(ctx context.Context, tenantID, subjectID string) ([]string, []string, []string, error) {
+func (s *Store) explicitRoleModels(ctx context.Context, tenantID, subjectID string) ([]ModelAccessRoleRef, []string, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT r.role_id, r.name, rm.model_id
 		FROM model_access_role_assignments a
@@ -617,29 +628,32 @@ func (s *Store) explicitRoleModels(ctx context.Context, tenantID, subjectID stri
 		WHERE a.tenant_id = $1 AND a.subject_id = $2 AND r.retired_at IS NULL
 		ORDER BY r.name, r.role_id, rm.model_id`, tenantID, subjectID)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("role assignments lookup: %w", err)
+		return nil, nil, fmt.Errorf("role assignments lookup: %w", err)
 	}
 	defer rows.Close()
 
-	roleSet := map[string]struct{}{}
-	nameSet := map[string]struct{}{}
+	refs := []ModelAccessRoleRef{}
+	seen := map[string]struct{}{}
 	modelSet := map[string]struct{}{}
 	for rows.Next() {
 		var roleID, name string
 		var model sql.NullString
 		if err := rows.Scan(&roleID, &name, &model); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
-		roleSet[roleID] = struct{}{}
-		nameSet[name] = struct{}{}
+		if _, ok := seen[roleID]; !ok {
+			seen[roleID] = struct{}{}
+			refs = append(refs, ModelAccessRoleRef{RoleID: roleID, Name: name})
+		}
 		if model.Valid && strings.TrimSpace(model.String) != "" {
 			modelSet[model.String] = struct{}{}
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	return sortedKeys(roleSet), sortedKeys(nameSet), sortedKeys(modelSet), nil
+	sort.Slice(refs, func(i, j int) bool { return refs[i].Name < refs[j].Name })
+	return refs, sortedKeys(modelSet), nil
 }
 
 func (s *Store) subjectGrantModels(ctx context.Context, tenantID, subjectID string) ([]string, error) {
