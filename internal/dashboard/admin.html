@@ -660,31 +660,14 @@ td .tag{white-space:nowrap}
         <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelAccess()">Refresh</button>
       </div>
     </div>
-    <div class="ts" style="margin-bottom:12px">Roles grant exact public model IDs and may add a per-member monthly budget. At most one role is the tenant default and applies automatically to every active person. Multiple role budgets add up; model access and budget are still enforced separately.</div>
+    <div class="ts" style="margin-bottom:12px">Roles grant exact public model IDs and may add a per-member monthly budget. The default role applies to everyone active; role budgets add up. Model access and budget are enforced separately.</div>
     <div id="ma-catalog-note" class="ts" style="margin-bottom:10px"></div>
-    <div style="margin-bottom:14px"><button class="btn btn-grn" onclick="openRoleWizard()">Create role…</button> <span class="ts">Guided: name → default → models → cost centers → budget → review.</span></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+      <button class="btn btn-grn" onclick="openRoleWizard()">Create role…</button>
+      <input id="ma-role-search" class="tbl-input" placeholder="Filter roles" oninput="renderModelAccessRoles()" style="width:180px;padding:7px 10px;font-size:12px">
+      <span class="ts">Guided: name → default → models → cost centers → budget → review.</span>
+    </div>
     <div id="ma-roles"><div class="loading"><div class="spinner"></div>Loading roles...</div></div>
-  </div>
-
-  <div class="card" id="ma-role-card" style="display:none">
-    <div class="card-hdr">
-      <div><span class="card-title" id="ma-role-title">Role</span><span class="card-count" id="ma-role-meta"></span></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-outline" style="padding:5px 12px;font-size:10px;color:#ff6b6b" onclick="retireModelAccessRole()">Retire role</button>
-        <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="closeModelAccessRole()">Close</button>
-      </div>
-    </div>
-    <label class="field-label">Selected models</label>
-    <div id="ma-role-models-summary" class="ts" style="margin-bottom:6px">No models selected</div>
-    <button class="btn btn-outline" style="padding:5px 12px;font-size:11px" onclick="openModelPicker('role')">Edit models</button>
-    <input id="ma-role-extra" class="tbl-input" placeholder="Extra exact IDs not in the catalog (comma-separated)" style="width:100%;margin-top:6px;padding:7px 10px;font-size:11px">
-    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-grn" onclick="saveModelAccessRoleModels()">Save models</button>
-      <label class="field-label" style="margin:0">$ / person / month</label>
-      <input id="ma-role-budget" type="number" min="0" step="1" class="tbl-input" style="width:120px;padding:7px 10px;font-size:12px" title="Adds to the member's budget; 0 falls back to the global default">
-      <button class="btn btn-outline" onclick="saveModelAccessRoleBudget()">Save budget</button>
-    </div>
-    <div class="ts" style="margin-top:16px;border-top:1px solid var(--bdr);padding-top:14px">People are assigned by cost center when the role is created, or per person from the effective-access drawer.</div>
   </div>
 
   <div class="card">
@@ -757,6 +740,30 @@ td .tag{white-space:nowrap}
       <button class="btn btn-outline" onclick="closeRoleWizard()" style="padding:7px 18px;font-size:11px">Cancel</button>
       <button class="btn btn-grn" id="ma-wizard-next" onclick="roleWizardNext()">Next</button>
       <button class="btn btn-grn" id="ma-wizard-create" onclick="createModelAccessRole()" style="display:none">Create role</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="ma-role-edit-modal">
+  <div class="modal" style="max-width:620px">
+    <button class="modal-close" onclick="closeRoleEditor()">&times;</button>
+    <div class="modal-title" id="ma-role-edit-title">Edit role</div>
+    <div class="ts" id="ma-role-edit-meta" style="margin-bottom:14px"></div>
+    <div class="field">
+      <label>Models</label>
+      <div id="ma-role-models-summary" class="ts" style="margin-bottom:6px">No models selected</div>
+      <button class="btn btn-outline" onclick="openModelPicker('role')">Choose models</button>
+      <input id="ma-role-extra" class="tbl-input" placeholder="Extra exact IDs not in the catalog (comma-separated)" style="width:100%;margin-top:8px;padding:7px 10px;font-size:11px">
+    </div>
+    <div class="field">
+      <label>$ / person / month</label>
+      <input id="ma-role-budget" type="number" min="0" step="1" placeholder="0" style="width:160px">
+      <div class="ts">Adds to each member's budget. Empty/0 falls back to the global default.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="ma-role-retire" style="color:#ff6b6b;margin-right:auto" onclick="retireModelAccessRole()">Retire role</button>
+      <button class="btn btn-outline" onclick="closeRoleEditor()" style="padding:7px 18px;font-size:11px">Cancel</button>
+      <button class="btn btn-grn" onclick="saveRoleEditor()">Save changes</button>
     </div>
   </div>
 </div>
@@ -1102,12 +1109,15 @@ function loadModelAccess() {
     fetchJSON(maURL('/catalog')).catch(function() { return []; })
   ]).then(function(res) {
     maRoles = res[0] || [];
+    maRoles.sort(function(a, b) {
+      if (a.is_default !== b.is_default) return a.is_default ? -1 : 1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
     maSubjects = res[1] || [];
     maCatalog = res[2] || [];
     renderModelAccessRoles();
     renderModelAccessSubjects();
     renderModelSummary('new');
-    if (maRole) renderModelSummary('role');
     renderCatalogNote();
   }).catch(function(err) {
     var el = document.getElementById('ma-roles');
@@ -1119,7 +1129,7 @@ function renderCatalogNote() {
   var note = document.getElementById('ma-catalog-note');
   if (!note) return;
   note.innerHTML = maCatalog.length
-    ? maCatalog.length + ' configured models available. Use “Choose models” to pick with checkboxes; use the extra field for IDs not in the catalog.'
+    ? maCatalog.length + ' models available. Use “Choose models” for checkboxes; add extra exact IDs when needed.'
     : '<span style="color:var(--amb)">Catalog is empty. Click “Import catalog” or add exact IDs in the extra field.</span>';
 }
 
@@ -1142,7 +1152,13 @@ function renderModelSummary(kind) {
 
 function openModelPicker(kind) {
   maPickerTarget = kind;
-  maPickerSelection = new Set(kind === 'new' ? maNewModels : maRoleModels);
+  var extraInput = document.getElementById(kind === 'new' ? 'ma-new-extra' : 'ma-role-extra');
+  var base = (kind === 'new' ? maNewModels : maRoleModels).slice();
+  splitModels(extraInput ? extraInput.value : '').forEach(function(m) {
+    if (base.indexOf(m) < 0) base.push(m);
+  });
+  if (kind === 'new') maNewModels = base; else maRoleModels = base;
+  maPickerSelection = new Set(base);
   document.getElementById('ma-models-title').textContent = kind === 'new' ? 'Choose models for the new role' : 'Edit role models';
   document.getElementById('ma-models-search').value = '';
   renderModelPicker();
@@ -1219,16 +1235,31 @@ function renderModelAccessRoles() {
     el.innerHTML = '<div class="ts">No roles yet. Create one above; set “Default role” for the baseline everyone receives.</div>';
     return;
   }
-  var rows = maRoles.map(function(r) {
-    return '<tr style="cursor:pointer" onclick="selectModelAccessRole(\'' + esc(r.role_id) + '\')">' +
+  var q = ((document.getElementById('ma-role-search') || {}).value || '').toLowerCase();
+  var visible = maRoles.filter(function(r) {
+    return !q || (r.name + ' ' + (r.models || []).join(' ')).toLowerCase().indexOf(q) >= 0;
+  });
+  var rows = visible.map(function(r) {
+    var models = r.models || [];
+    var sample = models.slice(0, 4).join(', ') + (models.length > 4 ? '…' : '');
+    var retire = r.is_default
+      ? '<button class="btn btn-outline" style="padding:4px 10px;font-size:10px" disabled title="Replace the default role before retiring it">Retire</button>'
+      : '<button class="btn btn-outline" style="padding:4px 10px;font-size:10px;color:#ff6b6b" onclick="retireModelAccessRole(\'' + esc(r.role_id) + '\')">Retire</button>';
+    return '<tr>' +
       '<td><strong>' + esc(r.name) + '</strong>' + (r.is_default ? ' <span class="badge badge-grn">default</span>' : '') + '</td>' +
-      '<td>' + (r.models || []).length + '</td>' +
+      '<td>' + models.length + '</td>' +
       '<td>' + (r.monthly_usd ? '$' + r.monthly_usd + '/person' : '—') + '</td>' +
-      '<td>' + (r.subject_count || 0) + '</td>' +
-      '<td class="ts">' + esc((r.models || []).slice(0, 4).join(', ')) + ((r.models || []).length > 4 ? '…' : '') + '</td>' +
+      '<td>' + (r.subject_count || 0).toLocaleString('en-US') + '</td>' +
+      '<td class="ts" title="' + esc(models.join(', ')) + '">' + esc(sample || '—') + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-outline" style="padding:4px 10px;font-size:10px;margin-right:6px" onclick="editModelAccessRole(\'' + esc(r.role_id) + '\')">Edit</button>' +
+        retire +
+      '</td>' +
     '</tr>';
   }).join('');
-  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Role</th><th>Models</th><th>Budget</th><th>People</th><th>Sample models</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Role</th><th>Models</th><th>Budget</th><th>People</th><th>Sample models</th><th>Actions</th></tr></thead><tbody>' +
+    (rows || '<tr><td colspan="6" class="ts">No roles match the filter.</td></tr>') +
+    '</tbody></table></div>';
 }
 
 var maWizardStep = 1;
@@ -1413,60 +1444,57 @@ function createModelAccessRole() {
   }).then(function(role) {
     showToast('Role created', 'success');
     closeRoleWizard();
-    loadModelAccess();
-    selectModelAccessRole(role.role_id);
+    loadModelAccess().then(function() { editModelAccessRole(role.role_id); });
   }).catch(function(err) { showToast('Create failed: ' + err.message, 'error'); });
 }
 
-function selectModelAccessRole(roleID) {
-  fetchJSON(maURL('/roles/' + encodeURIComponent(roleID))).then(function(role) {
-    maRole = role;
-    document.getElementById('ma-role-card').style.display = '';
-    document.getElementById('ma-role-title').textContent = maRole.name;
-    document.getElementById('ma-role-meta').textContent = (maRole.is_default ? 'default role · ' + (maRole.subject_count || 0) + ' active people' : (maRole.subject_count || 0) + ' people') + (maRole.monthly_usd ? ' · $' + maRole.monthly_usd + '/person' : '');
-    document.getElementById('ma-role-budget').value = maRole.monthly_usd || '';
-    maRoleModels = (maRole.models || []).slice();
-    renderModelSummary('role');
-    document.getElementById('ma-role-card').scrollIntoView({behavior: 'smooth', block: 'nearest'});
-  }).catch(function(err) { showToast('Load role failed: ' + err.message, 'error'); });
+function editModelAccessRole(roleID) {
+  var role = maRoles.filter(function(r) { return r.role_id === roleID; })[0];
+  if (!role) return;
+  maRole = role;
+  document.getElementById('ma-role-edit-title').textContent = role.name;
+  document.getElementById('ma-role-edit-meta').textContent =
+    (role.is_default ? 'Default role · applies to every active person' : 'Explicit role') +
+    ' · ' + (role.subject_count || 0).toLocaleString('en-US') + ' people';
+  document.getElementById('ma-role-budget').value = role.monthly_usd || '';
+  maRoleModels = (role.models || []).slice();
+  renderModelSummary('role');
+  var retire = document.getElementById('ma-role-retire');
+  retire.disabled = !!role.is_default;
+  retire.title = role.is_default ? 'Replace the default role before retiring it' : '';
+  document.getElementById('ma-role-edit-modal').classList.add('open');
 }
 
-function closeModelAccessRole() {
+function closeRoleEditor() {
   maRole = null;
-  document.getElementById('ma-role-card').style.display = 'none';
+  document.getElementById('ma-role-edit-modal').classList.remove('open');
 }
 
-function retireModelAccessRole() {
-  if (!maRole) return;
-  if (!confirm('Retire role "' + maRole.name + '"? Its grants disappear; the role row is kept for audit.')) return;
-  sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id)), 'DELETE')
-    .then(function() {
-      showToast('Role retired', 'success');
-      closeModelAccessRole();
-      loadModelAccess();
-    }).catch(function(err) { showToast('Retire failed: ' + err.message, 'error'); });
-}
-
-function saveModelAccessRoleBudget() {
-  if (!maRole) return;
-  var amount = parseFloat(document.getElementById('ma-role-budget').value || '0') || 0;
-  sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/budget'), 'PUT', {monthly_usd: amount})
-    .then(function(role) {
-      maRole = role;
-      showToast('Role budget saved', 'success');
-      loadModelAccess().then(function() { selectModelAccessRole(role.role_id); });
-    }).catch(function(err) { showToast('Budget save failed: ' + err.message, 'error'); });
-}
-
-function saveModelAccessRoleModels() {
+function saveRoleEditor() {
   if (!maRole) return;
   var models = maRoleModels.concat(splitModels(document.getElementById('ma-role-extra').value));
-  sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/models'), 'PUT', {models: models})
+  var amount = parseFloat(document.getElementById('ma-role-budget').value || '0') || 0;
+  Promise.all([
+    sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/models'), 'PUT', {models: models}),
+    sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/budget'), 'PUT', {monthly_usd: amount})
+  ]).then(function() {
+    showToast('Role updated', 'success');
+    closeRoleEditor();
+    loadModelAccess();
+  }).catch(function(err) { showToast('Save failed: ' + err.message, 'error'); });
+}
+
+function retireModelAccessRole(roleID) {
+  var role = roleID ? maRoles.filter(function(r) { return r.role_id === roleID; })[0] : maRole;
+  if (!role) return;
+  if (role.is_default) { showToast('Replace the default role before retiring it', 'error'); return; }
+  if (!confirm('Retire role "' + role.name + '"? Its assignments disappear; the role row is kept for audit.')) return;
+  sendJSON(maURL('/roles/' + encodeURIComponent(role.role_id)), 'DELETE')
     .then(function() {
-      showToast('Role models saved', 'success');
+      showToast('Role retired', 'success');
+      closeRoleEditor();
       loadModelAccess();
-      selectModelAccessRole(maRole.role_id);
-    }).catch(function(err) { showToast('Save failed: ' + err.message, 'error'); });
+    }).catch(function(err) { showToast('Retire failed: ' + err.message, 'error'); });
 }
 
 function loadModelAccessSubjects() {
