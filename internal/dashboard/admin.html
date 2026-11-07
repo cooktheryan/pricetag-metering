@@ -1539,7 +1539,7 @@ function showModelAccessEffective(subjectID) {
     var chips = function(arr) { return (arr || []).length ? arr.map(function(m) { return '<span class="tag tag-blu">' + esc(m) + '</span>'; }).join(' ') : '<span class="ts">none</span>'; };
     var sub = maSubjects.filter(function(s) { return s.subject_id === subjectID; })[0] || {};
     var costCenter = [sub.cost_center, sub.cost_center_description].filter(Boolean).join(' — ');
-    var sso = [sub.email, sub.organization, costCenter, sub.job_title, sub.employee_type, (sub.groups || []).join(', ')].filter(Boolean).join(' · ');
+    var sso = [sub.email, sub.organization, costCenter, sub.job_title, sub.employee_type].filter(Boolean).join(' · ');
     var roleChips = (e.role_refs || []).length ? e.role_refs.map(function(ref) {
       return '<span class="tag tag-blu">' + esc(ref.name) + ' <button class="btn" style="padding:0;background:none;color:inherit;font-weight:700" title="Remove role" onclick="removeRoleFromEffective(\'' + esc(ref.role_id) + '\')">&times;</button></span>';
     }).join(' ') : '<span class="ts">none</span>';
