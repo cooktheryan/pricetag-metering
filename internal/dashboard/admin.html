@@ -662,7 +662,7 @@ td .tag{white-space:nowrap}
     </div>
     <div class="ts" style="margin-bottom:12px">Roles grant exact public model IDs and may add a per-member monthly budget. At most one role is the tenant default and applies automatically to every active person. Multiple role budgets add up; model access and budget are still enforced separately.</div>
     <div id="ma-catalog-note" class="ts" style="margin-bottom:10px"></div>
-    <div style="margin-bottom:14px"><button class="btn btn-grn" onclick="openRoleWizard()">Create role…</button> <span class="ts">Guided: name → default → models → people → budget → review.</span></div>
+    <div style="margin-bottom:14px"><button class="btn btn-grn" onclick="openRoleWizard()">Create role…</button> <span class="ts">Guided: name → default → models → cost centers → budget → review.</span></div>
     <div id="ma-roles"><div class="loading"><div class="spinner"></div>Loading roles...</div></div>
   </div>
 
@@ -684,26 +684,7 @@ td .tag{white-space:nowrap}
       <input id="ma-role-budget" type="number" min="0" step="1" class="tbl-input" style="width:120px;padding:7px 10px;font-size:12px" title="Adds to the member's budget; 0 falls back to the global default">
       <button class="btn btn-outline" onclick="saveModelAccessRoleBudget()">Save budget</button>
     </div>
-    <div style="margin-top:16px;border-top:1px solid var(--bdr);padding-top:14px">
-      <label class="field-label">Assign people</label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-        <input id="ma-person-search" class="tbl-input" placeholder="Search name, email, org, cost center, or group" oninput="renderRolePersonPicker()" style="flex:1;min-width:240px;padding:7px 10px;font-size:12px">
-        <select id="ma-person-select" size="4" style="flex:1;min-width:260px;background:var(--c2);color:var(--t);border:1px solid var(--bdr);border-radius:6px;padding:5px;font-size:12px;font-family:inherit;outline:none"></select>
-        <button class="btn btn-outline" style="align-self:flex-start" onclick="assignSelectedRolePerson()">Assign selected</button>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
-        <select id="ma-filter-field" style="background:var(--c2);color:var(--t);border:1px solid var(--bdr);border-radius:6px;padding:7px 8px;font-size:12px;font-family:inherit;outline:none">
-          <option value="cost_center">Cost center</option>
-          <option value="organization">Organization</option>
-          <option value="group">Group</option>
-        </select>
-        <input id="ma-filter-value" class="tbl-input" placeholder="Exact value, e.g. CC-100 / AI Engineering / ai-eng" style="flex:1;min-width:240px;padding:7px 10px;font-size:12px">
-        <button class="btn btn-outline" onclick="previewRoleFilter()">Preview</button>
-        <button class="btn btn-grn" onclick="assignRoleFilter()">Assign filter</button>
-      </div>
-      <div id="ma-filter-preview" class="ts" style="margin-top:8px"></div>
-      <div id="ma-role-subjects" style="margin-top:12px"></div>
-    </div>
+    <div class="ts" style="margin-top:16px;border-top:1px solid var(--bdr);padding-top:14px">People are assigned by cost center when the role is created, or per person from the effective-access drawer.</div>
   </div>
 
   <div class="card">
@@ -711,7 +692,7 @@ td .tag{white-space:nowrap}
       <div><span class="card-title">People &amp; service identities</span><span class="card-count" id="ma-subjects-count"></span></div>
       <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelAccessSubjects()">Refresh</button>
     </div>
-    <div style="margin-bottom:10px"><input id="ma-subject-search" class="tbl-input" placeholder="Search name, email, external ID, cost center, organization, or group" oninput="loadModelAccessSubjects()" style="width:100%;padding:7px 10px;font-size:12px"></div>
+    <div style="margin-bottom:10px"><input id="ma-subject-search" class="tbl-input" placeholder="Search name, email, external ID, or cost center" oninput="loadModelAccessSubjects()" style="width:100%;padding:7px 10px;font-size:12px"></div>
     <div id="ma-subjects"><div class="loading"><div class="spinner"></div>Loading subjects...</div></div>
   </div>
 </div>
@@ -754,17 +735,10 @@ td .tag{white-space:nowrap}
     <div id="ma-wizard-step4" style="display:none">
       <div class="ts" style="margin-bottom:10px">Step 4 of 6</div>
       <div id="ma-wizard-people" class="field">
-        <label>Assign people (optional)</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <select id="ma-wizard-filter-field" style="background:var(--c2);color:var(--t);border:1px solid var(--bdr);border-radius:6px;padding:7px 8px;font-size:12px;font-family:inherit;outline:none">
-            <option value="">No filter</option>
-            <option value="cost_center">Cost center</option>
-            <option value="organization">Organization</option>
-            <option value="group">Group</option>
-          </select>
-          <input id="ma-wizard-filter-value" class="tbl-input" placeholder="Exact value" style="flex:1;min-width:180px;padding:7px 10px;font-size:12px">
-        </div>
-        <div class="ts" style="margin-top:6px">Assignment is a one-time snapshot of the people matching now; future directory changes are not automatic. You can also assign people later from the role card.</div>
+        <label>Assign cost centers (optional)</label>
+        <div id="ma-new-cost-centers-summary" class="ts" style="margin-bottom:6px">No cost centers selected</div>
+        <button class="btn btn-outline" onclick="openCostCenterPicker()">Choose cost centers</button>
+        <div class="ts" style="margin-top:6px">Everyone currently in the selected cost centers is assigned once; future directory changes are not automatic. Individuals can also be added later from a person's effective-access drawer.</div>
       </div>
     </div>
 
@@ -783,6 +757,26 @@ td .tag{white-space:nowrap}
       <button class="btn btn-outline" onclick="closeRoleWizard()" style="padding:7px 18px;font-size:11px">Cancel</button>
       <button class="btn btn-grn" id="ma-wizard-next" onclick="roleWizardNext()">Next</button>
       <button class="btn btn-grn" id="ma-wizard-create" onclick="createModelAccessRole()" style="display:none">Create role</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="ma-cost-centers-modal">
+  <div class="modal" style="max-width:560px">
+    <button class="modal-close" onclick="closeCostCenterPicker()">&times;</button>
+    <div class="modal-title">Choose cost centers</div>
+    <div class="field">
+      <input type="search" id="ma-cc-search" class="tbl-input" placeholder="Search cost center code or description" oninput="renderCostCenterPicker()" style="width:100%;padding:8px 10px;font-size:12px">
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-outline" style="padding:4px 10px;font-size:10px" onclick="selectAllCostCenterPicker(true)">Select all visible</button>
+      <button class="btn btn-outline" style="padding:4px 10px;font-size:10px" onclick="selectAllCostCenterPicker(false)">Clear</button>
+      <span class="ts" id="ma-cc-count"></span>
+    </div>
+    <div id="ma-cc-list" style="max-height:45vh;overflow:auto;border:1px solid var(--bdr);border-radius:6px;padding:8px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeCostCenterPicker()" style="padding:7px 18px;font-size:11px">Cancel</button>
+      <button class="btn btn-grn" onclick="saveCostCenterPicker()">Apply</button>
     </div>
   </div>
 </div>
@@ -1238,20 +1232,94 @@ function renderModelAccessRoles() {
 }
 
 var maWizardStep = 1;
+var maCostCenters = [];
+var maCostCenterSelection = new Set();
+var maWizardCostCenters = [];
 
 function openRoleWizard() {
   maWizardStep = 1;
   maNewModels = [];
+  maWizardCostCenters = [];
   document.getElementById('ma-new-name').value = '';
   document.getElementById('ma-new-extra').value = '';
   document.getElementById('ma-new-budget').value = '';
   document.getElementById('ma-new-default').checked = false;
   document.getElementById('ma-wizard-replace').checked = false;
-  document.getElementById('ma-wizard-filter-field').value = '';
-  document.getElementById('ma-wizard-filter-value').value = '';
   renderModelSummary('new');
+  renderCostCenterSummary();
+  loadCostCenterFacets();
   renderRoleWizard();
   document.getElementById('ma-role-wizard').classList.add('open');
+}
+
+function loadCostCenterFacets() {
+  fetchJSON(maURL('/cost-centers')).then(function(facets) {
+    maCostCenters = facets || [];
+    renderCostCenterSummary();
+    if (document.getElementById('ma-cost-centers-modal').classList.contains('open')) renderCostCenterPicker();
+  }).catch(function(err) { showToast('Cost centers failed: ' + err.message, 'error'); });
+}
+
+function renderCostCenterSummary() {
+  var el = document.getElementById('ma-new-cost-centers-summary');
+  if (!el) return;
+  if (!maWizardCostCenters.length) { el.textContent = 'No cost centers selected'; return; }
+  var counts = {};
+  maCostCenters.forEach(function(f) { counts[f.cost_center] = f.people || 0; });
+  var total = maWizardCostCenters.reduce(function(sum, cc) { return sum + (counts[cc] || 0); }, 0);
+  el.textContent = maWizardCostCenters.join(', ') + (total ? ' · ' + total + ' active people now' : '');
+}
+
+function openCostCenterPicker() {
+  maCostCenterSelection = new Set(maWizardCostCenters);
+  document.getElementById('ma-cc-search').value = '';
+  renderCostCenterPicker();
+  document.getElementById('ma-cost-centers-modal').classList.add('open');
+  if (!maCostCenters.length) loadCostCenterFacets();
+}
+
+function closeCostCenterPicker() {
+  document.getElementById('ma-cost-centers-modal').classList.remove('open');
+}
+
+function renderCostCenterPicker() {
+  var q = (document.getElementById('ma-cc-search').value || '').toLowerCase();
+  var visible = maCostCenters.filter(function(f) {
+    return !q || (f.cost_center + ' ' + (f.description || '')).toLowerCase().indexOf(q) >= 0;
+  });
+  var html = visible.map(function(f) {
+    return '<label style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12px;cursor:pointer">' +
+      '<input type="checkbox" style="width:auto;margin-top:2px" ' + (maCostCenterSelection.has(f.cost_center) ? 'checked' : '') +
+      ' onchange="toggleCostCenterPicker(\'' + esc(f.cost_center).replace(/'/g, "\\'") + '\',this.checked)">' +
+      '<span><strong>' + esc(f.cost_center) + '</strong>' +
+      (f.description ? ' <span class="ts">— ' + esc(f.description) + '</span>' : '') +
+      ' <span class="badge badge-blu" style="font-size:9px">' + (f.people || 0) + ' people</span></span></label>';
+  }).join('');
+  document.getElementById('ma-cc-list').innerHTML = html || '<div class="ts">No cost centers match the search.</div>';
+  document.getElementById('ma-cc-count').textContent = maCostCenterSelection.size + ' selected';
+}
+
+function toggleCostCenterPicker(cc, checked) {
+  if (checked) maCostCenterSelection.add(cc); else maCostCenterSelection.delete(cc);
+  document.getElementById('ma-cc-count').textContent = maCostCenterSelection.size + ' selected';
+}
+
+function selectAllCostCenterPicker(select) {
+  var boxes = document.querySelectorAll('#ma-cc-list input[type=checkbox]');
+  for (var i = 0; i < boxes.length; i++) {
+    boxes[i].checked = select;
+    var label = boxes[i].closest('label');
+    var cc = label ? label.querySelector('strong').textContent : '';
+    if (cc) { if (select) maCostCenterSelection.add(cc); else maCostCenterSelection.delete(cc); }
+  }
+  document.getElementById('ma-cc-count').textContent = maCostCenterSelection.size + ' selected';
+}
+
+function saveCostCenterPicker() {
+  maWizardCostCenters = Array.from(maCostCenterSelection).sort();
+  renderCostCenterSummary();
+  if (maWizardStep === 6) renderRoleWizard();
+  closeCostCenterPicker();
 }
 
 function closeRoleWizard() {
@@ -1279,14 +1347,15 @@ function renderRoleWizard() {
   if (step === 3) renderModelSummary('new');
   if (step === 6) {
     var models = maNewModels.concat(splitModels(document.getElementById('ma-new-extra').value));
-    var filterField = document.getElementById('ma-wizard-filter-field').value;
-    var filterValue = (document.getElementById('ma-wizard-filter-value').value || '').trim();
     var budget = parseFloat(document.getElementById('ma-new-budget').value || '0') || 0;
+    var costCenters = maWizardCostCenters.length
+      ? esc(maWizardCostCenters.join(', ')) + ' (one-time snapshot)'
+      : 'none yet — assign later';
     document.getElementById('ma-wizard-review').innerHTML =
       '<div><strong>Name:</strong> ' + esc(document.getElementById('ma-new-name').value || '') + '</div>' +
       '<div><strong>Default:</strong> ' + (isDefault ? 'yes — all active people' + (existingDefault ? ' (replaces ' + esc(existingDefault.name) + ')' : '') : 'no') + '</div>' +
       '<div><strong>Models:</strong> ' + (models.length ? esc(models.join(', ')) : 'none (grants no access)') + '</div>' +
-      '<div><strong>People:</strong> ' + (isDefault ? 'all active people' : (filterField && filterValue ? esc(filterField) + ' = ' + esc(filterValue) + ' (one-time snapshot)' : 'none yet — assign later')) + '</div>' +
+      '<div><strong>Cost centers:</strong> ' + (isDefault ? 'all active people' : costCenters) + '</div>' +
       '<div><strong>Budget:</strong> ' + (budget > 0 ? '$' + budget + '/person/month' : 'no role budget — inherits global default') + '</div>';
   }
   document.getElementById('ma-wizard-back').style.display = step === 1 ? 'none' : '';
@@ -1310,10 +1379,8 @@ function roleWizardNext() {
     var models = maNewModels.concat(splitModels(document.getElementById('ma-new-extra').value));
     if (!models.length && !confirm('This role has no models and will grant no access. Continue?')) return;
   }
-  if (maWizardStep === 4 && !isDefault) {
-    var field = document.getElementById('ma-wizard-filter-field').value;
-    var value = (document.getElementById('ma-wizard-filter-value').value || '').trim();
-    if ((field && !value) || (!field && value)) { showToast('Choose a filter field and value, or leave both empty', 'error'); return; }
+  if (maWizardStep === 4 && !isDefault && !maWizardCostCenters.length) {
+    if (!confirm('No cost centers selected. Create the role without assigning anyone?')) return;
   }
   if (maWizardStep === 5) {
     var budget = parseFloat(document.getElementById('ma-new-budget').value || '0');
@@ -1335,14 +1402,12 @@ function createModelAccessRole() {
   if (!name) { showToast('Role name is required', 'error'); return; }
   var existingDefault = maRoles.filter(function(r) { return r.is_default; })[0];
   var replaceDefault = isDefault && existingDefault && document.getElementById('ma-wizard-replace').checked;
-  var filterField = document.getElementById('ma-wizard-filter-field').value;
-  var filterValue = (document.getElementById('ma-wizard-filter-value').value || '').trim();
   sendJSON(maURL('/roles'), 'POST', {
     name: name, description: '', models: models, is_default: isDefault,
     replace_default: !!replaceDefault, monthly_usd: monthlyUSD
   }).then(function(role) {
-    var applyPeople = !isDefault && filterField && filterValue
-      ? sendJSON(maURL('/roles/' + encodeURIComponent(role.role_id) + '/subjects/filter'), 'POST', {field: filterField, value: filterValue})
+    var applyPeople = !isDefault && maWizardCostCenters.length
+      ? sendJSON(maURL('/roles/' + encodeURIComponent(role.role_id) + '/subjects/filter'), 'POST', {field: 'cost_center', values: maWizardCostCenters})
       : Promise.resolve(null);
     return applyPeople.then(function() { return role; });
   }).then(function(role) {
@@ -1354,31 +1419,14 @@ function createModelAccessRole() {
 }
 
 function selectModelAccessRole(roleID) {
-  Promise.all([
-    fetchJSON(maURL('/roles/' + encodeURIComponent(roleID))),
-    fetchJSON(maURL('/roles/' + encodeURIComponent(roleID) + '/subjects'))
-  ]).then(function(res) {
-    maRole = res[0];
-    var subjects = res[1] || [];
+  fetchJSON(maURL('/roles/' + encodeURIComponent(roleID))).then(function(role) {
+    maRole = role;
     document.getElementById('ma-role-card').style.display = '';
     document.getElementById('ma-role-title').textContent = maRole.name;
     document.getElementById('ma-role-meta').textContent = (maRole.is_default ? 'default role · ' + (maRole.subject_count || 0) + ' active people' : (maRole.subject_count || 0) + ' people') + (maRole.monthly_usd ? ' · $' + maRole.monthly_usd + '/person' : '');
     document.getElementById('ma-role-budget').value = maRole.monthly_usd || '';
     maRoleModels = (maRole.models || []).slice();
     renderModelSummary('role');
-    renderRolePersonPicker();
-    document.getElementById('ma-filter-preview').innerHTML = '';
-    maFilterPreview = null;
-    var el = document.getElementById('ma-role-subjects');
-    if (!subjects.length) {
-      el.innerHTML = '<div class="ts">No explicit assignments. ' + (maRole.is_default ? 'Everyone active receives this role automatically.' : 'Assign a subject by ID above.') + '</div>';
-    } else {
-      el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Person</th><th>Type</th><th></th></tr></thead><tbody>' +
-        subjects.map(function(s) {
-          return '<tr><td>' + esc(s.display_name || s.external_id) + '</td><td class="ts">' + esc(s.principal_type) + '</td>' +
-            '<td><button class="btn btn-outline" style="padding:3px 8px;font-size:10px" onclick="removeModelAccessSubject(\'' + esc(maRole.role_id) + '\',\'' + esc(s.subject_id) + '\')">Remove</button></td></tr>';
-        }).join('') + '</tbody></table></div>';
-    }
     document.getElementById('ma-role-card').scrollIntoView({behavior: 'smooth', block: 'nearest'});
   }).catch(function(err) { showToast('Load role failed: ' + err.message, 'error'); });
 }
@@ -1421,74 +1469,6 @@ function saveModelAccessRoleModels() {
     }).catch(function(err) { showToast('Save failed: ' + err.message, 'error'); });
 }
 
-var maFilterPreview = null;
-
-function renderRolePersonPicker() {
-  var q = ((document.getElementById('ma-person-search') || {}).value || '').toLowerCase();
-  var sel = document.getElementById('ma-person-select');
-  if (!sel) return;
-  var matches = maSubjects.filter(function(s) {
-    var hay = [s.display_name, s.email, s.external_id, s.organization, s.cost_center, s.cost_center_description, (s.groups || []).join(' ')].join(' ').toLowerCase();
-    return !q || hay.indexOf(q) >= 0;
-  });
-  sel.innerHTML = matches.length ? matches.map(function(s) {
-    return '<option value="' + esc(s.subject_id) + '">' + esc(s.display_name || s.external_id) +
-      (s.email ? ' — ' + esc(s.email) : '') +
-      (s.organization ? ' · ' + esc(s.organization) : '') +
-      (s.cost_center ? ' · ' + esc(s.cost_center) : '') + '</option>';
-  }).join('') : '<option value="">No matching people</option>';
-}
-
-function assignSelectedRolePerson() {
-  if (!maRole) return;
-  var sel = document.getElementById('ma-person-select');
-  var subjectID = sel ? sel.value : '';
-  if (!subjectID) { showToast('Select a person first', 'error'); return; }
-  sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/subjects'), 'POST', {subject_id: subjectID})
-    .then(function() {
-      showToast('Person assigned', 'success');
-      loadModelAccess().then(function() { selectModelAccessRole(maRole.role_id); });
-    }).catch(function(err) { showToast('Assign failed: ' + err.message, 'error'); });
-}
-
-function previewRoleFilter() {
-  if (!maRole) return;
-  var field = document.getElementById('ma-filter-field').value;
-  var value = (document.getElementById('ma-filter-value').value || '').trim();
-  if (!value) { showToast('Enter an exact filter value', 'error'); return; }
-  sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/subjects/preview'), 'POST', {field: field, value: value})
-    .then(function(res) {
-      maFilterPreview = {field: field, value: value, count: res.count || 0};
-      var names = (res.sample || []).map(function(s) { return s.display_name || s.external_id; }).slice(0, 8).join(', ');
-      document.getElementById('ma-filter-preview').innerHTML = (res.count || 0) +
-        ' active people match <strong>' + esc(field) + ' = ' + esc(value) + '</strong>' +
-        (names ? '<br><span class="ts">' + esc(names) + ((res.count || 0) > 8 ? '…' : '') + '</span>' : '');
-    }).catch(function(err) { showToast('Preview failed: ' + err.message, 'error'); });
-}
-
-function assignRoleFilter() {
-  if (!maRole) return;
-  var field = document.getElementById('ma-filter-field').value;
-  var value = (document.getElementById('ma-filter-value').value || '').trim();
-  if (!value) { showToast('Enter an exact filter value', 'error'); return; }
-  var countText = maFilterPreview && maFilterPreview.field === field && maFilterPreview.value === value
-    ? maFilterPreview.count + ' matching people' : 'all currently matching people';
-  if (!confirm('Assign role "' + maRole.name + '" to ' + countText + '? Future changes to this ' + field + ' are not automatic.')) return;
-  sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/subjects/filter'), 'POST', {field: field, value: value})
-    .then(function(res) {
-      showToast('Assigned ' + res.assigned + ' people', 'success');
-      document.getElementById('ma-filter-preview').innerHTML = '';
-      maFilterPreview = null;
-      loadModelAccess().then(function() { selectModelAccessRole(maRole.role_id); });
-    }).catch(function(err) { showToast('Filter assign failed: ' + err.message, 'error'); });
-}
-
-function removeModelAccessSubject(roleID, subjectID) {
-  sendJSON(maURL('/roles/' + encodeURIComponent(roleID) + '/subjects/' + encodeURIComponent(subjectID)), 'DELETE')
-    .then(function() { showToast('Removed', 'success'); selectModelAccessRole(roleID); loadModelAccess(); })
-    .catch(function(err) { showToast('Remove failed: ' + err.message, 'error'); });
-}
-
 function loadModelAccessSubjects() {
   var q = (document.getElementById('ma-subject-search') || {}).value || '';
   fetchJSON(maURL('/subjects?limit=200&q=' + encodeURIComponent(q))).then(function(subjects) {
@@ -1507,23 +1487,21 @@ function renderModelAccessSubjects() {
     return;
   }
   var rows = maSubjects.map(function(s) {
-    var groups = s.groups || [];
-    var groupText = groups.slice(0, 2).join(', ') + (groups.length > 2 ? ' +' + (groups.length - 2) : '');
     var cc = s.cost_center || '';
     var ccDesc = s.cost_center_description || '';
     var ccText = cc ? (ccDesc && ccDesc !== cc ? cc + ' — ' + ccDesc : cc) : (ccDesc || '—');
     var personName = s.display_name || s.email || s.external_id;
     var personSub = s.email && s.email !== personName ? s.email : '';
     return '<tr style="cursor:pointer" onclick="showModelAccessEffective(\'' + esc(s.subject_id) + '\')">' +
+      '<td class="ts">' + esc(s.first_name || '—') + '</td>' +
+      '<td class="ts">' + esc(s.last_name || '—') + '</td>' +
       '<td><strong>' + esc(personName) + '</strong>' + (personSub ? '<div class="ts" style="font-size:10px">' + esc(personSub) + '</div>' : '') + '</td>' +
-      '<td class="ts">' + esc(s.organization || '—') + '</td>' +
       '<td class="ts">' + esc(ccText) + '</td>' +
-      '<td class="ts" title="' + esc(groups.join(', ')) + '">' + (groupText ? esc(groupText) : '—') + '</td>' +
       '<td class="ts">' + esc(s.principal_type) + '</td>' +
       '<td>' + esc(s.status) + '</td>' +
     '</tr>';
   }).join('');
-  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Person</th><th>Organization</th><th>Cost center</th><th>Groups</th><th>Type</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>First name</th><th>Last name</th><th>Person</th><th>Cost center</th><th>Type</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 function showModelAccessEffective(subjectID) {

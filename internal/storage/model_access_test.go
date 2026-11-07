@@ -340,7 +340,7 @@ func TestSyncPartnerUserSubjects(t *testing.T) {
 	userID := uuid.NewString()
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO partner_users (user_id, tags, role, active, created_by, updated_by)
-		VALUES ($1, '{"preferred_username":"alice","email":"alice@example.com","cost_center":"cc-42","cost_center_description":"Platform","organization":"AI Engineering","job_title":"Staff Engineer","employee_type":"employee","groups":["ai-eng"]}', 'user', TRUE, 'test', 'test')`,
+		VALUES ($1, '{"preferred_username":"alice","first_name":"Alice","last_name":"Anderson","email":"alice@example.com","cost_center":"cc-42","cost_center_description":"Platform","organization":"AI Engineering","job_title":"Staff Engineer","employee_type":"employee","groups":["ai-eng"]}', 'user', TRUE, 'test', 'test')`,
 		userID); err != nil {
 		t.Fatal(err)
 	}
@@ -398,6 +398,7 @@ func TestSyncPartnerUserSubjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(subjects) != 1 || subjects[0].CostCenter != "cc-42" ||
+		subjects[0].FirstName != "Alice" || subjects[0].LastName != "Anderson" ||
 		subjects[0].CostCenterDescription != "Platform" ||
 		subjects[0].Organization != "AI Engineering" ||
 		subjects[0].JobTitle != "Staff Engineer" ||
@@ -664,9 +665,19 @@ func TestAssignModelAccessRoleByFilter(t *testing.T) {
 	if _, err := s.SyncPartnerUserSubjects(ctx, tenant); err != nil {
 		t.Fatal(err)
 	}
-	count, err := s.CountPolicySubjectsByFilter(ctx, tenant, "cost_center", "CC-1")
-	if err != nil || count != 2 {
-		t.Fatalf("count = %d, err %v", count, err)
+	facets, err := s.ListCostCenterFacets(ctx, tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byCC := map[string]int{}
+	for _, f := range facets {
+		byCC[f.CostCenter] = f.People
+	}
+	if byCC["CC-1"] != 2 || byCC["CC-2"] != 1 {
+		t.Fatalf("facets = %#v", facets)
+	}
+	if _, err := s.AssignModelAccessRoleByFilter(ctx, tenant, role.RoleID, "organization", "AI Engineering", "admin"); err == nil {
+		t.Fatal("organization filter should be rejected")
 	}
 	assigned, err := s.AssignModelAccessRoleByFilter(ctx, tenant, role.RoleID, "cost_center", "CC-1", "admin")
 	if err != nil || assigned != 2 {
@@ -676,8 +687,12 @@ func TestAssignModelAccessRoleByFilter(t *testing.T) {
 	if err != nil || assigned != 0 {
 		t.Fatalf("repeat assigned = %d, err %v", assigned, err)
 	}
+	assigned, err = s.AssignModelAccessRoleByCostCenters(ctx, tenant, role.RoleID, []string{"CC-2", "CC-2"}, "admin")
+	if err != nil || assigned != 1 {
+		t.Fatalf("multi assigned = %d, err %v", assigned, err)
+	}
 	subjects, err := s.ListModelAccessRoleSubjects(ctx, tenant, role.RoleID)
-	if err != nil || len(subjects) != 2 {
+	if err != nil || len(subjects) != 3 {
 		t.Fatalf("role subjects = %d, err %v", len(subjects), err)
 	}
 }

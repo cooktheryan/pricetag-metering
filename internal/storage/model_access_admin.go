@@ -45,6 +45,8 @@ type PolicySubjectRecord struct {
 	DisplayName           string    `json:"display_name"`
 	Status                string    `json:"status"`
 	Source                string    `json:"source"`
+	FirstName             string    `json:"first_name,omitempty"`
+	LastName              string    `json:"last_name,omitempty"`
 	Email                 string    `json:"email,omitempty"`
 	CostCenter            string    `json:"cost_center,omitempty"`
 	CostCenterDescription string    `json:"cost_center_description,omitempty"`
@@ -542,6 +544,8 @@ func (s *Store) ListModelAccessRoleSubjects(ctx context.Context, tenantID, roleI
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.subject_id::text, s.tenant_id::text, s.principal_type, s.external_id,
 		       s.display_name, s.status, s.source,
+		       COALESCE(pu.tags->>'first_name', ''),
+		       COALESCE(pu.tags->>'last_name', ''),
 		       COALESCE(pu.tags->>'email', ''),
 		       COALESCE(pu.tags->>'cost_center', ''),
 		       COALESCE(pu.tags->>'cost_center_description', ''),
@@ -565,7 +569,7 @@ func (s *Store) ListModelAccessRoleSubjects(ctx context.Context, tenantID, roleI
 	for rows.Next() {
 		var s PolicySubjectRecord
 		if err := rows.Scan(&s.SubjectID, &s.TenantID, &s.PrincipalType, &s.ExternalID,
-			&s.DisplayName, &s.Status, &s.Source, &s.Email, &s.CostCenter,
+			&s.DisplayName, &s.Status, &s.Source, &s.FirstName, &s.LastName, &s.Email, &s.CostCenter,
 			&s.CostCenterDescription, &s.Organization, &s.JobTitle, &s.EmployeeType,
 			pq.Array(&s.Groups), &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
@@ -585,6 +589,8 @@ func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.subject_id::text, s.tenant_id::text, s.principal_type, s.external_id,
 		       s.display_name, s.status, s.source,
+		       COALESCE(pu.tags->>'first_name', ''),
+		       COALESCE(pu.tags->>'last_name', ''),
 		       COALESCE(pu.tags->>'email', ''),
 		       COALESCE(pu.tags->>'cost_center', ''),
 		       COALESCE(pu.tags->>'cost_center_description', ''),
@@ -599,6 +605,8 @@ func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, 
 		WHERE s.tenant_id = $1
 		  AND ($2 = '' OR s.display_name ILIKE '%' || $2 || '%'
 		       OR s.external_id ILIKE '%' || $2 || '%'
+		       OR COALESCE(pu.tags->>'first_name', '') ILIKE '%' || $2 || '%'
+		       OR COALESCE(pu.tags->>'last_name', '') ILIKE '%' || $2 || '%'
 		       OR COALESCE(pu.tags->>'email', '') ILIKE '%' || $2 || '%'
 		       OR COALESCE(pu.tags->>'cost_center', '') ILIKE '%' || $2 || '%'
 		       OR COALESCE(pu.tags->>'cost_center_description', '') ILIKE '%' || $2 || '%'
@@ -616,7 +624,7 @@ func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, 
 	for rows.Next() {
 		var s PolicySubjectRecord
 		if err := rows.Scan(&s.SubjectID, &s.TenantID, &s.PrincipalType, &s.ExternalID,
-			&s.DisplayName, &s.Status, &s.Source, &s.Email, &s.CostCenter,
+			&s.DisplayName, &s.Status, &s.Source, &s.FirstName, &s.LastName, &s.Email, &s.CostCenter,
 			&s.CostCenterDescription, &s.Organization, &s.JobTitle, &s.EmployeeType,
 			pq.Array(&s.Groups), &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
@@ -681,17 +689,48 @@ func (s *Store) GetActiveCreditUSD(ctx context.Context, tenantID, subjectID stri
 	return credits, nil
 }
 
+// policySubjectFilterClause is intentionally cost-center only: v1 assigns
+// people to roles by cost center, not by organization or group.
 func policySubjectFilterClause(field, placeholder string) (string, error) {
-	switch field {
-	case "cost_center":
-		return `COALESCE(pu.tags->>'cost_center', '') = ` + placeholder, nil
-	case "organization":
-		return `COALESCE(pu.tags->>'organization', '') = ` + placeholder, nil
-	case "group":
-		return `EXISTS (SELECT 1 FROM jsonb_array_elements_text(pu.tags->'groups') g WHERE g = ` + placeholder + `)`, nil
-	default:
-		return "", fmt.Errorf("unsupported subject filter %q", field)
+	if field != "cost_center" {
+		return "", fmt.Errorf("unsupported subject filter %q (only cost_center)", field)
 	}
+	return `COALESCE(pu.tags->>'cost_center', '') = ` + placeholder, nil
+}
+
+// CostCenterFacet is one selectable cost center plus its active headcount.
+type CostCenterFacet struct {
+	CostCenter  string `json:"cost_center"`
+	Description string `json:"description,omitempty"`
+	People      int    `json:"people"`
+}
+
+// ListCostCenterFacets lists the cost centers available for bulk assignment.
+func (s *Store) ListCostCenterFacets(ctx context.Context, tenantID string) ([]CostCenterFacet, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT COALESCE(pu.tags->>'cost_center', '') AS cost_center,
+		       COALESCE(MAX(NULLIF(pu.tags->>'cost_center_description', '')), '') AS description,
+		       COUNT(*)::int AS people
+		FROM policy_subjects s
+		JOIN partner_users pu
+		  ON s.principal_type = 'partner_user' AND pu.user_id::text = s.external_id
+		WHERE s.tenant_id = $1 AND s.principal_type = 'partner_user' AND s.status = 'active'
+		  AND COALESCE(pu.tags->>'cost_center', '') <> ''
+		GROUP BY COALESCE(pu.tags->>'cost_center', '')
+		ORDER BY cost_center`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("list cost center facets: %w", err)
+	}
+	defer rows.Close()
+	out := []CostCenterFacet{}
+	for rows.Next() {
+		var f CostCenterFacet
+		if err := rows.Scan(&f.CostCenter, &f.Description, &f.People); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) ListPolicySubjectsByFilter(ctx context.Context, tenantID, field, value string, limit int) ([]PolicySubjectRecord, error) {
@@ -705,6 +744,8 @@ func (s *Store) ListPolicySubjectsByFilter(ctx context.Context, tenantID, field,
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.subject_id::text, s.tenant_id::text, s.principal_type, s.external_id,
 		       s.display_name, s.status, s.source,
+		       COALESCE(pu.tags->>'first_name', ''),
+		       COALESCE(pu.tags->>'last_name', ''),
 		       COALESCE(pu.tags->>'email', ''),
 		       COALESCE(pu.tags->>'cost_center', ''),
 		       COALESCE(pu.tags->>'cost_center_description', ''),
@@ -728,7 +769,7 @@ func (s *Store) ListPolicySubjectsByFilter(ctx context.Context, tenantID, field,
 	for rows.Next() {
 		var s PolicySubjectRecord
 		if err := rows.Scan(&s.SubjectID, &s.TenantID, &s.PrincipalType, &s.ExternalID,
-			&s.DisplayName, &s.Status, &s.Source, &s.Email, &s.CostCenter,
+			&s.DisplayName, &s.Status, &s.Source, &s.FirstName, &s.LastName, &s.Email, &s.CostCenter,
 			&s.CostCenterDescription, &s.Organization, &s.JobTitle, &s.EmployeeType,
 			pq.Array(&s.Groups), &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
@@ -756,17 +797,28 @@ func (s *Store) CountPolicySubjectsByFilter(ctx context.Context, tenantID, field
 	return count, nil
 }
 
-// AssignModelAccessRoleByFilter assigns every currently matching person to a
-// role. It resolves the match at apply time and writes explicit assignment
-// rows; it does not create a dynamic organization/group binding.
-func (s *Store) AssignModelAccessRoleByFilter(ctx context.Context, tenantID, roleID, field, value, actor string) (int, error) {
-	clause, err := policySubjectFilterClause(field, "$3")
-	if err != nil {
-		return 0, err
+// AssignModelAccessRoleByCostCenters assigns every active person currently in
+// the given cost centers to a role. It resolves the match at apply time and
+// writes explicit assignment rows; it does not create a dynamic binding.
+func (s *Store) AssignModelAccessRoleByCostCenters(ctx context.Context, tenantID, roleID string, costCenters []string, actor string) (int, error) {
+	clean := make([]string, 0, len(costCenters))
+	seen := map[string]struct{}{}
+	for _, cc := range costCenters {
+		cc = strings.TrimSpace(cc)
+		if cc == "" {
+			continue
+		}
+		if _, ok := seen[cc]; ok {
+			continue
+		}
+		seen[cc] = struct{}{}
+		clean = append(clean, cc)
 	}
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return 0, fmt.Errorf("filter value is required")
+	if len(clean) == 0 {
+		return 0, fmt.Errorf("at least one cost center is required")
+	}
+	if len(clean) > 200 {
+		return 0, fmt.Errorf("at most 200 cost centers per assignment")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -787,21 +839,21 @@ func (s *Store) AssignModelAccessRoleByFilter(ctx context.Context, tenantID, rol
 		INSERT INTO model_access_role_assignments (tenant_id, role_id, subject_id, assigned_by)
 		SELECT $1, $2, s.subject_id, $4
 		FROM policy_subjects s
-		LEFT JOIN partner_users pu
+		JOIN partner_users pu
 		  ON s.principal_type = 'partner_user' AND pu.user_id::text = s.external_id
 		WHERE s.tenant_id = $1 AND s.principal_type = 'partner_user' AND s.status = 'active'
-		  AND `+clause+`
+		  AND COALESCE(pu.tags->>'cost_center', '') = ANY($3)
 		ON CONFLICT (role_id, subject_id) DO NOTHING`,
-		tenantID, roleID, value, actor)
+		tenantID, roleID, pq.Array(clean), actor)
 	if err != nil {
-		return 0, fmt.Errorf("assign role by filter: %w", err)
+		return 0, fmt.Errorf("assign role by cost center: %w", err)
 	}
 	n, _ := result.RowsAffected()
 	if err := s.bumpPolicyVersionTx(ctx, tx, tenantID); err != nil {
 		return int(n), err
 	}
-	if err := s.auditTx(ctx, tx, actor, "model_access.assignment_filter", roleID, map[string]any{
-		"field": field, "value": value, "assigned": n,
+	if err := s.auditTx(ctx, tx, actor, "model_access.assignment_cost_center", roleID, map[string]any{
+		"cost_centers": clean, "assigned": n,
 	}); err != nil {
 		return int(n), err
 	}
@@ -809,6 +861,15 @@ func (s *Store) AssignModelAccessRoleByFilter(ctx context.Context, tenantID, rol
 		return int(n), err
 	}
 	return int(n), nil
+}
+
+// AssignModelAccessRoleByFilter is the single-value compatibility wrapper
+// behind the old preview/assign form. Only cost_center is supported.
+func (s *Store) AssignModelAccessRoleByFilter(ctx context.Context, tenantID, roleID, field, value, actor string) (int, error) {
+	if _, err := policySubjectFilterClause(field, "$3"); err != nil {
+		return 0, err
+	}
+	return s.AssignModelAccessRoleByCostCenters(ctx, tenantID, roleID, []string{value}, actor)
 }
 
 func (s *Store) EnsureServiceIdentity(ctx context.Context, tenantID, externalID, displayName string) (string, error) {
