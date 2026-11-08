@@ -219,7 +219,33 @@ func TestCostCenterChartShowsPercentAndDirectoryCode(t *testing.T) {
 		"String(d.item.cost_center||'').trim()",
 		"function costCenterSliceLabel(meta)",
 		"meta.pct+'% — '+id+meta.desc",
-		"'% spent — '",
+		"const share=tokensOnly?'% of tokens':'% spent';",
+		"meta.pct+share+' — '",
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("dashboard.html no longer contains %q", want)
+		}
+	}
+}
+
+// Demo mode must be safe to screen-share: names are blurred, and every
+// actual-spend surface either switches to tokens or disappears. Savings stay
+// visible because they are the demo's point.
+func TestDemoModeHidesActualSpend(t *testing.T) {
+	data, err := FS.ReadFile("dashboard.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Demo mode · costs hidden",
+		".demo-private .demo-cost{display:none!important}",
+		"function syncDemoMetrics()",
+		"const tokensOnly=demoPrivacyEnabled();",
+		"tokensOnly?function(d){return d.total_tokens||0;}:function(d){return d.cost_usd||0;}",
+		"document.getElementById('kpi-cost').textContent=demoPrivacyEnabled()?'Hidden':fmtC(d.total_cost_usd);",
+		"cachedRecent=Array.isArray(data)?data:[];",
+		`class="num demo-cost">${fmtC(r.cost_usd)}`,
+		"if(demoPrivacyEnabled()&&e.target.dataset.um==='cost')return;",
 	} {
 		if !bytes.Contains(data, []byte(want)) {
 			t.Errorf("dashboard.html no longer contains %q", want)
