@@ -20,6 +20,12 @@ audit trail.
 `user_id` is the stable external UUID. It is not an email address or MaaS key
 ID.
 
+`DELETE` is a two-phase operation: the user is marked inactive first, then
+partner-managed keys are revoked in MaaS. The entitlement layer resolves both
+inactive and revocation-pending users (including historical logins) and denies
+every model, so access stops immediately even when the MaaS revocation fails
+and has to be retried.
+
 ## Partial profile synchronization
 
 Use `PATCH` when an upstream login or directory sync detects changed LDAP

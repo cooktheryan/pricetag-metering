@@ -100,9 +100,16 @@ func (s *Store) GetUserModelAllowlist(ctx context.Context, username string) (Use
 		return UserModelAllowlist{}, errors.New("username is required")
 	}
 	// SSO partner identities are keyed by stable UUID in their public policy
-	// API. Resolve the MaaS login from validation metadata through the retained
-	// login map so policies follow email changes and inactive users fail closed.
-	partnerUser, partnerErr := s.PartnerUserByMaaSUsername(ctx, username)
+	// API. Resolve the login through the retained login map — including
+	// historical (non-current) logins — so policies follow email changes and
+	// a deactivated person still resolves to their UUID.
+	//
+	// Resolving only the current *active* login is a security bug: an
+	// inactive or revocation-pending user then looks like an unknown login
+	// and falls through to the legacy allowlist below, which is usually empty
+	// and therefore allows every model. GetPartnerUserModelAllowlist already
+	// fails closed for inactive/pending users; it just needs the UUID.
+	partnerUser, partnerErr := s.PartnerUserByAnyMaaSUsername(ctx, username)
 	if partnerErr == nil {
 		partnerPolicy, err := s.GetPartnerUserModelAllowlist(ctx, partnerUser.UserID)
 		if err != nil {

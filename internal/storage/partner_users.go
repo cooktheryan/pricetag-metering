@@ -770,6 +770,23 @@ func (s *Store) PartnerUserByMaaSUsername(ctx context.Context, username string) 
 	return user, err
 }
 
+// PartnerUserByAnyMaaSUsername resolves the partner user behind a MaaS login
+// without requiring the login to be current or the user to be active. The
+// entitlement layer uses it to fail closed for deactivated people: treating
+// their login as unknown would fall through to the legacy allowlist, which is
+// usually empty and therefore allows every model. Identity and authorization
+// callers must keep using PartnerUserByMaaSUsername, which follows only the
+// current active login.
+func (s *Store) PartnerUserByAnyMaaSUsername(ctx context.Context, username string) (PartnerUser, error) {
+	user, err := scanPartnerUser(s.db.QueryRowContext(ctx, partnerUserSelect+`
+		JOIN partner_user_logins l ON l.user_id = p.user_id
+		WHERE LOWER(l.username) = LOWER($1)`, strings.TrimSpace(username)))
+	if errors.Is(err, sql.ErrNoRows) {
+		return PartnerUser{}, ErrPartnerUserNotFound
+	}
+	return user, err
+}
+
 // CurrentPartnerUserLogin resolves the canonical MaaS login for a verified
 // partner UUID. OIDC uses this after profile persistence because that patch
 // can move the is_current login when the IdP changes the email address.
