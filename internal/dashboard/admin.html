@@ -1080,6 +1080,7 @@ function setTabBadge(tab, n, alert) {
    Model access
    ================================================================ */
 var maRoles = [], maRole = null, maSubjects = [], maCatalog = [], maEffectiveSubject = null;
+var maHighlightRoleID = null;
 var maNewModels = [], maRoleModels = [], maPickerTarget = null, maPickerSelection = new Set();
 
 function maURL(path) { return '/api/v2/tenants/default/model-access' + path; }
@@ -1245,7 +1246,7 @@ function renderModelAccessRoles() {
     var retire = r.is_default
       ? '<button class="btn btn-outline" style="padding:4px 10px;font-size:10px" disabled title="Replace the default role before retiring it">Retire</button>'
       : '<button class="btn btn-outline" style="padding:4px 10px;font-size:10px;color:#ff6b6b" onclick="retireModelAccessRole(\'' + esc(r.role_id) + '\')">Retire</button>';
-    return '<tr>' +
+    return '<tr' + (r.role_id === maHighlightRoleID ? ' style="background:var(--c2)"' : '') + '>' +
       '<td><strong>' + esc(r.name) + '</strong>' + (r.is_default ? ' <span class="badge badge-grn">default</span>' : '') + '</td>' +
       '<td>' + models.length + '</td>' +
       '<td>' + (r.monthly_usd ? '$' + r.monthly_usd + '/person' : '—') + '</td>' +
@@ -1268,6 +1269,7 @@ var maCostCenterSelection = new Set();
 var maWizardCostCenters = [];
 
 function openRoleWizard() {
+  closeRoleEditor();
   maWizardStep = 1;
   maNewModels = [];
   maWizardCostCenters = [];
@@ -1442,9 +1444,12 @@ function createModelAccessRole() {
       : Promise.resolve(null);
     return applyPeople.then(function() { return role; });
   }).then(function(role) {
-    showToast('Role created', 'success');
+    showToast('Role "' + role.name + '" created', 'success');
     closeRoleWizard();
-    loadModelAccess().then(function() { editModelAccessRole(role.role_id); });
+    maHighlightRoleID = role.role_id;
+    loadModelAccess().then(function() {
+      setTimeout(function() { maHighlightRoleID = null; renderModelAccessRoles(); }, 3000);
+    });
   }).catch(function(err) { showToast('Create failed: ' + err.message, 'error'); });
 }
 
