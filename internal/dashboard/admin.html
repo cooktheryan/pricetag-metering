@@ -52,6 +52,7 @@ body{background:var(--bg);color:var(--t);font-family:Inter,-apple-system,BlinkMa
   letter-spacing:.3px;cursor:pointer;font-family:inherit;transition:color .15s;
   display:inline-flex;align-items:center;gap:7px;
 }
+.vtab[hidden]{display:none}
 .vtab:hover{color:var(--t)}
 .vtab.on{color:var(--blu);border-bottom-color:var(--blu)}
 .tcount{
@@ -550,7 +551,7 @@ td .tag{white-space:nowrap}
     <a href="/account?tab=keys">API keys</a>
     <a href="/dashboard">Org usage</a>
     <a href="/manager" id="team-tab" style="display:none" title="Usage for everyone on your team">My team</a>
-    <a href="/routing">Routing</a>
+    <a href="/routing" id="legacy-routing">Routing</a>
     <a href="/admin" class="on">Admin</a>
   </nav>
   <div class="ab-right">
@@ -564,7 +565,7 @@ td .tag{white-space:nowrap}
 
 <!-- Console tabs -->
 <div class="vtabs">
-  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button><button class="vtab" id="vtab-model-access" onclick="showTab('model-access')">Model access</button><button class="vtab" id="vtab-over-limit" onclick="showTab('over-limit')">Over limit<span class="tcount" id="badge-over-limit" style="display:none"></span></button><button class="vtab" id="vtab-safety-net" onclick="showTab('safety-net')">Safety Net</button><button class="vtab" id="vtab-pricing-discounts" onclick="showTab('pricing-discounts')">Pricing Discounts</button><button class="vtab" id="vtab-model-restrictions" onclick="showTab('model-restrictions')">Legacy restrictions</button>
+  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button><button class="vtab" id="vtab-user-keys" data-managed hidden onclick="showTab('user-keys')">User keys</button><button class="vtab" id="vtab-model-access" onclick="showTab('model-access')">Model access</button><button class="vtab" id="vtab-over-limit" onclick="showTab('over-limit')">Over limit<span class="tcount" id="badge-over-limit" style="display:none"></span></button><button class="vtab" id="vtab-safety-net" onclick="showTab('safety-net')">Safety Net</button><button class="vtab" id="vtab-user-quota" data-managed hidden onclick="showTab('user-quota')">User quota</button><button class="vtab" id="vtab-model-pricing" data-managed hidden onclick="showTab('model-pricing')">Model pricing</button><button class="vtab" id="vtab-pricing-discounts" onclick="showTab('pricing-discounts')">Pricing Discounts</button><button class="vtab" id="vtab-model-restrictions" onclick="showTab('model-restrictions')">Legacy restrictions</button>
   <div class="vtab-tools">
     <span id="last-updated"></span>
     <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="refreshTab(activeTab,true)">Refresh</button>
@@ -621,19 +622,22 @@ td .tag{white-space:nowrap}
 <!-- ============ TAB: Users ============ -->
 <div class="tab-panel" id="tab-people">
 <div class="card">
-  <div class="card-hdr"><div><span class="card-title">Partner / Atlas Users</span><span class="card-count" id="partner-users-count"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadPartnerUsers()">Refresh</button></div>
-  <div class="ts" style="margin-bottom:10px">Partner identity records — the single source of truth for user management. Role changes are restricted to super-admins.</div>
+<!-- MANAGED_USERS -->
+  <div class="card-hdr"><div><span class="card-title">Users</span><span class="card-count" id="partner-users-count"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadPartnerUsers()">Refresh</button></div>
+  <div class="ts" style="margin-bottom:10px">Select a user for details and active keys. Edit uses the existing login; role and manager changes require a super-admin.</div>
   <div class="partner-users-toolbar" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-    <input type="search" id="partner-users-search" class="tbl-input" placeholder="Search name, email, or user ID" oninput="onPartnerUsersSearch()" style="flex:1;min-width:220px;padding:7px 10px;font-size:12px">
+    <input type="search" id="partner-users-search" class="tbl-input" placeholder="Search login, name, email, or user ID" oninput="onPartnerUsersSearch()" style="flex:1;min-width:220px;padding:7px 10px;font-size:12px">
+    <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:6px">Status <select class="tbl-input" style="width:auto;padding:6px 10px" id="partner-users-state" onchange="loadPartnerUsers(0)"><option value="all">All users</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
     <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:6px">Per page
       <select id="partner-users-page-size" onchange="onPartnerUsersPageSize()" style="background:var(--c2);color:var(--t);border:1px solid var(--bdr);padding:6px 10px;border-radius:5px;font-size:12px;font-family:inherit;cursor:pointer;outline:none">
-        <option value="20">20</option>
-        <option value="50" selected>50</option>
+        <option value="5" selected>5</option><option value="20">20</option>
+        <option value="50">50</option>
         <option value="100">100</option>
         <option value="200">200</option>
       </select>
     </label>
   </div>
+
   <div id="partner-users-list"><div class="loading"><div class="spinner"></div>Loading partner users...</div></div>
   <div class="partner-users-pager"><button id="partner-users-prev" onclick="changePartnerUsersPage(-1)">Previous</button><span id="partner-users-page-label">Page 1</span><button id="partner-users-next" onclick="changePartnerUsersPage(1)">Next</button></div>
   </div>
@@ -829,6 +833,10 @@ td .tag{white-space:nowrap}
   </div>
 </div>
 
+<div class="tab-panel" id="tab-user-quota"><div class="card"><!-- MANAGED_BUDGETS --></div></div>
+<div class="tab-panel" id="tab-model-pricing"><div class="card"><!-- MANAGED_PRICES --></div></div>
+<div class="tab-panel" id="tab-user-keys"><div class="card"><!-- MANAGED_KEYS --></div></div>
+<p role="status" id="status" hidden></p>
 <!-- ============ TAB: Safety Net ============ -->
 <div class="tab-panel" id="tab-safety-net">
   <div class="card">
@@ -843,6 +851,7 @@ td .tag{white-space:nowrap}
   <div class="card">
     <div class="card-hdr"><div><span class="card-title">Commercial Pricing Discounts</span><span class="card-count" id="pricing-discounts-meta"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadPricingDiscounts()">Refresh</button></div>
     <div class="ts" style="margin-bottom:14px">Super-admin-only effective-rate policy. Vendor list prices remain unchanged. Changes are audited and apply on the next pricing refresh or Metering restart.</div>
+
     <div id="pricing-discounts-body"><div class="loading"><div class="spinner"></div>Loading pricing policy...</div></div>
   </div>
 </div>
@@ -1046,10 +1055,10 @@ function resolveModelName(crdName) {
 /* ================================================================
    Tabs — one panel visible, lazy load on first open, deep-linkable
    ================================================================ */
-var TABS = ['people', 'model-access', 'over-limit', 'safety-net', 'pricing-discounts', 'model-restrictions'];
+var TABS = ['people', 'user-keys', 'model-access', 'over-limit', 'safety-net', 'user-quota', 'model-pricing', 'pricing-discounts', 'model-restrictions'];
 
 function showTab(name, pushHash) {
-  if (TABS.indexOf(name) < 0) name = 'people';
+  if (TABS.indexOf(name) < 0 || document.getElementById('vtab-' + name)?.hidden) name = 'people';
   activeTab = name;
   for (var i = 0; i < TABS.length; i++) {
     var t = TABS[i];
@@ -1072,6 +1081,12 @@ function refreshTab(name, manual) {
     loadModelAccess();
   } else if (name === 'over-limit') {
     loadOverLimit();
+  } else if (name === 'model-pricing' && window.refreshManagedPrices) {
+    window.refreshManagedPrices();
+  } else if (name === 'user-quota' && window.refreshManagedBudgets) {
+    window.refreshManagedBudgets();
+  } else if (name === 'user-keys' && window.refreshManagedUsers) {
+    window.refreshManagedUsers();
   } else if (name === 'safety-net') {
     loadSafetyNet();
   } else if (name === 'pricing-discounts') {
@@ -1848,7 +1863,7 @@ function excludeModelAccessDefault() {
     .catch(function(err) { showToast('Exclude failed: ' + err.message, 'error'); });
 }
 
-var safetyNetPolicy = null, safetyNetModels = [], safetyNetDraft = null;
+var safetyNetPolicy = null, safetyNetModels = [], safetyNetDraft = null, safetyNetModelLabels = {};
 var pricingDiscountPolicy = null, pricingDiscountDraft = null;
 var modelRestrictionsPage = 0, modelRestrictionsPageSize = 50, modelRestrictionsHasMore = false;
 
@@ -1858,7 +1873,8 @@ function loadSafetyNet() {
     safetyNetDraft = (policy.allowed_over_limit_models || []).slice();
     return fetchJSON('/api/v1/admin/models').then(function(models) {
       safetyNetModels = (Array.isArray(models) ? models : []).map(function(m) {
-        return m.name || m.id || m.model || '';
+        var id=m.targetModel || m.name || m.id || m.model || '';
+        safetyNetModelLabels[id]=m.name||id;return id;
       }).filter(Boolean);
     }).catch(function() { safetyNetModels = []; }).then(renderSafetyNet);
   }).catch(function(err) {
@@ -1914,7 +1930,12 @@ function savePricingDiscounts() {
   syncPricingDiscountDraft();
   var version = document.getElementById('pricing-discount-version').value.trim();
   updateJSON('/api/v1/admin/pricing-discounts', 'PUT', {version:version, rules:pricingDiscountDraft}).then(function() {
-    return fetch('/api/v1/admin/pricing/refresh', {method:'POST'});
+    return fetch('/api/v1/admin/pricing/refresh', {method:'POST'}).then(function(response) {
+      if (!response.ok) throw new Error('Policy saved, but rate refresh failed (HTTP ' + response.status + '). Retry refresh before relying on the new rates.');
+      return response.json().then(function(result) {
+        if (result.error) throw new Error('Policy saved, but rate refresh failed. Retry refresh before relying on the new rates.');
+      });
+    });
   }).then(function() {
     loadPricingDiscounts();
   }).catch(function(err) {
@@ -1927,7 +1948,7 @@ function renderSafetyNet() {
   var chips = draft.length ? draft.map(function(m, i) {
     return '<span class="badge badge-grn" style="font-size:10px;display:inline-flex;gap:6px;align-items:center;padding:5px 9px;margin:0 6px 6px 0">' + esc(m) + '<button class="btn" style="padding:0;background:none;color:inherit;font-weight:700" onclick="removeSafetyModel(' + i + ')">&times;</button></span>';
   }).join('') : '<span class="ts">No bypass models — over-limit users are fully blocked.</span>';
-  var opts = safetyNetModels.filter(function(m) { return draft.indexOf(m) < 0; }).map(function(m) { return '<option value="' + esc(m) + '">'; }).join('');
+  var opts = safetyNetModels.filter(function(m) { return draft.indexOf(m) < 0; }).map(function(m) { return '<option value="' + esc(m) + '" label="' + esc(safetyNetModelLabels[m]||m) + '">'; }).join('');
   document.getElementById('safety-net-meta').textContent = p.enforced ? 'ENFORCING' : 'tracking only';
   document.getElementById('safety-net-body').innerHTML =
     '<div class="warning" style="margin-bottom:14px"><span class="icon">!</span><div>Enforcement uses month-to-date USD spend. Bypass matching is exact and case-sensitive; the gateway must provide the request model for it to work.</div></div>' +
@@ -1936,7 +1957,7 @@ function renderSafetyNet() {
       '<div><label class="field-label">Enforcement</label><label style="display:flex;gap:8px;align-items:center;margin-top:9px"><input type="checkbox" id="safety-enforced" style="width:auto" ' + (p.enforced ? 'checked' : '') + '> Block over-limit requests</label></div>' +
     '</div>' +
     '<div style="border-top:1px solid var(--border);padding-top:14px"><label class="field-label">Models allowed after the limit</label><div style="margin:8px 0 12px">' + chips + '</div>' +
-      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input id="safety-model-add" list="safety-model-list" placeholder="Exact model ID" style="width:320px"><datalist id="safety-model-list">' + opts + '</datalist><button class="btn btn-outline" onclick="addSafetyModel()">Add model</button></div>' +
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input id="safety-model-add" list="safety-model-list" placeholder="Choose or enter the billed model ID" style="width:320px"><datalist id="safety-model-list">' + opts + '</datalist><button class="btn btn-outline" onclick="addSafetyModel()">Add model</button></div>' +
     '</div><div style="margin-top:16px"><button class="btn btn-grn" onclick="saveSafetyNet()">Save safety net</button></div>';
 }
 function addSafetyModel() {
@@ -2066,7 +2087,7 @@ refreshTimer = setInterval(function() {
   if (document.querySelector('.modal-overlay.open, .confirm-overlay.open')) return;
   var ae = document.activeElement;
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return;
-  if (activeTab === 'people' || activeTab === 'model-access' || activeTab === 'safety-net') return; // editable tabs use explicit refresh/save
+  if (['people','model-access','safety-net','user-keys','user-quota','model-pricing','pricing-discounts'].includes(activeTab)) return; // editable tabs use explicit refresh/save
   refreshTab(activeTab, false);
 }, REFRESH_INTERVAL);
 
@@ -2863,16 +2884,19 @@ function loadPeople(cb) {
     if (cb) cb();
   });
 }
-var partnerUsersAll = [], partnerManagersAll = [], partnerUsersPage = 0, partnerUsersPageSize = 50, partnerUsersHasMore = false, partnerUsersSearch = '', partnerUsersSearchTimer = null;
+var partnerUsersAll = [], partnerManagersAll = [], partnerUsersPage = 0, partnerUsersPageSize = 5, partnerUsersHasMore = false, partnerUsersSearch = '', partnerUsersSearchTimer = null;
+var partnerUsersGeneration;
 function loadPartnerUsers(page) {
   if (typeof page === 'number') partnerUsersPage = page;
   // refreshTab can call this before the declarations below have executed.
   // Keep the first request valid instead of sending undefined/NaN to the API.
-  var limit = partnerUsersPageSize || 50;
+  var limit = partnerUsersPageSize || 5;
   var offset = (partnerUsersPage || 0) * limit;
-  var q = '/api/v1/admin/partner-users?limit=' + limit + '&offset=' + offset;
+  var q = '/api/v1/admin/partner-users?limit=' + limit + '&offset=' + offset + '&state=' + encodeURIComponent(document.getElementById('partner-users-state').value);
+  var generation = partnerUsersGeneration = (partnerUsersGeneration || 0) + 1;
   if (partnerUsersSearch) q += '&search=' + encodeURIComponent(partnerUsersSearch);
   fetchJSON(q).then(function(payload) {
+    if(generation !== partnerUsersGeneration)return;
     var pageData = Array.isArray(payload) ? {users: payload, managers: payload, total: payload.length, has_more: false} : payload;
     partnerUsersAll = Array.isArray(pageData.users) ? pageData.users : [];
     partnerManagersAll = Array.isArray(pageData.managers) ? pageData.managers : partnerUsersAll;
@@ -2881,6 +2905,7 @@ function loadPartnerUsers(page) {
     loadRoles(partnerManagersAll);
     renderPartnerUsers();
   }).catch(function(e) {
+    if(generation !== partnerUsersGeneration)return;
     document.getElementById('partner-users-list').innerHTML = '<div class="err-msg">' + esc(e.message) + '</div>';
   });
 }
@@ -2899,7 +2924,7 @@ function changePartnerUsersPage(delta) {
 }
 function onPartnerUsersPageSize() {
   var sel = document.getElementById('partner-users-page-size');
-  partnerUsersPageSize = parseInt(sel.value, 10) || 50;
+  partnerUsersPageSize = parseInt(sel.value, 10) || 5;
   loadPartnerUsers(0); // page size change resets to the first page
 }
 function onPartnerUsersSearch() {
@@ -2914,7 +2939,7 @@ function onPartnerUsersSearch() {
 function renderPartnerUsers() {
   var byId = {};
   partnerUsersAll.forEach(function(u) { byId[u.user_id] = u; });
-  var html = '<table><thead><tr><th>User</th><th>Country</th><th>Manager</th><th>Role</th><th>Status</th></tr></thead><tbody>';
+  var html = '<table><thead><tr><th>User</th><th>Login</th><th>Country</th><th>Manager</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
   partnerUsersAll.forEach(function(u) {
     var t = u.tags || {};
     var name = ((t.first_name || '') + ' ' + (t.last_name || '')).trim() || t.email || u.user_id;
@@ -2923,11 +2948,11 @@ function renderPartnerUsers() {
       return '<option value="' + esc(m.user_id) + '"' + (u.manager_user_id === m.user_id ? ' selected' : '') + '>' + esc(mn) + '</option>';
     }).join('');
     html += '<tr data-user-id="' + esc(u.user_id) + '" tabindex="0" onclick="openPartnerDetails(' + partnerUsersAll.indexOf(u) + ')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openPartnerDetails(' + partnerUsersAll.indexOf(u) + ')}"><td><b>' + esc(name) + '</b><div class="ts">' + esc(t.email || '') + '<br>' + esc(u.user_id) + '</div></td>' +
-      '<td>' + countryFlag(t.country) + esc(t.country || '—') + '</td>' +
-      '<td><select class="tbl-input partner-manager" onchange="updatePartnerAccess(this)">' + managers + '</select></td>' +
-      '<td><select class="tbl-input partner-role" onchange="updatePartnerAccess(this)">' +
+      '<td>' + esc((u.logins || []).join(', ')) + '</td><td>' + countryFlag(t.country) + esc(t.country || '—') + '</td>' +
+      '<td><select class="tbl-input partner-manager" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()" onchange="updatePartnerAccess(this)">' + managers + '</select></td>' +
+      '<td><select class="tbl-input partner-role" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()" onchange="updatePartnerAccess(this)">' +
       ['user','admin','super_admin'].map(function(role) { return '<option value="' + role + '"' + (u.role === role ? ' selected' : '') + '>' + role + '</option>'; }).join('') +
-      '</select></td><td>' + (u.active ? 'active' : 'inactive') + '</td></tr>';
+      '</select></td><td>' + (u.active ? 'active' : 'inactive') + '</td><td><button type="button" class="btn btn-outline" onclick="event.stopPropagation();if(window.editManagedUser)editManagedUser('+partnerUsersAll.indexOf(u)+')" onkeydown="event.stopPropagation()">Edit</button></td></tr>';
   });
   html += '</tbody></table>';
   document.getElementById('partner-users-list').innerHTML = html;
@@ -2936,11 +2961,12 @@ function renderPartnerUsers() {
 function openPartnerDetails(index) {
   var u=partnerUsersAll[index]; if(!u)return;
   var t=u.tags||{}, name=((t.first_name||'')+' '+(t.last_name||'')).trim()||t.email||u.user_id;
-  var rows=[['role',u.role||'user'],['active',String(u.active)],['manager_user_id',u.manager_user_id||'']];
+  var rows=[['login',(u.logins||[]).join(', ')],['role',u.role||'user'],['active',String(u.active)],['manager_user_id',u.manager_user_id||'']];
   Object.keys(t).sort().forEach(function(k){rows.push([k,typeof t[k]==='object'?JSON.stringify(t[k]):t[k]]);});
   document.getElementById('partner-detail-title').innerHTML=countryFlag(t.country)+esc(name);
   document.getElementById('partner-detail-body').innerHTML='<div class="partner-detail-grid">'+rows.map(function(r){return '<div class="partner-detail-key">'+esc(r[0])+'</div><div class="partner-detail-value">'+esc(r[1])+'</div>';}).join('')+'</div>';
   document.getElementById('partner-detail-ov').classList.add('show');
+  if(window.loadManagedUserKeys)window.loadManagedUserKeys(u);
 }
 function closePartnerDetails(){document.getElementById('partner-detail-ov').classList.remove('show')}
 function updatePartnerAccess(select) {
@@ -3466,6 +3492,7 @@ function execConfirm() {
 <script>
 /* Header identity (post MaaS-key auth) + "My view as user" target. */
 fetch("/whoami").then(function(r){return r.json()}).then(function(d){
+  if(d.managementEnabled){document.getElementById("legacy-routing").style.display="none";}
   var el=document.getElementById("abUser");
   if(d.user&&el){
     var name=d.display_name?d.display_name:d.user;
@@ -3532,5 +3559,6 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closePricing
     window.addEventListener('storage',function(e){if(e.key===KEY)apply(e.newValue==='1')});
   };
 })();
-</script></body>
+</script><!-- MANAGED_SCRIPT -->
+</body>
 </html>

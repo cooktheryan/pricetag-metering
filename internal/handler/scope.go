@@ -89,10 +89,14 @@ func WhoAmIScope(r *http.Request, store *storage.Store, cfg config.Config) (isMa
 // when a 400 response was already written.
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	defer r.Body.Close()
-	dec := json.NewDecoder(io.LimitReader(r.Body, 64<<10))
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		http.Error(w, "invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return false
+	}
+	if err := dec.Decode(new(any)); err != io.EOF {
+		http.Error(w, "expected one JSON object", http.StatusBadRequest)
 		return false
 	}
 	return true

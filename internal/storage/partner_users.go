@@ -315,6 +315,14 @@ func (s *Store) ListAllPartnerUsers(ctx context.Context) ([]PartnerUser, error) 
 // normal unfiltered page. The offset is used only by the admin table; the full
 // list method remains available for internal manager and role lookups.
 func (s *Store) ListPartnerUsersPage(ctx context.Context, search string, limit, offset int) ([]PartnerUser, int, bool, error) {
+	return s.ListPartnerUsersPageByState(ctx, search, "active", limit, offset)
+}
+
+// ListPartnerUsersPageByState is the administrator directory; other callers remain active-only.
+func (s *Store) ListPartnerUsersPageByState(ctx context.Context, search, state string, limit, offset int) ([]PartnerUser, int, bool, error) {
+	if state != "all" && state != "active" && state != "inactive" {
+		return nil, 0, false, errors.New("invalid user state")
+	}
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
@@ -322,25 +330,26 @@ func (s *Store) ListPartnerUsersPage(ctx context.Context, search string, limit, 
 		offset = 0
 	}
 	// $1 holds the search term. An empty term disables the filter so the
-	// clause stays a no-op (every active row matches). user_id is cast to
+	// clause stays a no-op within the selected state. user_id is cast to
 	// text so a partial UUID search works. All comparisons are lower-cased
 	// for case-insensitivity.
-	where := `WHERE p.active AND ($1 = '' OR (
+	where := `WHERE ($2 = 'all' OR p.active = ($2 = 'active')) AND ($1 = '' OR (
 		lower(COALESCE(p.tags->>'email','')) LIKE '%' || lower($1) || '%'
 		OR lower(COALESCE(p.tags->>'first_name','')) LIKE '%' || lower($1) || '%'
 		OR lower(COALESCE(p.tags->>'last_name','')) LIKE '%' || lower($1) || '%'
 		OR lower(TRIM(CONCAT_WS(' ', p.tags->>'first_name', p.tags->>'last_name'))) LIKE '%' || lower($1) || '%'
 		OR lower(p.user_id::text) LIKE '%' || lower($1) || '%'
+		OR EXISTS (SELECT 1 FROM partner_user_logins l WHERE l.user_id=p.user_id AND lower(l.username) LIKE '%' || lower($1) || '%')
 	))`
 
 	var total int
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM partner_users p `+where, search).Scan(&total); err != nil {
+		`SELECT COUNT(*) FROM partner_users p `+where, search, state).Scan(&total); err != nil {
 		return nil, 0, false, err
 	}
 
 	rows, err := s.db.QueryContext(ctx, partnerUserSelect+`
-		`+where+` ORDER BY p.created_at, p.user_id LIMIT $2 OFFSET $3`, search, limit+1, offset)
+		`+where+` ORDER BY p.created_at, p.user_id LIMIT $3 OFFSET $4`, search, state, limit+1, offset)
 	if err != nil {
 		return nil, 0, false, err
 	}
@@ -782,6 +791,20 @@ func (s *Store) PartnerUserByMaaSUsername(ctx context.Context, username string) 
 	user, err := scanPartnerUser(s.db.QueryRowContext(ctx, partnerUserSelect+`
 		JOIN partner_user_logins l ON l.user_id = p.user_id
 		WHERE LOWER(l.username) = LOWER($1) AND l.is_current AND p.active`, strings.TrimSpace(username)))
+	if errors.Is(err, sql.ErrNoRows) {
+		return PartnerUser{}, ErrPartnerUserNotFound
+	}
+	return user, err
+}
+
+// partnerUserForPolicy includes retained logins and inactive identities. Their
+// keys must retain restrictions after a rename and fail closed after deactivation.
+// Authentication and organization lookups continue to use the current, active
+// identity contract in PartnerUserByMaaSUsername.
+func (s *Store) partnerUserForPolicy(ctx context.Context, username string) (PartnerUser, error) {
+	user, err := scanPartnerUser(s.db.QueryRowContext(ctx, partnerUserSelect+`
+		JOIN partner_user_logins l ON l.user_id = p.user_id
+		WHERE LOWER(l.username) = LOWER($1)`, strings.TrimSpace(username)))
 	if errors.Is(err, sql.ErrNoRows) {
 		return PartnerUser{}, ErrPartnerUserNotFound
 	}

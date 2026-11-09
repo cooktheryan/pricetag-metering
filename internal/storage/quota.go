@@ -713,3 +713,34 @@ func (s *Store) GetQuotaView(ctx context.Context, username string, exempt bool) 
 	v.DenialsThisMonth = s.sumQuotaDenials(ctx, logins)
 	return v, nil
 }
+
+// UserBudgetOverridesPage is the bounded administration view. Search is literal,
+// and subject selects a single login without changing the inheritance policy.
+func (s *Store) UserBudgetOverridesPage(ctx context.Context, search, subject string, limit, offset int) ([]QuotaOverride, bool, error) {
+	if limit < 1 || limit > 100 || offset < 0 || offset > 1000000 || len(search) > 128 || len(subject) > 128 {
+		return nil, false, fmt.Errorf("invalid override page")
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT scope,principal,monthly_usd,updated_by,updated_at
+ FROM quota_overrides WHERE scope='user' AND ($1='' OR strpos(lower(principal),lower($1))>0)
+ AND ($2='' OR principal=$2) ORDER BY principal LIMIT $3 OFFSET $4`, search, subject, limit+1, offset)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	out := []QuotaOverride{}
+	for rows.Next() {
+		var row QuotaOverride
+		if err := rows.Scan(&row.Scope, &row.Principal, &row.MonthlyUSD, &row.UpdatedBy, &row.UpdatedAt); err != nil {
+			return nil, false, err
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	more := len(out) > limit
+	if more {
+		out = out[:limit]
+	}
+	return out, more, nil
+}

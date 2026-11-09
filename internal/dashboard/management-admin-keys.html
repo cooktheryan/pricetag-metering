@@ -1,0 +1,8 @@
+<div class="managed-controls"><section>
+<h2>Issue onboarding key</h2><p>Each submission creates an additional key; existing keys remain valid. Send the key privately to the selected user for sign-in and inference.</p><form id="onboard">
+  <label>User <select class="tbl-input" name="subject" required></select></label>
+  <label>Key name <input class="tbl-input" name="name" required maxlength="128" value="onboarding"></label>
+  <label>Lifetime <input class="tbl-input" name="expiresIn" required value="30d"></label><button class="btn btn-grn">Issue key</button></form>
+<p><a id="viewUserUsage" href="#">View selected user’s usage</a> · <a id="viewUserTeam" href="#">View selected user’s team</a> (read-only impersonation)</p>
+<div id="onboardKey" hidden><p>Key created. Copy or download it now; it cannot be retrieved later. Keep the file private.</p><button type="button" class="btn btn-outline" data-key-copy>Copy key</button> <button type="button" class="btn btn-outline" data-key-download>Download .key</button> <button type="button" class="btn btn-outline" data-key-clear>Dismiss key</button></div></section>
+</div>

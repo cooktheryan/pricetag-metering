@@ -1,0 +1,13 @@
+<div class="managed-controls">
+<section>
+<div class="card-hdr"><h2 class="card-title">Per-user monthly quota overrides</h2></div>
+<p>Override the global monthly allowance for one login. Removing an override restores the global default without resetting spending.</p>
+<form id="budget">
+  <label>User <select class="tbl-input" name="subject" required></select></label>
+  <label>Monthly USD <input class="tbl-input" type="number" name="monthly_usd" min="0.01" max="10000" step="0.01" required></label><button class="btn btn-grn">Set override</button><button class="btn btn-outline" type="button" id="removeBudget">Use global default</button></form>
+<p id="budgetCurrent" role="status"></p>
+</section>
+<section class="managed-table" id="budgetDetails"><div class="card-hdr"><h2 class="card-title">Existing user overrides</h2><button type="button" class="btn btn-outline" id="listBudgets">Refresh</button></div>
+<form id="budgetSearch"><label>Search login <input class="tbl-input" name="search" maxlength="128"></label><label>Rows <select class="tbl-input" id="budgetPageSize"><option value="5">5</option><option value="20">20</option><option value="50">50</option></select></label><button class="btn btn-outline">Search</button></form>
+<div style="overflow-x:auto" id="budgets"></div><div class="partner-users-pager" id="budgetPages"></div></section>
+</div>

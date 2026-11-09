@@ -74,6 +74,11 @@ func parseMeteringModeOrRaw(raw string) MeteringMode {
 
 // Config is the resolved runtime configuration.
 type Config struct {
+	// Standalone management is opt-in and uses a dedicated operator credential.
+	ManagementAPISecret    string
+	ManagementPublicOrigin string
+	GatewayModelsFile      string
+
 	// DatabaseURL is the PostgreSQL connection string. Required.
 	DatabaseURL string
 
@@ -428,6 +433,9 @@ func Load() Config {
 		QuotaEnforcementEnabled:  envBool("QUOTA_ENFORCEMENT_ENABLED", true),
 		ModelAccessEnforcement:   envDefault("MODEL_ACCESS_ENFORCEMENT", "off"),
 		DBMaxOpenConns:           envInt("DB_MAX_OPEN_CONNS", 50),
+		ManagementAPISecret:      os.Getenv("MANAGEMENT_API_SECRET"),
+		ManagementPublicOrigin:   strings.TrimRight(os.Getenv("MANAGEMENT_PUBLIC_ORIGIN"), "/"),
+		GatewayModelsFile:        os.Getenv("GATEWAY_MODELS_FILE"),
 		DBMaxIdleConns:           envInt("DB_MAX_IDLE_CONNS", 10),
 		DBConnMaxLifetimeSeconds: envInt("DB_CONN_MAX_LIFETIME_SECONDS", 14400),
 		EventSource:              envDefault("EVENT_SOURCE", "ai-gateway"),

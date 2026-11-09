@@ -150,7 +150,7 @@ var costBackfillSQL = fmt.Sprintf(`
 		LEFT JOIN model_pricing p ON p.model = e.model
 		WHERE e.id > $1 AND e.id <= $2 AND e.cost_usd IS NULL
 	) c
-	WHERE u.id = c.id`, costUSDExpr)
+	WHERE u.id = c.id`, currentPriceUSDExpr)
 
 // rebuildHourSQL rewrites one hour's rollup rows from raw. Overwriting
 // with EXCLUDED (not adding) is what makes a crashed rebuild safe to

@@ -187,7 +187,7 @@ func (s *Store) RepriceHistorical(ctx context.Context, actor string, req Histori
 	}
 	query := fmt.Sprintf(`SELECT COUNT(*), COALESCE(SUM(e.cost_usd),0), COALESCE(SUM(%s),0)
 		FROM usage_events e LEFT JOIN model_pricing p ON p.model=e.model
-		WHERE %s`, costUSDExpr, where[5:])
+		WHERE %s`, currentPriceUSDExpr, where[5:])
 	var result HistoricalRepriceResult
 	result.From, result.Until, result.Policy = req.From, req.Until, req.Policy
 	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&result.Rows, &result.OldTotal, &result.NewTotal); err != nil {
@@ -257,7 +257,7 @@ func (s *Store) RepriceHistorical(ctx context.Context, actor string, req Histori
 		}
 		update := fmt.Sprintf(`UPDATE usage_events u SET cost_usd = r.new_cost
 			FROM (SELECT e.id, %s AS new_cost FROM usage_events e LEFT JOIN model_pricing p ON p.model=e.model WHERE %s) r
-			WHERE u.id=r.id`, costUSDExpr, chunkWhere[5:])
+			WHERE u.id=r.id`, currentPriceUSDExpr, chunkWhere[5:])
 		if _, err = tx.ExecContext(ctx, update, chunkArgs...); err == nil {
 			_, err = tx.ExecContext(ctx, rebuildHourLockSQL, hour, chunkUntil)
 		}

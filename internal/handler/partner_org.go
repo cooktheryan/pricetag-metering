@@ -45,6 +45,9 @@ func (h *PartnerOrgHandler) ServeManager(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "manager page not found", http.StatusInternalServerError)
 		return
 	}
+	if h.cfg.ManagementAPISecret != "" {
+		data = dashboard.WithSessionDialog(data)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Write(data)

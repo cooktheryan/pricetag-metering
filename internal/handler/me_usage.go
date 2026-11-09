@@ -45,7 +45,7 @@ func (h *MeUsageHandler) HandleSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := map[string]any{"overview": overview}
-	if quota, qerr := h.store.GetQuotaView(r.Context(), caller(r, h.cfg), false); qerr == nil {
+	if quota, qerr := h.store.GetQuotaView(r.Context(), caller(r, h.cfg), IsPartnerSuperAdminUsername(r.Context(), h.cfg, h.store, caller(r, h.cfg))); qerr == nil {
 		resp["quota"] = quota
 	}
 	writeJSON(w, resp)

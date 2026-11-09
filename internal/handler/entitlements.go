@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -135,6 +136,29 @@ func (h *EntitlementsHandler) HandleEntitlement(w http.ResponseWriter, r *http.R
 	if username == "" {
 		http.Error(w, "missing customer ID", http.StatusBadRequest)
 		return
+	}
+
+	// Standalone management owns the account directory. Check it before any
+	// quota exemption or model exception, without the spending cache: disabling
+	// an account must also deny keys created through the personal lifecycle API.
+	if h.cfg.ManagementAPISecret != "" {
+		if h.store == nil {
+			http.Error(w, "account directory unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		profile, err := h.store.PartnerUserByMaaSUsername(r.Context(), username)
+		if errors.Is(err, storage.ErrPartnerUserNotFound) {
+			writeJSON(w, storage.UsageStats{HasAccess: false, ModelAllowed: false})
+			return
+		}
+		if err != nil {
+			http.Error(w, "account directory unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if !profile.Active || profile.KeyRevocationPending {
+			writeJSON(w, storage.UsageStats{HasAccess: false, ModelAllowed: false})
+			return
+		}
 	}
 
 	model := r.URL.Query().Get("model")

@@ -35,6 +35,7 @@ type PartnerUsersHandler struct {
 }
 
 type adminPartnerUserResponse struct {
+	Logins        []string       `json:"logins,omitempty"`
 	UserID        string         `json:"user_id"`
 	Tags          map[string]any `json:"tags"`
 	Role          string         `json:"role"`
@@ -210,6 +211,16 @@ func (h *PartnerUsersHandler) HandleUsers(w http.ResponseWriter, r *http.Request
 func (h *PartnerUsersHandler) HandleAdminAccess(w http.ResponseWriter, r *http.Request) {
 	const prefix = "/api/v1/admin/partner-users/"
 	userID := strings.TrimPrefix(r.URL.Path, prefix)
+	if strings.HasSuffix(userID, "/keys") && !strings.Contains(strings.TrimSuffix(userID, "/keys"), "/") {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		h.listKeys(w, r, strings.TrimSuffix(userID, "/keys"))
+		return
+	}
 	if userID == r.URL.Path || userID == "" || strings.Contains(userID, "/") {
 		http.Error(w, "user id is required", http.StatusBadRequest)
 		return
@@ -247,7 +258,13 @@ func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Re
 	}
 	limitText, offsetText := r.URL.Query().Get("limit"), r.URL.Query().Get("offset")
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
-	if limitText == "" && offsetText == "" && search == "" {
+	state := r.URL.Query().Get("state")
+	if state != "" && state != "active" && state != "inactive" && state != "all" {
+		http.Error(w, "invalid state", 400)
+		return
+	}
+
+	if limitText == "" && offsetText == "" && search == "" && state == "" {
 		users, err := h.store.ListAllPartnerUsers(r.Context())
 		if err != nil {
 			http.Error(w, "partner user list failed", http.StatusInternalServerError)
@@ -283,7 +300,10 @@ func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Re
 		}
 		offset = parsed
 	}
-	users, total, hasMore, err := h.store.ListPartnerUsersPage(r.Context(), search, limit, offset)
+	if state == "" {
+		state = "active"
+	}
+	users, total, hasMore, err := h.store.ListPartnerUsersPageByState(r.Context(), search, state, limit, offset)
 	if err != nil {
 		http.Error(w, "partner user page failed", http.StatusInternalServerError)
 		return
@@ -300,7 +320,13 @@ func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Re
 		HasMore:  hasMore,
 	}
 	for _, user := range users {
-		page.Users = append(page.Users, adminPartnerUser(user))
+		entry := adminPartnerUser(user)
+		entry.Logins, err = h.store.ListPartnerUsernames(r.Context(), user.UserID)
+		if err != nil {
+			http.Error(w, "user logins unavailable", 500)
+			return
+		}
+		page.Users = append(page.Users, entry)
 	}
 	for _, user := range managers {
 		page.Managers = append(page.Managers, adminPartnerUser(user))

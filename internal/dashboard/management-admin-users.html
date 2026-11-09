@@ -1,0 +1,25 @@
+<style>
+.managed-controls section{margin:0;padding:0}
+.managed-controls .managed-table{margin-top:24px;padding-top:20px;border-top:1px solid var(--bdr)}
+.managed-editor{padding-bottom:20px;margin-bottom:20px;border-bottom:1px solid var(--bdr)}
+.managed-controls .card-title{font-size:14px}
+#budgetSearch label,#priceSearch label{flex:1}
+#budgetSearch .tbl-input,#priceSearch .tbl-input{width:100%}
+.managed-controls h2{font-size:14px;margin-bottom:10px}
+.managed-controls a{color:var(--blu);text-decoration:none}.managed-controls a:hover{text-decoration:underline}
+.managed-controls p{color:var(--t2);margin:8px 0}
+.managed-controls form{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin:12px 0}
+.managed-controls label{display:flex;flex-direction:column;gap:6px;color:var(--t2);font-size:11px;font-weight:600}
+.managed-controls .tbl-input{width:200px;max-width:100%;min-height:34px}
+.managed-controls select.tbl-input{width:260px}
+.managed-controls .btn{min-height:34px}
+.managed-controls pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto}
+</style><div class="managed-controls managed-editor" id="admin">
+<section>
+<div class="card-hdr"><h2 class="card-title">Create or update a user</h2></div><form id="user">
+  <label>Login <input class="tbl-input" name="subject" required></label>
+  <label>Name <input class="tbl-input" name="name" required></label>
+  <label>State <select class="tbl-input" name="active"><option value="true">Active</option><option value="false">Inactive</option></select></label><button class="btn btn-grn">Save user</button><button class="btn btn-outline" type="button" id="newUser">New user</button></form>
+<p>Creating a user does not create a key. New users start with the user role. Set roles and managers in the existing user table below.</p></section>
+
+</div>

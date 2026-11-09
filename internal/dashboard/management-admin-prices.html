@@ -1,0 +1,20 @@
+<style>
+#price{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:end}
+#price .tbl-input{width:100%}
+#price .price-rates{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+#price>button{width:fit-content}
+@media(max-width:700px){#price,#price .price-rates{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<div class="managed-controls">
+<section>
+<div class="card-hdr"><h2 class="card-title">Model pricing</h2></div><p>Rates are USD per million tokens and are stored in PriceTag’s PostgreSQL database. Saving creates a managed rate that price imports and discount refreshes do not overwrite. Existing request charges stay unchanged; historical repricing is a separate, explicit operation. There is currently no reset-to-import action. A price entry does not publish a gateway route.</p><form id="price">
+  <label>Model/alias <input class="tbl-input" name="model" required></label>
+  <label>Provider <input class="tbl-input" name="provider" required></label>
+  <label>Copy source model (optional) <input class="tbl-input" name="source_model"></label>
+<div class="price-rates">
+  <label>Input <input class="tbl-input" name="input_cost_per_mtok" type="number" min="0" step="any" value="0"></label>
+  <label>Output <input class="tbl-input" name="output_cost_per_mtok" type="number" min="0" step="any" value="0"></label>
+  <label>Cache write <input class="tbl-input" name="cache_write_cost_per_mtok" type="number" min="0" step="any" value="0"></label>
+  <label>Cache read <input class="tbl-input" name="cache_read_cost_per_mtok" type="number" min="0" step="any" value="0"></label></div><button class="btn btn-grn">Save rates</button></form>
+</section><section class="managed-table"><div class="card-hdr"><h2 class="card-title">Current model rates</h2><button type="button" class="btn btn-outline" id="listPrices">Refresh</button></div><form id="priceSearch"><label>Search model or provider <input class="tbl-input" name="search"></label><label>Rows <select class="tbl-input" id="pricePageSize"><option value="5">5</option><option value="20">20</option><option value="50">50</option></select></label><button class="btn btn-outline">Search</button></form><div style="overflow-x:auto" id="prices"></div><div class="partner-users-pager" id="pricePages"></div></section>
+</div>

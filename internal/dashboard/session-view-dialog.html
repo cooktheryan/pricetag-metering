@@ -1,0 +1,48 @@
+<style>
+#session-view-dialog,#session-view-dialog *{box-sizing:border-box}
+#session-view-dialog{margin:auto;padding:24px;width:min(480px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;border:1px solid #2e3848;border-radius:12px;background:#141820;color:#e2e6ec;font:13px/1.5 Inter,-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 20px 60px #0008}
+#session-view-dialog::backdrop{background:#0009}
+#session-view-dialog h2{font-size:18px;margin:0 0 16px}#session-view-dialog p{margin:12px 0;color:#8090a8;overflow-wrap:anywhere}
+#session-view-dialog .session-view-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px;flex-wrap:wrap}
+#session-view-dialog button{font-family:inherit;font-size:13px;font-weight:600;padding:9px 18px;border:1px solid #2e3848;border-radius:6px;background:#1a2030;color:#e2e6ec;cursor:pointer}
+#session-view-dialog button[type=submit]{background:#4da0f8;color:#0b0e11;border-color:#4da0f8}
+#session-view-dialog button:focus-visible{outline:2px solid #4da0f8;outline-offset:3px}#session-view-dialog button:disabled{opacity:.5;cursor:wait}
+</style>
+<dialog id="session-view-dialog" aria-labelledby="session-view-title" aria-describedby="session-view-description session-view-scope">
+<h2 id="session-view-title">Change dashboard view</h2>
+<p id="session-view-description"></p>
+<p id="session-view-scope">Read-only: keys and settings cannot be changed while viewing as a user. This changes the dashboard view in all tabs sharing this browser session.</p>
+<form method="post" id="session-view-form">
+<div class="session-view-actions"><button type="button" id="session-view-cancel" autofocus>Cancel</button><button type="submit">Continue</button></div>
+</form>
+</dialog>
+<script>
+(()=>{
+ const dialog=document.getElementById('session-view-dialog');
+ if(typeof dialog.showModal!=='function')return;
+ const form=document.getElementById('session-view-form');let submitting=false,trigger;
+ document.addEventListener('click',event=>{
+  if(event.defaultPrevented||event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+  const link=event.target.closest('a[href]');if(!link||link.hasAttribute('download')||(link.target&&link.target!=='_self'))return;
+  const url=new URL(link.href,location.href);
+  if(url.origin!==location.origin||url.username||url.password||url.pathname!=='/admin/impersonate')return;
+  event.preventDefault();if(dialog.open)return;
+  const target=(url.searchParams.get('as')||'').trim();
+  const action=new URL('/admin/impersonate',location.origin);
+  if(target)action.searchParams.set('as',target);
+  if(['/manager','manager'].includes(url.searchParams.get('to')))action.searchParams.set('to','/manager');
+  form.action=action.pathname+action.search;
+  document.getElementById('session-view-description').textContent=target
+   ? 'View '+(action.searchParams.has('to')?'team usage':'personal usage')+' as '+target+'?'
+   : 'Return to your administrator dashboard?';
+  document.getElementById('session-view-scope').hidden=!target;
+  submitting=false;form.querySelector('button[type=submit]').disabled=false;trigger=link;dialog.showModal();
+ });
+ document.getElementById('session-view-cancel').onclick=()=>dialog.close();
+ dialog.addEventListener('close',()=>{form.removeAttribute('action');trigger?.focus();});
+ form.addEventListener('submit',event=>{
+  if(submitting){event.preventDefault();return;}
+  submitting=true;form.querySelector('button[type=submit]').disabled=true;
+ });
+})();
+</script>

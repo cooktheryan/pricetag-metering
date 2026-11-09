@@ -11,8 +11,8 @@ import (
 // Partner-backed manager views. The org hierarchy is derived dynamically from
 // partner_users.manager_user_id; a user's "slug" on these surfaces is their
 // partner user_id (UUID). Spend aggregates across every login a partner user
-// holds in partner_user_logins. Dollar quotas were retired in phase one, so
-// the quota gauge fields stay zero here.
+// holds in partner_user_logins. Budget gauges use calendar-month spending
+// independently of the selected chart window.
 
 // partnerFullNameExpr resolves "First Last" from the partner tags, aliasing the
 // partner_users row as `pu`. Empty when neither name is set.
@@ -31,8 +31,9 @@ type OrgUsageRow struct {
 	LastUsed    *string `json:"last_used,omitempty"`
 	NoIdentity  bool    `json:"no_identity,omitempty"`
 
-	// Retained for the manager page's budget column; always zero while dollar
-	// quotas are disabled in phase one.
+	// Read-only monthly budget summary; managers cannot change policy here.
+	QuotaExempt   bool    `json:"quota_exempt"`
+	QuotaEnforced bool    `json:"quota_enforced"`
 	QuotaUSD      float64 `json:"quota_usd"`
 	QuotaSpentUSD float64 `json:"quota_spent_usd"`
 	OverLimit     bool    `json:"over_limit"`
@@ -81,6 +82,18 @@ func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since
 		cost = `COALESCE(ROUND(SUM(e.cost_usd)::numeric,2),0)`
 		lastUsed = `MAX(e.hour)`
 	}
+	monthly := fmt.Sprintf(`SELECT l.user_id, COALESCE(SUM(%s),0) AS spent
+        FROM (SELECT DISTINCT user_id FROM subtree) st
+        JOIN partner_user_logins l ON l.user_id=st.user_id
+        JOIN usage_events e ON e.username=l.username
+        LEFT JOIN model_pricing p ON p.model=e.model
+        WHERE e.timestamp>=date_trunc('month',NOW()) GROUP BY l.user_id`, costUSDExpr)
+	if s.monthSpendEnabled.Load() {
+		monthly = `SELECT l.user_id, COALESCE(SUM(m.spent_usd),0) AS spent
+        FROM (SELECT DISTINCT user_id FROM subtree) st JOIN partner_user_logins l ON l.user_id=st.user_id
+        JOIN user_month_spend m ON m.username=l.username
+        WHERE m.month=date_trunc('month',NOW())::date GROUP BY l.user_id`
+	}
 	query := fmt.Sprintf(`
 		WITH RECURSIVE subtree(user_id, depth, path) AS (
 			SELECT p.user_id, 0, ARRAY[p.user_id]
@@ -106,14 +119,15 @@ func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since
 			SELECT DISTINCT manager_user_id AS user_id
 			FROM partner_users
 			WHERE active AND manager_user_id IS NOT NULL
-		)
+		), monthly AS (%s)
 		SELECT DISTINCT st.user_id::text,
 			COALESCE(%s, cl.username, '') AS full_name,
 			COALESCE(cl.username,''),
 			COALESCE(pu.manager_user_id::text,''),
 			(m.user_id IS NOT NULL),
 			COALESCE(u.requests,0), COALESCE(u.total_tokens,0), COALESCE(u.cost_usd,0),
-			to_char(u.last_used, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+			to_char(u.last_used, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+COALESCE(ov.monthly_usd,pol.default_monthly_usd), COALESCE(monthly.spent,0), pol.enforced, pu.role='super_admin'
 		FROM (SELECT DISTINCT user_id FROM subtree) st
 		JOIN partner_users pu ON pu.user_id = st.user_id
 		LEFT JOIN managers m ON m.user_id = st.user_id
@@ -122,7 +136,10 @@ func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since
 			ORDER BY is_current DESC, username LIMIT 1
 		) cl ON true
 		LEFT JOIN u ON u.user_id = st.user_id
-		ORDER BY 8 DESC, 2`, requests, cost, lastUsed, from, window, partnerFullNameExpr)
+		LEFT JOIN monthly ON monthly.user_id=st.user_id
+		CROSS JOIN quota_policy pol
+		LEFT JOIN quota_overrides ov ON ov.scope='user' AND ov.principal=cl.username
+		ORDER BY 8 DESC, 2`, requests, cost, lastUsed, from, window, monthly, partnerFullNameExpr)
 	rows, err := s.db.QueryContext(ctx, query, rootUserID, since, until)
 	if err != nil {
 		return nil, err
@@ -133,13 +150,14 @@ func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since
 		var r OrgUsageRow
 		var lastUsed sql.NullString
 		if err := rows.Scan(&r.Slug, &r.FullName, &r.Username, &r.ManagerSlug,
-			&r.IsManager, &r.Requests, &r.TotalTokens, &r.CostUSD, &lastUsed); err != nil {
+			&r.IsManager, &r.Requests, &r.TotalTokens, &r.CostUSD, &lastUsed, &r.QuotaUSD, &r.QuotaSpentUSD, &r.QuotaEnforced, &r.QuotaExempt); err != nil {
 			return nil, err
 		}
 		if lastUsed.Valid {
 			r.LastUsed = &lastUsed.String
 		}
 		r.NoIdentity = r.Username == ""
+		r.OverLimit = r.QuotaEnforced && !r.QuotaExempt && r.QuotaSpentUSD >= r.QuotaUSD
 		out = append(out, r)
 	}
 	return out, rows.Err()

@@ -1,0 +1,150 @@
+<script>
+(function () {
+'use strict';
+/* KEY_CONTROLS */
+const el=id=>document.getElementById(id);
+async function api(path,method='GET',body){const r=await fetch(path,{method,credentials:'same-origin',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,cache:'no-store'});if(!r.ok)throw new Error('Request failed: HTTP '+r.status);const text=await r.text();return text?JSON.parse(text):{};}
+const values=form=>Object.fromEntries(new FormData(form));
+function report(fn,notify=true){return async event=>{if(event)event.preventDefault();el('status').textContent='Working…';try{await fn();el('status').textContent='Done';if(notify)showToast('Saved','success');}catch(e){el('status').textContent=e.message;showToast(e.message,'error');}};}
+function bind(id,fn,notify=true){el(id).addEventListener('submit',KeyControls.singleFlight(el(id), report(()=>fn(values(el(id))),notify)));}
+bind('user',async body=>{await api('/api/v1/management/users','PUT',{...body,active:body.active==='true'});await loadUsers();loadPartnerUsers(0);});
+const issuedKey = KeyControls.delivery(el('onboardKey'));
+for (const [selector, action] of [['[data-key-copy]', () => issuedKey.copy()], ['[data-key-download]', () => issuedKey.download()], ['[data-key-clear]', () => issuedKey.clear()]]) {
+ el('onboardKey').querySelector(selector).onclick = report(action);
+}
+window.addEventListener('pagehide', () => issuedKey.clear());
+function updateViewLinks(){const login=el('onboard').elements.subject.value;el('viewUserUsage').href='/admin/impersonate?as='+encodeURIComponent(login);el('viewUserTeam').href='/admin/impersonate?as='+encodeURIComponent(login)+'&to=/manager';}
+el('onboard').elements.subject.addEventListener('change', () => {issuedKey.clear();updateViewLinks();});
+bind('onboard', async body => {
+ issuedKey.clear(); const select=el('onboard').elements.subject;select.disabled=true;
+ try {issuedKey.set(await api('/api/v1/management/keys', 'POST', body), {subject: body.subject, name: body.name});}
+ finally {select.disabled=false;}
+});
+window.editManagedUser=index=>{
+ const user=partnerUsersAll[index],login=user&&(user.logins||[])[0];
+ if(!login){showToast('This identity has no managed login.','error');return;}
+ const form=el('user');form.elements.subject.value=login;form.elements.subject.readOnly=true;
+ form.elements.name.value=(user.tags||{}).first_name||login;
+ form.elements.active.value=String(user.active);form.scrollIntoView({block:'center'});form.elements.name.focus();
+};
+el('newUser').onclick=()=>{const form=el('user');form.reset();form.elements.subject.readOnly=false;form.elements.subject.focus();};
+window.loadManagedUserKeys=async user=>{
+ const login=(user.logins||[])[0],section=document.createElement('section');section.className='managed-controls';
+ const heading=document.createElement('h3');heading.textContent='Active keys';section.append(heading);
+ const filters=document.createElement('form'),searchLabel=document.createElement('label'),search=document.createElement('input'),sizeLabel=document.createElement('label'),size=document.createElement('select');
+ search.type='search';search.className='tbl-input';search.maxLength=128;searchLabel.textContent='Search name or key ID';searchLabel.append(search);
+ size.className='tbl-input';sizeLabel.textContent='Rows';for(const value of [5,20,50]){const option=document.createElement('option');option.value=String(value);option.textContent=String(value);size.append(option);}sizeLabel.append(size);filters.append(searchLabel,sizeLabel);section.append(filters);
+ const content=document.createElement('div');content.style.overflowX='auto';content.textContent='Loading active keys…';section.append(content);
+ const pages=document.createElement('div');pages.className='partner-users-pager';section.append(pages);el('partner-detail-body').append(section);
+ const note=document.createElement('p');note.textContent='Revoking keys disconnects harnesses. Existing browser sessions remain valid; set the user inactive to block all access.';section.append(note);
+ const revoke=document.createElement('button');revoke.type='button';revoke.className='btn btn-red';revoke.textContent='Revoke all keys';revoke.disabled=true;section.append(revoke);
+ let keys=[],offset=0;
+ function render(){
+  const filtered=TableControls.filterKeys(keys,search.value,'active'),page=TableControls.page(filtered,offset,Number(size.value));offset=page.offset;
+  content.replaceChildren();const table=document.createElement('table');table.className='tbl';
+  const head=document.createElement('tr');for(const label of ['Name / key ID','Login','Expires']){const cell=document.createElement('th');cell.textContent=label;head.append(cell);}table.append(head);
+  for(const key of page.rows){const row=document.createElement('tr');for(const value of [(key.name||'Unnamed key')+' · '+key.id,key.username,KeyControls.remaining(key)]){const cell=document.createElement('td');cell.textContent=value||'—';row.append(cell);}table.append(row);}
+  if(page.rows.length)content.append(table);else content.textContent='No matching active keys.';
+  TableControls.pager(pages,{offset,size:Number(size.value),count:filtered.length,hasMore:page.hasMore,onPage:value=>{offset=value;render();}});
+ }
+ const reset=()=>{offset=0;render();};search.oninput=reset;size.onchange=reset;filters.onsubmit=event=>{event.preventDefault();reset();};
+ async function refresh(){
+  revoke.disabled=true;
+  try{
+   const result=await api('/api/v1/admin/partner-users/'+encodeURIComponent(user.user_id)+'/keys');
+   if(!section.isConnected)return;
+   keys=(result.keys||[]).filter(key=>KeyControls.state(key)==='active');
+   heading.textContent='Active keys ('+keys.length+')';render();
+   revoke.disabled=!login||!keys.length;
+  }catch(error){if(section.isConnected){content.textContent=error.message;pages.replaceChildren();}}
+ }
+ revoke.onclick=async()=>{
+  if(revoke.disabled)return;
+  if(!window.confirm('Revoke every active key for '+login+'? Their harnesses will lose access.'))return;
+  revoke.disabled=true;
+  try{await api('/api/v1/management/key-revocations','POST',{subject:login,dry_run:false});await refresh();}
+  catch(error){content.textContent=error.message+' Revocation may be partial; retry safely.';revoke.disabled=false;}
+ };
+ await refresh();
+};
+bind('budget',async body=>{await api('/api/v1/management/budgets','PUT',{subject:body.subject,monthly_usd:Number(body.monthly_usd)});await updateBudgetViews();});
+el('removeBudget').onclick=report(async()=>{await api('/api/v1/management/budgets','DELETE',{subject:el('budget').elements.subject.value});await updateBudgetViews();});
+bind('price',async body=>{if(body.source_model){for(const k of ['input_cost_per_mtok','output_cost_per_mtok','cache_write_cost_per_mtok','cache_read_cost_per_mtok'])delete body[k];}else{delete body.source_model;for(const k of ['input_cost_per_mtok','output_cost_per_mtok','cache_write_cost_per_mtok','cache_read_cost_per_mtok'])body[k]=Number(body[k]);}await api('/api/v1/management/prices','PUT',body);await loadPrices();});
+let priceRows=[],priceOffset=0;
+function renderPrices(){
+ const search=el('priceSearch').elements.search.value.toLowerCase();
+ const rows=priceRows.filter(row=>(row.Model+' '+row.Provider).toLowerCase().includes(search.trim()));
+ const size=Number(el('pricePageSize').value),page=TableControls.page(rows,priceOffset,size);priceOffset=page.offset;
+ const table=document.createElement('table');table.className='tbl';
+ const header=document.createElement('tr');for(const label of ['Model','Provider','Input','Output','Cache write','Cache read','Source','Action']){const cell=document.createElement('th');cell.textContent=label;header.append(cell);}table.append(header);
+ for(const item of page.rows){
+  const row=document.createElement('tr');
+  for(const value of [item.Model,item.Provider,item.InputCost,item.OutputCost,item.CacheWriteCost,item.CacheReadCost,item.Managed?'Managed override':'Imported / bundled']){const cell=document.createElement('td');cell.textContent=String(value);row.append(cell);}
+  const cell=document.createElement('td'),edit=document.createElement('button');edit.type='button';edit.className='btn btn-outline';edit.textContent='Edit rates';
+  edit.onclick=()=>{const form=el('price');for(const [field,value]of Object.entries({model:item.Model,provider:item.Provider,source_model:'',input_cost_per_mtok:item.InputCost,output_cost_per_mtok:item.OutputCost,cache_write_cost_per_mtok:item.CacheWriteCost,cache_read_cost_per_mtok:item.CacheReadCost}))form.elements[field].value=value;form.elements.model.focus();form.scrollIntoView({block:'center'});};
+  cell.append(edit);row.append(cell);table.append(row);
+ }
+ el('prices').replaceChildren(table);if(!rows.length)el('prices').textContent='No matching models.';
+ TableControls.pager(el('pricePages'),{offset:priceOffset,size,count:rows.length,hasMore:page.hasMore,onPage:offset=>{priceOffset=offset;renderPrices();}});
+}
+async function loadPrices(){priceRows=await api('/api/v1/management/prices')||[];priceOffset=0;renderPrices();}
+el('listPrices').onclick=report(loadPrices,false);
+bind('priceSearch',async()=>{if(!priceRows.length)await loadPrices();priceOffset=0;renderPrices();},false);
+let budgetOffset=0, budgetListGeneration=0;
+let budgetGeneration=0;
+async function loadSelectedBudget(){
+ const generation=++budgetGeneration;
+ const subject=el('budget').elements.subject.value;
+ el('budget').elements.monthly_usd.disabled=true;el('budget').querySelector('button').disabled=true;el('removeBudget').disabled=true;
+ el('budget').elements.monthly_usd.value='';el('budgetCurrent').textContent='Loading current allowance…';
+ if(!subject){el('budgetCurrent').textContent='Select a user.';return;}
+ const result=await api('/api/v1/management/budgets?subject='+encodeURIComponent(subject));
+ if(generation!==budgetGeneration)return;
+ const override=result.data[0];
+ el('budget').elements.monthly_usd.value=override?override.monthly_usd:result.default_monthly_usd;
+ el('budgetCurrent').textContent=override?'Current override: $'+Number(override.monthly_usd).toFixed(2)+' per month.':'Inherits global default: $'+Number(result.default_monthly_usd).toFixed(2)+' per month.';
+ el('removeBudget').disabled=!override;el('budget').elements.monthly_usd.disabled=false;el('budget').querySelector('button').disabled=false;
+}
+async function updateBudgetViews(){await loadSelectedBudget();await listBudgets();}
+async function listBudgets(offset=budgetOffset){
+ const generation=++budgetListGeneration,size=Number(el('budgetPageSize').value);
+ const result=await api('/api/v1/management/budgets?limit='+size+'&offset='+offset+'&search='+encodeURIComponent(el('budgetSearch').elements.search.value));
+ if(generation!==budgetListGeneration)return;
+ if(!result.data.length&&offset>0){return listBudgets(Math.max(0,offset-size));}
+ budgetOffset=offset;
+ const table=document.createElement('table');table.className='tbl';
+ const head=document.createElement('tr');for(const label of ['Login','Monthly USD','Updated','Action']){const cell=document.createElement('th');cell.textContent=label;head.append(cell);}table.append(head);
+ for(const item of result.data){
+  const row=document.createElement('tr');for(const value of [item.principal,'$'+Number(item.monthly_usd).toFixed(2),new Date(item.updated_at).toLocaleString()]){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}
+  const cell=document.createElement('td'),remove=document.createElement('button');remove.type='button';remove.className='btn btn-outline';remove.textContent='Remove override';
+  remove.onclick=report(async()=>{if(!window.confirm('Remove the override for '+item.principal+' and restore the global default?'))return;remove.disabled=true;try{await api('/api/v1/management/budgets','DELETE',{subject:item.principal});await updateBudgetViews();}catch(error){remove.disabled=false;throw error;}});
+  cell.append(remove);row.append(cell);table.append(row);
+ }
+ el('budgets').replaceChildren(table);if(!result.data.length)el('budgets').textContent='No matching overrides.';
+ TableControls.pager(el('budgetPages'),{offset:budgetOffset,size,hasMore:result.has_more,onPage:offset=>report(()=>listBudgets(offset),false)()});
+}
+el('budget').elements.subject.addEventListener('change',report(loadSelectedBudget,false));
+el('listBudgets').onclick=report(()=>listBudgets(),false);
+bind('budgetSearch',async()=>{await listBudgets(0);},false);
+el('budgetPageSize').onchange=report(()=>listBudgets(0),false);
+el('pricePageSize').onchange=()=>{priceOffset=0;renderPrices();};
+for(const [id,search] of [['priceSearch',()=>{priceOffset=0;renderPrices();}],['budgetSearch',report(()=>listBudgets(0),false)]]){
+ let timer;el(id).elements.search.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(search,200);});
+}
+
+async function loadUsers(){
+ const users=await api('/api/v1/management/users');
+ for(const select of [el('budget').elements.subject,el('onboard').elements.subject]){
+  if(select.disabled)continue;
+  const previous=select.value;select.replaceChildren();
+  for(const user of users){if(select===el('onboard').elements.subject&&!user.active)continue;const login=(user.logins||[])[0];if(!login)continue;const opt=document.createElement('option');opt.value=login;opt.textContent=(user.tags.first_name||login)+' ('+login+')';select.append(opt);}
+  if([...select.options].some(o=>o.value===previous))select.value=previous;
+ }
+}
+window.refreshManagedPrices=report(loadPrices,false);
+window.refreshManagedBudgets=report(updateBudgetViews,false);
+window.refreshManagedUsers=report(loadUsers,false);
+if(activeTab==='model-pricing')window.refreshManagedPrices();
+loadUsers().then(()=>{updateViewLinks();return activeTab==='user-quota'?updateBudgetViews():loadSelectedBudget();}).catch(error => {el('status').textContent=error.message;showToast(error.message,'error');});
+})();
+</script>

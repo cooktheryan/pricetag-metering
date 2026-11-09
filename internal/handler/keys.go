@@ -185,6 +185,7 @@ func (h *KeysHandler) HandleWhoAmI(w http.ResponseWriter, r *http.Request) {
 		"isAdmin":           IsPartnerAdmin(r.Context(), h.cfg, h.store, r),
 		"isSuperAdmin":      IsPartnerSuperAdmin(r.Context(), h.cfg, h.store, r),
 		"keyServiceEnabled": h.cfg.KeyService.Enabled(),
+		"managementEnabled": h.cfg.ManagementAPISecret != "",
 		"impersonating":     impersonating,
 		"real_user":         "",
 		// "First Last" for the identity the page is showing (the impersonated

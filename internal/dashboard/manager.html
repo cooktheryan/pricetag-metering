@@ -185,7 +185,7 @@ td.num{text-align:right}
     <a href="/admin" id="tab-admin" style="display:none">Admin</a>
   </nav>
   <div class="ab-right">
-    <button class="ab-out" style="border-color:var(--accent);color:var(--accent);display:none" id="my-view-btn" title="See the dashboard as a regular user would">My view as user</button>
+    <a href="#" class="ab-out" style="border-color:var(--accent);color:var(--accent);display:none" id="my-view-btn" title="See the dashboard as a regular user would">My view as user</a>
     <button class="ab-out" style="color:var(--text)" onclick="openPricing()">Pricing</button>
     <span class="demo-badge" id="demoBadge">Demo mode · costs hidden</span>
     <span class="ab-user" id="abUser"></span>
@@ -258,6 +258,7 @@ td.num{text-align:right}
     <h2>Approval requests <span id="apprCount" class="dim" style="text-transform:none;letter-spacing:0;font-weight:400"></span> <span class="dim" style="text-transform:none;letter-spacing:0;font-weight:400">— over-limit budget asks from your team</span></h2>
     <div id="apprBody"></div>
   </div>
+  <p id="chartsError" class="err" role="status" hidden></p>
   <div class="charts" id="chartsRow">
     <div class="panel"><h2>Token Usage · Hosted vs Vendor</h2><canvas id="hvChart" height="170"></canvas></div>
     <div class="panel">
@@ -436,6 +437,7 @@ function renderRows(){
 // numbers arrive from the server (quota_spent_usd / quota_usd, calendar
 // month regardless of the selected range); width caps at 100%.
 function budgetCell(r){
+  if(r.quota_exempt)return '<span class="dim">Exempt</span>';
   if(!r.quota_usd)return '<span class="dim">–</span>';
   const pct=Math.min(100,100*(r.quota_spent_usd||0)/r.quota_usd);
   const cls=r.over_limit?'over':(pct>=80?'warn':'');
@@ -780,35 +782,43 @@ function isHostedModel(m){return m.hosted===true||HOSTED_PROVIDERS.indexOf(m.pro
 function pieVal(d,m){return m==='cost'?d.cost_usd||0:m==='requests'?d.requests||0:d.total_tokens||0;}
 function pieFmt(v,m){return m==='cost'?fmt$(v):fmtTok(v);}
 
+function chartFailure(error){
+ const message=document.getElementById('chartsError');message.hidden=false;
+ message.textContent='Charts could not be loaded. '+error.message+' Change the range to retry.';
+ chartsCache=null;renderTimeline([]);renderPies();
+}
+async function chartJSON(url){const response=await fetch(url,{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);return response.json();}
 async function loadCharts(){
   try{
     let url='/api/v1/org/charts?range='+range+'&ref='+encodeURIComponent(savingsRef);
     if(drillSlug)url+='&root='+encodeURIComponent(drillSlug);
-    const d=await (await fetch(url)).json();
+    const d=await chartJSON(url);
+    document.getElementById('chartsError').hidden=true;
     if(!d||!d.overview)throw new Error(d.error||'charts failed');
     chartsCache=d;
     renderTimeline(d.timeline||[]);
     renderSavedKPI(d.overview);
     renderPies();
-  }catch(e){/* the table reports real failures; charts just stay as-is */}
+  }catch(e){chartFailure(e);}
 }
 
 // Same endpoints, self-scoped by the server: a non-manager opening the page
 // sees their own pies, timeline and Saved card.
 async function loadSelfCharts(){
   try{
-    const j=async u=>await (await fetch(u)).json();
+    const j=chartJSON;
     const [ov,mo,us,tl]=await Promise.all([
       j('/api/v1/dashboard/overview?range='+range+'&ref='+encodeURIComponent(savingsRef)),
       j('/api/v1/dashboard/models?range='+range),
       j('/api/v1/dashboard/users?range='+range+'&sort=cost_usd&order=desc&limit=10&ref='+encodeURIComponent(savingsRef)),
       j('/api/v1/dashboard/timeline?range='+range+'&group_by=user')
     ]);
+    document.getElementById('chartsError').hidden=true;
     chartsCache={overview:ov,models:mo,users:us,timeline:tl};
     renderTimeline(tl||[]);
     renderSavedKPI(ov);
     renderPies();
-  }catch(e){}
+  }catch(e){chartFailure(e);}
 }
 
 function personName(username){
@@ -1092,6 +1102,7 @@ async function boot(){
   }
   if(me.isSuperAdmin){
     ['tab-routing','tab-admin'].forEach(id=>document.getElementById(id).style.display='');
+    if(me.managementEnabled)document.getElementById('tab-routing').style.display='none';
     const mvb=document.getElementById('my-view-btn');
     mvb.href='/admin/impersonate?as='+encodeURIComponent(me.user);
     mvb.style.display='';
@@ -1217,10 +1228,11 @@ function rejectReq(id){
 }
 
 async function loadSelf(){
-  const users=await (await fetch('/api/v1/dashboard/users?range='+range)).json();
-  rows=users.map(u=>({full_name:u.display_name||u.username,cost_usd:u.cost_usd,total_tokens:u.total_tokens,requests:u.requests,last_used:null,is_manager:false,no_identity:!u.requests}));
-  renderRows();
-  loadSelfCharts();
+  try {
+    rows=await chartJSON('/api/v1/org/usage?range='+range);
+    renderRows();
+    await loadCharts();
+  }catch(error){document.getElementById('rows').innerHTML='<tr><td colspan="6" class="err">'+esc(error.message)+'</td></tr>';chartFailure(error);}
 }
 
 // ── Person detail (per-model spend + hosted savings) ──────────────────────

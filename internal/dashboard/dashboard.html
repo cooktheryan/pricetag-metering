@@ -1904,6 +1904,7 @@ fetch('/api/v1/whoami').then(function(r){return r.json()}).then(function(d){
     if(d.isSuperAdmin||d.isManager)document.getElementById('tab-team').style.display='';
     if(isSuperAdmin){
       ['tab-routing','tab-admin'].forEach(function(id){document.getElementById(id).style.display='';});
+      if(d.managementEnabled)document.getElementById('tab-routing').style.display='none';
       var mvb=document.getElementById('my-view-btn');
       mvb.href='/admin/impersonate?as='+encodeURIComponent(d.user);
       mvb.style.display='';
