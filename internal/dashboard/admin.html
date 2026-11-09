@@ -1446,6 +1446,7 @@ function createModelAccessRole() {
   }).then(function(role) {
     showToast('Role "' + role.name + '" created', 'success');
     closeRoleWizard();
+    closeRoleEditor();
     maHighlightRoleID = role.role_id;
     loadModelAccess().then(function() {
       setTimeout(function() { maHighlightRoleID = null; renderModelAccessRoles(); }, 3000);
