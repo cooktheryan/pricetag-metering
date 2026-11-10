@@ -838,6 +838,57 @@ func TestRoleBudgetAndCredits(t *testing.T) {
 	}
 }
 
+func TestZeroCostModelsAllowedOverLimit(t *testing.T) {
+	s, ctx := openTestStore(t)
+	s.SetMonthSpendEnabled(true)
+	tenant, _ := s.EnsureDefaultTenant(ctx)
+	username := "free@example.com"
+	userID := uuid.NewString()
+	if _, err := s.CreatePartnerUser(ctx, "test", userID, map[string]any{
+		"email": username, "first_name": "Free", "last_name": "User",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SyncPartnerUserSubjects(ctx, tenant); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO model_pricing (model, provider, input_cost_per_mtok, output_cost_per_mtok)
+		VALUES ('free-model', 'test', 0, 0), ('paid-model', 'test', 1, 2)
+		ON CONFLICT (model) DO UPDATE SET
+			input_cost_per_mtok = EXCLUDED.input_cost_per_mtok,
+			output_cost_per_mtok = EXCLUDED.output_cost_per_mtok`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO quota_policy (id, default_monthly_usd, enforced, allowed_over_limit_models)
+		VALUES (true, 1, true, '{}')
+		ON CONFLICT (id) DO UPDATE SET
+			default_monthly_usd = 1, enforced = true, allowed_over_limit_models = '{}'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO user_month_spend (username, month, spent_usd, tokens, requests)
+		VALUES ($1, date_trunc('month', NOW())::date, 2, 0, 1)
+		ON CONFLICT (username, month) DO UPDATE SET spent_usd = 2`, username); err != nil {
+		t.Fatal(err)
+	}
+	s.invalidateQuotaCache()
+	decision, _, err := s.QuotaDecisionCached(ctx, username, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decision.LimitUSD != 1 || decision.SpentUSD != 2 {
+		t.Fatalf("decision = %#v", decision)
+	}
+	if !decision.ModelAllowedOverLimit("free-model") {
+		t.Fatalf("zero-cost model not allowed over limit: %#v", decision.OverLimitModels)
+	}
+	if decision.ModelAllowedOverLimit("paid-model") {
+		t.Fatalf("paid model allowed over limit: %#v", decision.OverLimitModels)
+	}
+}
+
 func TestModelAccessDefaultRoleChange(t *testing.T) {
 	s, ctx := openTestStore(t)
 	tenant, _ := s.EnsureDefaultTenant(ctx)

@@ -393,6 +393,12 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	if err != nil {
 		return d, fmt.Errorf("quota policy lookup: %w", err)
 	}
+	// Zero-cost models are always allowed after the dollar cap: using them
+	// cannot increase spend. Add them to the post-cap allowlist so free and
+	// hosted models do not depend on a manually maintained global list.
+	if err := s.addZeroCostOverLimitModels(ctx, &d); err != nil {
+		return d, err
+	}
 
 	// Role budgets are additive across all active roles (default + explicit).
 	// A per-person permanent override replaces the role sum; temporary credits
@@ -449,6 +455,37 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	d.ModelPolicyActive = modelPolicy.Enabled
 	d.UserAllowedModels = modelPolicy.Models
 	return d, nil
+}
+
+// addZeroCostOverLimitModels appends every model with a known zero input and
+// output list price to the post-cap allowlist. The model still has to pass the
+// separate role-based model-access gate; this only prevents the dollar cap
+// from blocking a request that cannot add spend.
+func (s *Store) addZeroCostOverLimitModels(ctx context.Context, d *QuotaDecision) error {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT model FROM model_pricing
+		WHERE input_cost_per_mtok = 0 AND output_cost_per_mtok = 0
+		ORDER BY model`)
+	if err != nil {
+		return fmt.Errorf("zero-cost model lookup: %w", err)
+	}
+	defer rows.Close()
+	seen := make(map[string]struct{}, len(d.OverLimitModels))
+	for _, model := range d.OverLimitModels {
+		seen[model] = struct{}{}
+	}
+	for rows.Next() {
+		var model string
+		if err := rows.Scan(&model); err != nil {
+			return err
+		}
+		if _, ok := seen[model]; ok {
+			continue
+		}
+		seen[model] = struct{}{}
+		d.OverLimitModels = append(d.OverLimitModels, model)
+	}
+	return rows.Err()
 }
 
 // --- Decision cache (the gateway's synchronous dependency) ---

@@ -691,14 +691,21 @@ td .tag{white-space:nowrap}
   <div class="modal" style="max-width:640px">
     <button class="modal-close" onclick="closeRoleWizard()">&times;</button>
     <div class="modal-title">Create model-access role</div>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t2);margin-bottom:4px">
+        <span id="ma-wizard-progress-label">Step 1 of 6</span>
+        <span id="ma-wizard-progress-pct">17%</span>
+      </div>
+      <div style="height:6px;background:var(--c2);border-radius:999px;overflow:hidden">
+        <div id="ma-wizard-progress-fill" style="height:100%;width:16.67%;background:var(--grn);transition:width .2s"></div>
+      </div>
+    </div>
 
     <div id="ma-wizard-step1">
-      <div class="ts" style="margin-bottom:10px">Step 1 of 6</div>
       <div class="field"><label>Role name</label><input type="text" id="ma-new-name" placeholder="e.g. Research"></div>
     </div>
 
     <div id="ma-wizard-step2" style="display:none">
-      <div class="ts" style="margin-bottom:10px">Step 2 of 6</div>
       <label style="font-size:12px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="ma-new-default" style="width:auto" onchange="renderRoleWizard()"> Make this the default role (applies to every active person)</label>
       <div class="ts" style="margin-top:6px">The default role is the baseline every active person receives. Only one default role can exist.</div>
       <div id="ma-wizard-replace-wrap" style="display:none;margin-top:10px">
@@ -708,15 +715,12 @@ td .tag{white-space:nowrap}
     </div>
 
     <div id="ma-wizard-step3" style="display:none">
-      <div class="ts" style="margin-bottom:10px">Step 3 of 6</div>
       <div class="field"><label>Models</label><div id="ma-new-models-summary" class="ts">No models selected</div></div>
       <button class="btn btn-outline" onclick="openModelPicker('new')">Choose models</button>
-      <input id="ma-new-extra" class="tbl-input" placeholder="Extra exact IDs not in the catalog (comma-separated)" style="width:100%;margin-top:8px;padding:7px 10px;font-size:11px">
       <div class="ts" style="margin-top:8px">A role with no models grants no access. Default-role models are the baseline everyone receives.</div>
     </div>
 
     <div id="ma-wizard-step4" style="display:none">
-      <div class="ts" style="margin-bottom:10px">Step 4 of 6</div>
       <div id="ma-wizard-people" class="field">
         <label>Assign cost centers or groups (optional)</label>
         <div id="ma-new-assignment-summary" class="ts" style="margin-bottom:6px">No cost centers or groups selected</div>
@@ -726,12 +730,11 @@ td .tag{white-space:nowrap}
     </div>
 
     <div id="ma-wizard-step5" style="display:none">
-      <div class="ts" style="margin-bottom:10px">Step 5 of 6</div>
       <div class="field"><label>Monthly budget per member (USD, optional)</label><input type="number" id="ma-new-budget" min="0" step="1" placeholder="e.g. 300"><div class="ts">Adds to the member's budget across roles. Empty/0 falls back to the global default. Temporary extra credits are added per person later.</div></div>
+      <div id="ma-new-free-models" class="ts"></div>
     </div>
 
     <div id="ma-wizard-step6" style="display:none">
-      <div class="ts" style="margin-bottom:10px">Step 6 of 6</div>
       <div id="ma-wizard-review" class="ts"></div>
     </div>
 
@@ -753,7 +756,7 @@ td .tag{white-space:nowrap}
       <label>Models</label>
       <div id="ma-role-models-summary" class="ts" style="margin-bottom:6px">No models selected</div>
       <button class="btn btn-outline" onclick="openModelPicker('role')">Choose models</button>
-      <input id="ma-role-extra" class="tbl-input" placeholder="Extra exact IDs not in the catalog (comma-separated)" style="width:100%;margin-top:8px;padding:7px 10px;font-size:11px">
+      <div id="ma-role-free-models" class="ts" style="margin-top:6px"></div>
     </div>
     <div class="field">
       <label>$ / person / month</label>
@@ -1134,8 +1137,8 @@ function renderCatalogNote() {
   var note = document.getElementById('ma-catalog-note');
   if (!note) return;
   note.innerHTML = maCatalog.length
-    ? maCatalog.length + ' models available. Use “Choose models” for checkboxes; add extra exact IDs when needed.'
-    : '<span style="color:var(--amb)">Catalog is empty. Click “Import catalog” or add exact IDs in the extra field.</span>';
+    ? maCatalog.length + ' models available. Use “Choose models” to pick from the catalog.'
+    : '<span style="color:var(--amb)">Catalog is empty. Click “Import catalog” first.</span>';
 }
 
 function modelSummaryText(models) {
@@ -1147,21 +1150,30 @@ function renderModelSummary(kind) {
   var models = kind === 'new' ? maNewModels : maRoleModels;
   var el = document.getElementById(kind === 'new' ? 'ma-new-models-summary' : 'ma-role-models-summary');
   if (el) el.textContent = modelSummaryText(models);
-  var extra = document.getElementById(kind === 'new' ? 'ma-new-extra' : 'ma-role-extra');
-  if (extra) {
-    var known = {};
-    maCatalog.forEach(function(m) { known[m.id] = true; });
-    extra.value = models.filter(function(m) { return !known[m]; }).join(', ');
-  }
+  renderFreeModelNote(kind, models);
+}
+
+function freeSelectedModelIDs(models) {
+  var byID = {};
+  maCatalog.forEach(function(m) { byID[m.id] = m; });
+  return (models || []).filter(function(id) {
+    var m = byID[id];
+    return m && m.zero_cost;
+  });
+}
+
+function renderFreeModelNote(kind, models) {
+  var el = document.getElementById(kind === 'new' ? 'ma-new-free-models' : 'ma-role-free-models');
+  if (!el) return;
+  var free = freeSelectedModelIDs(models);
+  el.innerHTML = free.length
+    ? '<strong>Free models (always allowed after the budget cap):</strong> ' + free.map(function(id) { return '<span class="tag tag-blu">' + esc(id) + '</span>'; }).join(' ')
+    : 'No zero-cost models selected. Paid models are blocked after the budget cap unless explicitly allowed.';
 }
 
 function openModelPicker(kind) {
   maPickerTarget = kind;
-  var extraInput = document.getElementById(kind === 'new' ? 'ma-new-extra' : 'ma-role-extra');
   var base = (kind === 'new' ? maNewModels : maRoleModels).slice();
-  splitModels(extraInput ? extraInput.value : '').forEach(function(m) {
-    if (base.indexOf(m) < 0) base.push(m);
-  });
   if (kind === 'new') maNewModels = base; else maRoleModels = base;
   maPickerSelection = new Set(base);
   document.getElementById('ma-models-title').textContent = kind === 'new' ? 'Choose models for the new role' : 'Edit role models';
@@ -1192,6 +1204,7 @@ function renderModelPicker() {
           '<input type="checkbox" style="width:auto;margin-top:2px" ' + (maPickerSelection.has(m.id) ? 'checked' : '') +
           ' onchange="toggleModelPicker(\'' + esc(m.id).replace(/'/g, "\\'") + '\',this.checked)">' +
           '<span><strong>' + esc(m.id) + '</strong>' + (m.display_name ? ' <span class="ts">— ' + esc(m.display_name) + '</span>' : '') +
+          (m.zero_cost ? ' <span class="badge badge-grn" style="font-size:9px">free</span>' : '') +
           (m.dialects && m.dialects.length ? ' <span class="badge badge-blu" style="font-size:9px">' + esc(m.dialects.join(', ')) + '</span>' : '') +
           '</span></label>';
       }).join('') + '</div>';
@@ -1288,7 +1301,6 @@ function openRoleWizard() {
   maCostCenterSelection = new Set();
   maGroupSelection = new Set();
   document.getElementById('ma-new-name').value = '';
-  document.getElementById('ma-new-extra').value = '';
   document.getElementById('ma-new-budget').value = '';
   document.getElementById('ma-new-default').checked = false;
   document.getElementById('ma-wizard-replace').checked = false;
@@ -1445,6 +1457,10 @@ function closeRoleWizard() {
 
 function renderRoleWizard() {
   var step = maWizardStep;
+  var pct = (step / 6) * 100;
+  document.getElementById('ma-wizard-progress-label').textContent = 'Step ' + step + ' of 6';
+  document.getElementById('ma-wizard-progress-pct').textContent = Math.round(pct) + '%';
+  document.getElementById('ma-wizard-progress-fill').style.width = pct + '%';
   for (var i = 1; i <= 6; i++) {
     var el = document.getElementById('ma-wizard-step' + i);
     if (el) el.style.display = i === step ? '' : 'none';
@@ -1462,8 +1478,10 @@ function renderRoleWizard() {
     document.getElementById('ma-wizard-people').style.display = isDefault ? 'none' : '';
   }
   if (step === 3) renderModelSummary('new');
+  if (step === 5) renderFreeModelNote('new', maNewModels);
   if (step === 6) {
-    var models = maNewModels.concat(splitModels(document.getElementById('ma-new-extra').value));
+    var models = maNewModels;
+    var freeModels = freeSelectedModelIDs(models);
     var budget = parseFloat(document.getElementById('ma-new-budget').value || '0') || 0;
     var costCenters = maWizardCostCenters.length
       ? esc(maWizardCostCenters.join(', ')) + ' (one-time snapshot)'
@@ -1479,6 +1497,7 @@ function renderRoleWizard() {
       '<div><strong>Name:</strong> ' + esc(document.getElementById('ma-new-name').value || '') + '</div>' +
       '<div><strong>Default:</strong> ' + (isDefault ? 'yes — all active people' + (existingDefault ? ' (replaces ' + esc(existingDefault.name) + ')' : '') : 'no') + '</div>' +
       '<div><strong>Models:</strong> ' + (models.length ? esc(models.join(', ')) : 'none (grants no access)') + '</div>' +
+      '<div><strong>Free over budget:</strong> ' + (freeModels.length ? esc(freeModels.join(', ')) : 'none') + '</div>' +
       assignment +
       '<div><strong>Budget:</strong> ' + (budget > 0 ? '$' + budget + '/person/month' : 'no role budget — inherits global default') + '</div>';
   }
@@ -1500,7 +1519,7 @@ function roleWizardNext() {
     }
   }
   if (maWizardStep === 3) {
-    var models = maNewModels.concat(splitModels(document.getElementById('ma-new-extra').value));
+    var models = maNewModels;
     if (!models.length && !confirm('This role has no models and will grant no access. Continue?')) return;
   }
   if (maWizardStep === 4 && !isDefault && !maWizardCostCenters.length && !maWizardGroups.length) {
@@ -1520,7 +1539,7 @@ function roleWizardBack() {
 
 function createModelAccessRole() {
   var name = (document.getElementById('ma-new-name').value || '').trim();
-  var models = maNewModels.concat(splitModels(document.getElementById('ma-new-extra').value));
+  var models = maNewModels;
   var isDefault = document.getElementById('ma-new-default').checked;
   var monthlyUSD = parseFloat(document.getElementById('ma-new-budget').value || '0') || 0;
   if (!name) { showToast('Role name is required', 'error'); return; }
@@ -1588,7 +1607,7 @@ function closeRoleEditor() {
 
 function saveRoleEditor() {
   if (!maRole) return;
-  var models = maRoleModels.concat(splitModels(document.getElementById('ma-role-extra').value));
+  var models = maRoleModels;
   var amount = parseFloat(document.getElementById('ma-role-budget').value || '0') || 0;
   Promise.all([
     sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/models'), 'PUT', {models: models}),

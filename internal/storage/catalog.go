@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"sort"
@@ -15,16 +16,19 @@ import (
 // snapshot of what the gateway advertises; it is never consulted on the
 // entitlement hot path.
 type CatalogModel struct {
-	ModelID        string   `json:"id"`
-	DisplayName    string   `json:"display_name,omitempty"`
-	Provider       string   `json:"provider,omitempty"`
-	ProviderTarget string   `json:"provider_target,omitempty"`
-	Dialects       []string `json:"dialects,omitempty"`
-	Paths          []string `json:"paths,omitempty"`
-	Aliases        []string `json:"aliases,omitempty"`
-	Lifecycle      string   `json:"lifecycle"`
-	Region         string   `json:"region,omitempty"`
-	CostClass      string   `json:"cost_class,omitempty"`
+	ModelID           string   `json:"id"`
+	DisplayName       string   `json:"display_name,omitempty"`
+	Provider          string   `json:"provider,omitempty"`
+	ProviderTarget    string   `json:"provider_target,omitempty"`
+	Dialects          []string `json:"dialects,omitempty"`
+	Paths             []string `json:"paths,omitempty"`
+	Aliases           []string `json:"aliases,omitempty"`
+	Lifecycle         string   `json:"lifecycle"`
+	Region            string   `json:"region,omitempty"`
+	CostClass         string   `json:"cost_class,omitempty"`
+	InputCostPerMtok  *float64 `json:"input_cost_per_mtok,omitempty"`
+	OutputCostPerMtok *float64 `json:"output_cost_per_mtok,omitempty"`
+	ZeroCost          bool     `json:"zero_cost,omitempty"`
 }
 
 type praxisCatalogModel struct {
@@ -171,11 +175,13 @@ func (s *Store) SyncCatalogFromPraxisConfig(ctx context.Context, tenantID, path 
 
 func (s *Store) ListCatalogModels(ctx context.Context, tenantID string) ([]CatalogModel, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT model_id, display_name, provider, COALESCE(provider_target, ''),
-		       dialects, paths, aliases, lifecycle, COALESCE(region, ''), COALESCE(cost_class, '')
-		FROM catalog_models
-		WHERE tenant_id = $1
-		ORDER BY provider, display_name, model_id`, tenantID)
+		SELECT cm.model_id, cm.display_name, cm.provider, COALESCE(cm.provider_target, ''),
+		       cm.dialects, cm.paths, cm.aliases, cm.lifecycle, COALESCE(cm.region, ''), COALESCE(cm.cost_class, ''),
+		       mp.input_cost_per_mtok, mp.output_cost_per_mtok
+		FROM catalog_models cm
+		LEFT JOIN model_pricing mp ON mp.model = cm.model_id
+		WHERE cm.tenant_id = $1
+		ORDER BY cm.provider, cm.display_name, cm.model_id`, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("list catalog models: %w", err)
 	}
@@ -183,11 +189,21 @@ func (s *Store) ListCatalogModels(ctx context.Context, tenantID string) ([]Catal
 	out := []CatalogModel{}
 	for rows.Next() {
 		var m CatalogModel
+		var inputCost, outputCost sql.NullFloat64
 		if err := rows.Scan(&m.ModelID, &m.DisplayName, &m.Provider, &m.ProviderTarget,
 			pq.Array(&m.Dialects), pq.Array(&m.Paths), pq.Array(&m.Aliases), &m.Lifecycle,
-			&m.Region, &m.CostClass); err != nil {
+			&m.Region, &m.CostClass, &inputCost, &outputCost); err != nil {
 			return nil, err
 		}
+		if inputCost.Valid {
+			v := inputCost.Float64
+			m.InputCostPerMtok = &v
+		}
+		if outputCost.Valid {
+			v := outputCost.Float64
+			m.OutputCostPerMtok = &v
+		}
+		m.ZeroCost = inputCost.Valid && outputCost.Valid && inputCost.Float64 == 0 && outputCost.Float64 == 0
 		out = append(out, m)
 	}
 	return out, rows.Err()
