@@ -513,6 +513,9 @@ func TestModelAccessAdminCRUD(t *testing.T) {
 		t.Fatalf("default role name = %q", effective.DefaultRoleName)
 	}
 
+	if _, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Engineer", "", nil, false, 0); !errors.Is(err, ErrModelAccessRoleNameExists) {
+		t.Fatalf("duplicate active name error = %v", err)
+	}
 	research, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Research", "", []string{"model-d"}, false, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -532,6 +535,9 @@ func TestModelAccessAdminCRUD(t *testing.T) {
 	}
 	if err := s.RetireModelAccessRole(ctx, tenant, research.RoleID, "admin"); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Research", "", nil, false, 0); !errors.Is(err, ErrModelAccessRoleNameExists) {
+		t.Fatalf("duplicate retired name error = %v", err)
 	}
 	roles, err = s.ListModelAccessRoles(ctx, tenant)
 	if err != nil {

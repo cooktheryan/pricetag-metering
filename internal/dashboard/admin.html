@@ -1524,6 +1524,8 @@ function createModelAccessRole() {
   var isDefault = document.getElementById('ma-new-default').checked;
   var monthlyUSD = parseFloat(document.getElementById('ma-new-budget').value || '0') || 0;
   if (!name) { showToast('Role name is required', 'error'); return; }
+  var duplicate = maRoles.filter(function(r) { return (r.name || '').toLowerCase() === name.toLowerCase(); })[0];
+  if (duplicate) { showToast('A role named "' + duplicate.name + '" already exists. Choose another name.', 'error'); return; }
   var existingDefault = maRoles.filter(function(r) { return r.is_default; })[0];
   var replaceDefault = isDefault && existingDefault && document.getElementById('ma-wizard-replace').checked;
   sendJSON(maURL('/roles'), 'POST', {
@@ -1552,7 +1554,14 @@ function createModelAccessRole() {
     loadModelAccess().then(function() {
       setTimeout(function() { maHighlightRoleID = null; renderModelAccessRoles(); }, 3000);
     });
-  }).catch(function(err) { showToast('Create failed: ' + err.message, 'error'); });
+  }).catch(function(err) {
+    var msg = err.message || String(err);
+    if (msg.indexOf('model access role name already exists') >= 0) {
+      showToast('That role name is already in use, including by a retired role. Choose another name.', 'error');
+    } else {
+      showToast('Create failed: ' + msg, 'error');
+    }
+  });
 }
 
 function editModelAccessRole(roleID) {

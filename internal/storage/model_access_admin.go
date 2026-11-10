@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	ErrModelAccessRoleNotFound = errors.New("model access role not found")
-	ErrInvalidModelAccessRole  = errors.New("invalid model access role")
-	ErrInvalidModelAccessModel = errors.New("invalid model identifier")
-	ErrCannotRetireDefaultRole = errors.New("cannot retire the default role; create or assign another default first")
+	ErrModelAccessRoleNotFound   = errors.New("model access role not found")
+	ErrModelAccessRoleNameExists = errors.New("model access role name already exists")
+	ErrInvalidModelAccessRole    = errors.New("invalid model access role")
+	ErrInvalidModelAccessModel   = errors.New("invalid model identifier")
+	ErrCannotRetireDefaultRole   = errors.New("cannot retire the default role; create or assign another default first")
 )
 
 const modelAccessRoleMaxModels = 500
@@ -185,6 +186,18 @@ func (s *Store) CreateModelAccessRole(ctx context.Context, tenantID, actor, name
 		return ModelAccessRole{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	var retiredAt sql.NullTime
+	switch err := tx.QueryRowContext(ctx, `
+		SELECT retired_at FROM model_access_roles
+		WHERE tenant_id = $1 AND name = $2`, tenantID, name).Scan(&retiredAt); {
+	case err == nil:
+		if retiredAt.Valid {
+			return ModelAccessRole{}, fmt.Errorf("%w: %q is used by a retired role; choose another name", ErrModelAccessRoleNameExists, name)
+		}
+		return ModelAccessRole{}, fmt.Errorf("%w: %q is already in use", ErrModelAccessRoleNameExists, name)
+	case !errors.Is(err, sql.ErrNoRows):
+		return ModelAccessRole{}, err
+	}
 	if isDefault {
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE model_access_roles SET is_default = FALSE, updated_at = NOW()
@@ -197,6 +210,10 @@ func (s *Store) CreateModelAccessRole(ctx context.Context, tenantID, actor, name
 			(role_id, tenant_id, name, description, is_default, monthly_usd, created_by, updated_by)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
 		roleID, tenantID, name, strings.TrimSpace(description), isDefault, monthlyUSD, actor); err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return ModelAccessRole{}, fmt.Errorf("%w: %q is already in use", ErrModelAccessRoleNameExists, name)
+		}
 		return ModelAccessRole{}, fmt.Errorf("create role: %w", err)
 	}
 	for _, model := range clean {

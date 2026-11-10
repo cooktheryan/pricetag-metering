@@ -303,7 +303,11 @@ func (h *ModelAccessHandler) handleRoles(w http.ResponseWriter, r *http.Request,
 			role, err := h.store.CreateModelAccessRole(r.Context(), tenant, actor,
 				body.Name, body.Description, body.Models, body.IsDefault, body.MonthlyUSD)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+				status := http.StatusBadRequest
+				if errors.Is(err, storage.ErrModelAccessRoleNameExists) {
+					status = http.StatusConflict
+				}
+				http.Error(w, err.Error(), status)
 				return
 			}
 			writeJSONStatus(w, http.StatusCreated, role)
