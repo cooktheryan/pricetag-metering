@@ -107,6 +107,7 @@ func (s *Store) migratePartnerUsers(ctx context.Context) error {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		)`,
 		`CREATE INDEX IF NOT EXISTS partner_user_logins_user_idx ON partner_user_logins (user_id)`,
+		`CREATE INDEX IF NOT EXISTS partner_user_logins_username_lower_idx ON partner_user_logins (LOWER(username))`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS partner_user_logins_one_current ON partner_user_logins (user_id) WHERE is_current`,
 		// Keys minted through the partner API. Deactivation revokes exactly
 		// these; keys a user obtained through the dashboard or MaaS directly
