@@ -564,7 +564,7 @@ td .tag{white-space:nowrap}
 
 <!-- Console tabs -->
 <div class="vtabs">
-  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button><button class="vtab" id="vtab-model-access" onclick="showTab('model-access')">Model access</button><button class="vtab" id="vtab-safety-net" onclick="showTab('safety-net')">Safety Net</button><button class="vtab" id="vtab-pricing-discounts" onclick="showTab('pricing-discounts')">Pricing Discounts</button><button class="vtab" id="vtab-model-restrictions" onclick="showTab('model-restrictions')">Legacy restrictions</button>
+  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button><button class="vtab" id="vtab-model-access" onclick="showTab('model-access')">Model access</button><button class="vtab" id="vtab-over-limit" onclick="showTab('over-limit')">Over limit<span class="tcount" id="badge-over-limit" style="display:none"></span></button><button class="vtab" id="vtab-safety-net" onclick="showTab('safety-net')">Safety Net</button><button class="vtab" id="vtab-pricing-discounts" onclick="showTab('pricing-discounts')">Pricing Discounts</button><button class="vtab" id="vtab-model-restrictions" onclick="showTab('model-restrictions')">Legacy restrictions</button>
   <div class="vtab-tools">
     <span id="last-updated"></span>
     <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="refreshTab(activeTab,true)">Refresh</button>
@@ -677,6 +677,20 @@ td .tag{white-space:nowrap}
     </div>
     <div style="margin-bottom:10px"><input id="ma-subject-search" class="tbl-input" placeholder="Search name, email, external ID, cost center, or group" oninput="loadModelAccessSubjects()" style="width:100%;padding:7px 10px;font-size:12px"></div>
     <div id="ma-subjects"><div class="loading"><div class="spinner"></div>Loading subjects...</div></div>
+  </div>
+</div>
+
+<!-- ============ TAB: Over limit ============ -->
+<div class="tab-panel" id="tab-over-limit">
+  <div class="card">
+    <div class="card-hdr">
+      <div><span class="card-title">People over budget</span><span class="card-count" id="ol-count"></span></div>
+      <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadOverLimit()">Refresh</button>
+    </div>
+    <div class="ts" id="ol-note" style="margin-bottom:12px">People at or above their effective monthly budget. Budgets are additive across roles; temporary credits add on top. Free and zero-cost models stay available after the cap; paid requests return 429 while enforcement is on.</div>
+    <div style="margin-bottom:10px"><input id="ol-search" class="tbl-input" placeholder="Search name, email, cost center, or username" oninput="loadOverLimit()" style="width:100%;padding:7px 10px;font-size:12px"></div>
+    <div id="ol-list"><div class="loading"><div class="spinner"></div>Loading over-limit users...</div></div>
+    <div class="partner-users-pager"><button id="ol-prev" onclick="changeOverLimitPage(-1)">Previous</button><span id="ol-page-label">Page 1</span><button id="ol-next" onclick="changeOverLimitPage(1)">Next</button></div>
   </div>
 </div>
 
@@ -1032,7 +1046,7 @@ function resolveModelName(crdName) {
 /* ================================================================
    Tabs — one panel visible, lazy load on first open, deep-linkable
    ================================================================ */
-var TABS = ['people', 'model-access', 'safety-net', 'pricing-discounts', 'model-restrictions'];
+var TABS = ['people', 'model-access', 'over-limit', 'safety-net', 'pricing-discounts', 'model-restrictions'];
 
 function showTab(name, pushHash) {
   if (TABS.indexOf(name) < 0) name = 'people';
@@ -1056,6 +1070,8 @@ function refreshTab(name, manual) {
     loadPartnerUsers();
   } else if (name === 'model-access') {
     loadModelAccess();
+  } else if (name === 'over-limit') {
+    loadOverLimit();
   } else if (name === 'safety-net') {
     loadSafetyNet();
   } else if (name === 'pricing-discounts') {
@@ -1961,6 +1977,65 @@ function changeModelRestrictionsPage(delta) {
   var next = modelRestrictionsPage + delta;
   if (next < 0 || (delta > 0 && !modelRestrictionsHasMore)) return;
   loadModelRestrictions(next);
+}
+
+/* ================================================================
+   Over limit — read-only budget overage list
+   ================================================================ */
+var overLimitPage = 0, overLimitPageSize = 50, overLimitHasMore = false;
+
+function olMoney(v) {
+  return '$' + (Number(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function loadOverLimit(page) {
+  if (typeof page === 'number') overLimitPage = page;
+  var q = (document.getElementById('ol-search') || {}).value || '';
+  var offset = overLimitPage * overLimitPageSize;
+  fetchJSON(maURL('/over-limit?limit=' + overLimitPageSize + '&offset=' + offset + '&q=' + encodeURIComponent(q))).then(function(payload) {
+    var rows = (payload && payload.users) || [];
+    var total = (payload && payload.total) || 0;
+    overLimitHasMore = offset + rows.length < total;
+    document.getElementById('ol-count').textContent = '(' + total + ')';
+    setTabBadge('over-limit', total, true);
+    var note = document.getElementById('ol-note');
+    if (payload && !payload.enforced) {
+      note.innerHTML = 'Enforcement is currently <b>off</b>. These people are over their effective budget, but requests are not being blocked. Free and zero-cost models stay available after the cap.';
+    } else {
+      note.innerHTML = 'People at or above their effective monthly budget. Budgets are additive across roles; temporary credits add on top. Free and zero-cost models stay available after the cap; paid requests return 429.';
+    }
+    var html = '<div class="tbl-wrap"><table><thead><tr><th>Person</th><th>Cost center</th><th>Roles</th><th>Budget</th><th>Spent</th><th>Over by</th><th>Used</th><th>Last activity</th></tr></thead><tbody>';
+    rows.forEach(function(u) {
+      var name = u.display_name || u.email || u.username || u.user_id;
+      var sub = [u.email && u.email !== name ? u.email : '', u.username && u.username !== (u.email || name) ? u.username : ''].filter(Boolean).join(' · ');
+      var roles = (u.roles || []).length ? u.roles.map(function(r) { return '<span class="tag tag-blu">' + esc(r) + '</span>'; }).join(' ') : '<span class="ts">none</span>';
+      var pct = u.limit_usd > 0 ? Math.round(u.spent_usd / u.limit_usd * 100) : 0;
+      html += '<tr>' +
+        '<td><strong>' + esc(name) + '</strong>' + (sub ? '<div class="ts" style="font-size:10px">' + esc(sub) + '</div>' : '') + '</td>' +
+        '<td class="ts">' + esc(u.cost_center || '—') + '</td>' +
+        '<td>' + roles + '</td>' +
+        '<td>' + olMoney(u.limit_usd) + '<div class="ts" style="font-size:10px">' + esc(u.budget_source || '') + '</div></td>' +
+        '<td>' + olMoney(u.spent_usd) + '</td>' +
+        '<td><span class="badge badge-red">+' + olMoney(u.over_by_usd) + '</span></td>' +
+        '<td>' + pct + '%</td>' +
+        '<td class="ts">' + (u.last_activity_at ? esc(new Date(u.last_activity_at).toLocaleString('en-US', {hour12:false})) : '—') + '</td>' +
+      '</tr>';
+    });
+    if (!rows.length) html += '<tr><td colspan="8" class="loading">Nobody is over budget this month.</td></tr>';
+    html += '</tbody></table></div>';
+    document.getElementById('ol-list').innerHTML = html;
+    document.getElementById('ol-prev').disabled = overLimitPage === 0;
+    document.getElementById('ol-next').disabled = !overLimitHasMore;
+    document.getElementById('ol-page-label').textContent = 'Page ' + (overLimitPage + 1);
+  }).catch(function(err) {
+    document.getElementById('ol-list').innerHTML = '<div class="err-msg">' + esc(err.message) + '</div>';
+  });
+}
+
+function changeOverLimitPage(delta) {
+  var next = overLimitPage + delta;
+  if (next < 0 || (delta > 0 && !overLimitHasMore)) return;
+  loadOverLimit(next);
 }
 
 /* ================================================================

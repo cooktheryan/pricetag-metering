@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -204,6 +205,21 @@ func (h *ModelAccessHandler) HandleAdmin(w http.ResponseWriter, r *http.Request)
 		h.handleSubjects(w, r, tenant, actor, parts[3:])
 	case "catalog":
 		h.handleCatalog(w, r, tenant, parts[3:])
+	case "over-limit":
+		if len(parts) > 3 || r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		page, err := h.store.ListUsersOverLimit(r.Context(), tenant, r.URL.Query().Get("q"), limit, offset)
+		if err != nil {
+			slog.Error("over-limit listing failed", "error", err)
+			http.Error(w, "over-limit listing unavailable", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, page)
 	case "cost-centers":
 		if len(parts) > 3 || r.Method != http.MethodGet {
 			w.Header().Set("Allow", "GET")
