@@ -651,12 +651,14 @@ func (s *Store) ListPolicySubjects(ctx context.Context, tenantID, query string, 
 	return out, rows.Err()
 }
 
-// GetRoleBudgetUSD sums the per-member budget contributions of the roles
-// currently assigned to a subject. The default role contributes only to
-// partner users and only when the subject is not excluded. A zero result
-// means "no role budget configured"; quota falls back to the global default.
-func (s *Store) GetRoleBudgetUSD(ctx context.Context, tenantID, subjectID string) (float64, error) {
-	var budget float64
+// GetRoleBudgetAndCreditsUSD resolves the additive role budget and the active
+// temporary credits in one round trip. The default role contributes only to
+// partner users and only when the subject is not excluded; a zero budget means
+// "no role budget configured" and quota falls back to the global default.
+// quotaDecision runs on the entitlement hot path, so this avoids a second
+// database call per decision.
+func (s *Store) GetRoleBudgetAndCreditsUSD(ctx context.Context, tenantID, subjectID string) (float64, float64, error) {
+	var budget, credits float64
 	if err := s.db.QueryRowContext(ctx, `
 		WITH assigned AS (
 			SELECT r.monthly_usd
@@ -684,26 +686,19 @@ func (s *Store) GetRoleBudgetUSD(ctx context.Context, tenantID, subjectID string
 			JOIN model_access_roles r
 			  ON r.role_id = a.role_id AND r.tenant_id = a.tenant_id
 			WHERE a.tenant_id = $1 AND a.subject_id = $2 AND r.retired_at IS NULL
+		),
+		active_credits AS (
+			SELECT COALESCE(SUM(amount_usd), 0) AS total
+			FROM quota_credits
+			WHERE tenant_id = $1 AND subject_id = $2
+			  AND (expires_at IS NULL OR expires_at > NOW())
 		)
-		SELECT COALESCE(SUM(monthly_usd), 0) FROM assigned`,
-		tenantID, subjectID).Scan(&budget); err != nil {
-		return 0, fmt.Errorf("role budget lookup: %w", err)
+		SELECT COALESCE((SELECT SUM(monthly_usd) FROM assigned), 0),
+		       (SELECT total FROM active_credits)`,
+		tenantID, subjectID).Scan(&budget, &credits); err != nil {
+		return 0, 0, fmt.Errorf("role budget/credit lookup: %w", err)
 	}
-	return budget, nil
-}
-
-// GetActiveCreditUSD sums non-expired temporary per-person credits.
-func (s *Store) GetActiveCreditUSD(ctx context.Context, tenantID, subjectID string) (float64, error) {
-	var credits float64
-	if err := s.db.QueryRowContext(ctx, `
-		SELECT COALESCE(SUM(amount_usd), 0)
-		FROM quota_credits
-		WHERE tenant_id = $1 AND subject_id = $2
-		  AND (expires_at IS NULL OR expires_at > NOW())`,
-		tenantID, subjectID).Scan(&credits); err != nil {
-		return 0, fmt.Errorf("quota credit lookup: %w", err)
-	}
-	return credits, nil
+	return budget, credits, nil
 }
 
 // policySubjectFilterClause is intentionally cost-center only: v1 assigns

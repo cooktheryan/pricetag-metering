@@ -796,7 +796,7 @@ func TestRoleBudgetAndCredits(t *testing.T) {
 	if err := s.AssignModelAccessRole(ctx, tenant, super.RoleID, subjectID, "admin"); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := s.GetRoleBudgetUSD(ctx, tenant, subjectID); err != nil || got != 500 {
+	if got, _, err := s.GetRoleBudgetAndCreditsUSD(ctx, tenant, subjectID); err != nil || got != 500 {
 		t.Fatalf("role budget = %v, err %v; want 500", got, err)
 	}
 	defaultRole, err := s.GetDefaultModelAccessRole(ctx, tenant)
@@ -812,7 +812,7 @@ func TestRoleBudgetAndCredits(t *testing.T) {
 	if _, err := s.AddQuotaCredit(ctx, tenant, subjectID, 100, &past, "expired", "admin"); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := s.GetActiveCreditUSD(ctx, tenant, subjectID); err != nil || got != 50 {
+	if _, got, err := s.GetRoleBudgetAndCreditsUSD(ctx, tenant, subjectID); err != nil || got != 50 {
 		t.Fatalf("credits = %v, err %v; want 50", got, err)
 	}
 	decision, _, err := s.QuotaDecisionCached(ctx, username, false)
@@ -825,7 +825,7 @@ func TestRoleBudgetAndCredits(t *testing.T) {
 	if err := s.SetModelAccessRoleBudget(ctx, tenant, super.RoleID, "admin", 250); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := s.GetRoleBudgetUSD(ctx, tenant, subjectID); err != nil || got != 550 {
+	if got, _, err := s.GetRoleBudgetAndCreditsUSD(ctx, tenant, subjectID); err != nil || got != 550 {
 		t.Fatalf("role budget after update = %v, err %v; want 550", got, err)
 	}
 
@@ -833,7 +833,7 @@ func TestRoleBudgetAndCredits(t *testing.T) {
 	if err := s.ExcludeSubjectFromDefault(ctx, tenant, subjectID, "admin", "test", nil); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := s.GetRoleBudgetUSD(ctx, tenant, subjectID); err != nil || got != 250 {
+	if got, _, err := s.GetRoleBudgetAndCreditsUSD(ctx, tenant, subjectID); err != nil || got != 250 {
 		t.Fatalf("excluded role budget = %v, err %v; want 250", got, err)
 	}
 }
@@ -886,6 +886,38 @@ func TestZeroCostModelsAllowedOverLimit(t *testing.T) {
 	}
 	if decision.ModelAllowedOverLimit("paid-model") {
 		t.Fatalf("paid model allowed over limit: %#v", decision.OverLimitModels)
+	}
+}
+
+func TestZeroCostModelListCachesAndRefreshes(t *testing.T) {
+	s, ctx := openTestStore(t)
+	insert := func(model string) {
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT INTO model_pricing (model, provider, input_cost_per_mtok, output_cost_per_mtok)
+			VALUES ($1, 'test', 0, 0)`, model); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert("free-a")
+	list, err := s.zeroCostModelList(ctx)
+	if err != nil || !slices.Contains(list, "free-a") {
+		t.Fatalf("first list = %v, err %v", list, err)
+	}
+	insert("free-b")
+	list, err = s.zeroCostModelList(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(list, "free-b") {
+		t.Fatalf("cache did not hold: %v", list)
+	}
+	// Expire the entry without sleeping so the refresh path is exercised.
+	s.zeroCostMu.Lock()
+	s.zeroCostExpires = time.Time{}
+	s.zeroCostMu.Unlock()
+	list, err = s.zeroCostModelList(ctx)
+	if err != nil || !slices.Contains(list, "free-b") {
+		t.Fatalf("refreshed list = %v, err %v", list, err)
 	}
 }
 

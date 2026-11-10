@@ -111,6 +111,12 @@ type Store struct {
 	monthSpendEnabled atomic.Bool
 	monthSpendWrites  atomic.Bool
 
+	// zeroCostMu memoises the global zero-price model list. The list changes
+	// only when pricing changes, but every quota cache miss consults it.
+	zeroCostMu      sync.RWMutex
+	zeroCostModels  []string
+	zeroCostExpires time.Time
+
 	// QoS classification state. The cached decisions are process-local,
 	// like the quota cache; the short-window and 5m-guard caches have
 	// different TTLs so the expensive 5m query is not repeated on every

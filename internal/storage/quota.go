@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -397,7 +398,9 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	// cannot increase spend. Add them to the post-cap allowlist so free and
 	// hosted models do not depend on a manually maintained global list.
 	if err := s.addZeroCostOverLimitModels(ctx, &d); err != nil {
-		return d, err
+		// Free-model allowance is an optimization, not a security gate. A
+		// pricing lookup failure must not break every entitlement decision.
+		slog.Warn("zero-cost model lookup failed; using explicit over-limit list", "error", err)
 	}
 
 	// Role budgets are additive across all active roles (default + explicit).
@@ -406,10 +409,7 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	var roleBudget, creditUSD float64
 	if tenantID, tenantErr := s.EnsureDefaultTenant(ctx); tenantErr == nil {
 		if subjectID, _, subjectErr := s.ResolvePolicySubjectByUsername(ctx, tenantID, username); subjectErr == nil {
-			if roleBudget, err = s.GetRoleBudgetUSD(ctx, tenantID, subjectID); err != nil {
-				return d, err
-			}
-			if creditUSD, err = s.GetActiveCreditUSD(ctx, tenantID, subjectID); err != nil {
+			if roleBudget, creditUSD, err = s.GetRoleBudgetAndCreditsUSD(ctx, tenantID, subjectID); err != nil {
 				return d, err
 			}
 		}
@@ -461,36 +461,69 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 // output list price to the post-cap allowlist. The model still has to pass the
 // separate role-based model-access gate; this only prevents the dollar cap
 // from blocking a request that cannot add spend.
-func (s *Store) addZeroCostOverLimitModels(ctx context.Context, d *QuotaDecision) error {
+func (s *Store) zeroCostModelList(ctx context.Context) ([]string, error) {
+	now := time.Now()
+	s.zeroCostMu.RLock()
+	if now.Before(s.zeroCostExpires) {
+		models := append([]string(nil), s.zeroCostModels...)
+		s.zeroCostMu.RUnlock()
+		return models, nil
+	}
+	s.zeroCostMu.RUnlock()
+
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT model FROM model_pricing
 		WHERE input_cost_per_mtok = 0 AND output_cost_per_mtok = 0
 		ORDER BY model`)
 	if err != nil {
-		return fmt.Errorf("zero-cost model lookup: %w", err)
+		return nil, fmt.Errorf("zero-cost model lookup: %w", err)
 	}
 	defer rows.Close()
+	models := []string{}
+	for rows.Next() {
+		var model string
+		if err := rows.Scan(&model); err != nil {
+			return nil, err
+		}
+		models = append(models, model)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	s.zeroCostMu.Lock()
+	s.zeroCostModels = models
+	s.zeroCostExpires = now.Add(zeroCostCacheTTL)
+	s.zeroCostMu.Unlock()
+	return models, nil
+}
+
+func (s *Store) addZeroCostOverLimitModels(ctx context.Context, d *QuotaDecision) error {
+	models, err := s.zeroCostModelList(ctx)
+	if err != nil {
+		return err
+	}
 	seen := make(map[string]struct{}, len(d.OverLimitModels))
 	for _, model := range d.OverLimitModels {
 		seen[model] = struct{}{}
 	}
-	for rows.Next() {
-		var model string
-		if err := rows.Scan(&model); err != nil {
-			return err
-		}
+	for _, model := range models {
 		if _, ok := seen[model]; ok {
 			continue
 		}
 		seen[model] = struct{}{}
 		d.OverLimitModels = append(d.OverLimitModels, model)
 	}
-	return rows.Err()
+	return nil
 }
 
 // --- Decision cache (the gateway's synchronous dependency) ---
 
-const quotaCacheTTL = 15 * time.Second
+const (
+	quotaCacheTTL = 15 * time.Second
+	// Pricing changes rarely, so the global zero-price list is safe to hold
+	// longer than a decision; a new free model becomes usable within a minute.
+	zeroCostCacheTTL = 60 * time.Second
+)
 
 type quotaCacheEntry struct {
 	decision QuotaDecision
