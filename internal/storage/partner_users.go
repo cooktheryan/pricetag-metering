@@ -760,6 +760,23 @@ func (s *Store) DeletePartnerUserModelAllowlist(ctx context.Context, actor, user
 	return nil
 }
 
+// PartnerUserByLoginAlias resolves a partner user from any retained login,
+// preferring an active current login. Policy lookups use this so a policy
+// follows an email change; callers that must act as the signed-in identity
+// keep using PartnerUserByMaaSUsername, which requires the login to be
+// current. Inactive users are returned so the policy layer can fail closed.
+func (s *Store) PartnerUserByLoginAlias(ctx context.Context, username string) (PartnerUser, error) {
+	user, err := scanPartnerUser(s.db.QueryRowContext(ctx, partnerUserSelect+`
+		JOIN partner_user_logins l ON l.user_id = p.user_id
+		WHERE LOWER(l.username) = LOWER($1)
+		ORDER BY p.active DESC, l.is_current DESC
+		LIMIT 1`, strings.TrimSpace(username)))
+	if errors.Is(err, sql.ErrNoRows) {
+		return PartnerUser{}, ErrPartnerUserNotFound
+	}
+	return user, err
+}
+
 func (s *Store) PartnerUserByMaaSUsername(ctx context.Context, username string) (PartnerUser, error) {
 	user, err := scanPartnerUser(s.db.QueryRowContext(ctx, partnerUserSelect+`
 		JOIN partner_user_logins l ON l.user_id = p.user_id

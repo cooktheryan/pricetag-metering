@@ -381,11 +381,11 @@ func (s *Store) SyncPartnerUserSubject(ctx context.Context, tenantID, userID str
 }
 
 // ResolvePolicySubjectByUsername maps a MaaS login to the stable policy
-// subject. It creates the subject lazily if the startup sync or OIDC login
-// missed it, so the compatibility entitlement path does not cut off a valid
-// partner user. Unlinked usernames return ErrPartnerUserNotFound.
+// subject. It resolves retained login aliases so a policy follows an email
+// change, and creates the subject lazily if the startup sync or OIDC login
+// missed it. Unlinked usernames return ErrPartnerUserNotFound.
 func (s *Store) ResolvePolicySubjectByUsername(ctx context.Context, tenantID, username string) (string, string, error) {
-	user, err := s.PartnerUserByMaaSUsername(ctx, username)
+	user, err := s.PartnerUserByLoginAlias(ctx, username)
 	if err != nil {
 		return "", "", err
 	}
