@@ -675,7 +675,7 @@ td .tag{white-space:nowrap}
       <div><span class="card-title">People &amp; service identities</span><span class="card-count" id="ma-subjects-count"></span></div>
       <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelAccessSubjects()">Refresh</button>
     </div>
-    <div style="margin-bottom:10px"><input id="ma-subject-search" class="tbl-input" placeholder="Search name, email, external ID, or cost center" oninput="loadModelAccessSubjects()" style="width:100%;padding:7px 10px;font-size:12px"></div>
+    <div style="margin-bottom:10px"><input id="ma-subject-search" class="tbl-input" placeholder="Search name, email, external ID, cost center, or group" oninput="loadModelAccessSubjects()" style="width:100%;padding:7px 10px;font-size:12px"></div>
     <div id="ma-subjects"><div class="loading"><div class="spinner"></div>Loading subjects...</div></div>
   </div>
 </div>
@@ -718,10 +718,10 @@ td .tag{white-space:nowrap}
     <div id="ma-wizard-step4" style="display:none">
       <div class="ts" style="margin-bottom:10px">Step 4 of 6</div>
       <div id="ma-wizard-people" class="field">
-        <label>Assign cost centers (optional)</label>
-        <div id="ma-new-cost-centers-summary" class="ts" style="margin-bottom:6px">No cost centers selected</div>
-        <button class="btn btn-outline" onclick="openCostCenterPicker()">Choose cost centers</button>
-        <div class="ts" style="margin-top:6px">Everyone currently in the selected cost centers is assigned once; future directory changes are not automatic. Individuals can also be added later from a person's effective-access drawer.</div>
+        <label>Assign cost centers or groups (optional)</label>
+        <div id="ma-new-assignment-summary" class="ts" style="margin-bottom:6px">No cost centers or groups selected</div>
+        <button class="btn btn-outline" onclick="openAssignmentPicker()">Choose cost centers or groups</button>
+        <div class="ts" style="margin-top:6px">Everyone currently in the selected cost centers or SSO groups is assigned once; future directory changes are not automatic. Individuals can also be added later from a person's effective-access drawer.</div>
       </div>
     </div>
 
@@ -768,22 +768,26 @@ td .tag{white-space:nowrap}
   </div>
 </div>
 
-<div class="modal-overlay" id="ma-cost-centers-modal">
-  <div class="modal" style="max-width:560px">
-    <button class="modal-close" onclick="closeCostCenterPicker()">&times;</button>
-    <div class="modal-title">Choose cost centers</div>
+<div class="modal-overlay" id="ma-assignment-modal">
+  <div class="modal" style="max-width:620px">
+    <button class="modal-close" onclick="closeAssignmentPicker()">&times;</button>
+    <div class="modal-title">Choose cost centers or groups</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn btn-outline" id="ma-assign-tab-cost-center" onclick="setAssignmentMode('cost_center')">Cost centers</button>
+      <button class="btn btn-outline" id="ma-assign-tab-group" onclick="setAssignmentMode('group')">SSO groups</button>
+    </div>
     <div class="field">
-      <input type="search" id="ma-cc-search" class="tbl-input" placeholder="Search cost center code or description" oninput="renderCostCenterPicker()" style="width:100%;padding:8px 10px;font-size:12px">
+      <input type="search" id="ma-assignment-search" class="tbl-input" placeholder="Search cost center code or description" oninput="onAssignmentSearch()" style="width:100%;padding:8px 10px;font-size:12px">
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-      <button class="btn btn-outline" style="padding:4px 10px;font-size:10px" onclick="selectAllCostCenterPicker(true)">Select all visible</button>
-      <button class="btn btn-outline" style="padding:4px 10px;font-size:10px" onclick="selectAllCostCenterPicker(false)">Clear</button>
-      <span class="ts" id="ma-cc-count"></span>
+      <button class="btn btn-outline" style="padding:4px 10px;font-size:10px" onclick="selectAllAssignmentPicker(true)">Select all visible</button>
+      <button class="btn btn-outline" style="padding:4px 10px;font-size:10px" onclick="selectAllAssignmentPicker(false)">Clear</button>
+      <span class="ts" id="ma-assignment-count"></span>
     </div>
-    <div id="ma-cc-list" style="max-height:45vh;overflow:auto;border:1px solid var(--bdr);border-radius:6px;padding:8px"></div>
+    <div id="ma-assignment-list" style="max-height:45vh;overflow:auto;border:1px solid var(--bdr);border-radius:6px;padding:8px"></div>
     <div class="modal-actions">
-      <button class="btn btn-outline" onclick="closeCostCenterPicker()" style="padding:7px 18px;font-size:11px">Cancel</button>
-      <button class="btn btn-grn" onclick="saveCostCenterPicker()">Apply</button>
+      <button class="btn btn-outline" onclick="closeAssignmentPicker()" style="padding:7px 18px;font-size:11px">Cancel</button>
+      <button class="btn btn-grn" onclick="saveAssignmentPicker()">Apply</button>
     </div>
   </div>
 </div>
@@ -1267,19 +1271,29 @@ var maWizardStep = 1;
 var maCostCenters = [];
 var maCostCenterSelection = new Set();
 var maWizardCostCenters = [];
+var maCostCenterPeople = {};
+var maGroupFacets = [];
+var maGroupSelection = new Set();
+var maWizardGroups = [];
+var maGroupPeople = {};
+var maAssignmentMode = 'cost_center';
+var maGroupSearchTimer = null;
 
 function openRoleWizard() {
   closeRoleEditor();
   maWizardStep = 1;
   maNewModels = [];
   maWizardCostCenters = [];
+  maWizardGroups = [];
+  maCostCenterSelection = new Set();
+  maGroupSelection = new Set();
   document.getElementById('ma-new-name').value = '';
   document.getElementById('ma-new-extra').value = '';
   document.getElementById('ma-new-budget').value = '';
   document.getElementById('ma-new-default').checked = false;
   document.getElementById('ma-wizard-replace').checked = false;
   renderModelSummary('new');
-  renderCostCenterSummary();
+  renderAssignmentSummary();
   loadCostCenterFacets();
   renderRoleWizard();
   document.getElementById('ma-role-wizard').classList.add('open');
@@ -1288,71 +1302,141 @@ function openRoleWizard() {
 function loadCostCenterFacets() {
   fetchJSON(maURL('/cost-centers')).then(function(facets) {
     maCostCenters = facets || [];
-    renderCostCenterSummary();
-    if (document.getElementById('ma-cost-centers-modal').classList.contains('open')) renderCostCenterPicker();
+    maCostCenters.forEach(function(f) { maCostCenterPeople[f.cost_center] = f.people || 0; });
+    renderAssignmentSummary();
+    if (document.getElementById('ma-assignment-modal').classList.contains('open') && maAssignmentMode === 'cost_center') renderAssignmentPicker();
   }).catch(function(err) { showToast('Cost centers failed: ' + err.message, 'error'); });
 }
 
-function renderCostCenterSummary() {
-  var el = document.getElementById('ma-new-cost-centers-summary');
+function loadGroupFacets(query) {
+  return fetchJSON(maURL('/groups?limit=50&q=' + encodeURIComponent(query || ''))).then(function(facets) {
+    maGroupFacets = facets || [];
+    maGroupFacets.forEach(function(f) { maGroupPeople[f.group] = f.people || 0; });
+    renderAssignmentSummary();
+    if (document.getElementById('ma-assignment-modal').classList.contains('open') && maAssignmentMode === 'group') renderAssignmentPicker();
+  }).catch(function(err) { showToast('Groups failed: ' + err.message, 'error'); });
+}
+
+function renderAssignmentSummary() {
+  var el = document.getElementById('ma-new-assignment-summary');
   if (!el) return;
-  if (!maWizardCostCenters.length) { el.textContent = 'No cost centers selected'; return; }
-  var counts = {};
-  maCostCenters.forEach(function(f) { counts[f.cost_center] = f.people || 0; });
-  var total = maWizardCostCenters.reduce(function(sum, cc) { return sum + (counts[cc] || 0); }, 0);
-  el.textContent = maWizardCostCenters.join(', ') + (total ? ' · ' + total + ' active people now' : '');
+  var parts = [];
+  if (maWizardCostCenters.length) {
+    var ccTotal = maWizardCostCenters.reduce(function(sum, cc) { return sum + (maCostCenterPeople[cc] || 0); }, 0);
+    parts.push('Cost centers: ' + maWizardCostCenters.join(', ') + (ccTotal ? ' (' + ccTotal + ' people now)' : ''));
+  }
+  if (maWizardGroups.length) {
+    var gTotal = maWizardGroups.reduce(function(sum, g) { return sum + (maGroupPeople[g] || 0); }, 0);
+    parts.push('Groups: ' + maWizardGroups.join(', ') + (gTotal ? ' (' + gTotal + ' people now)' : ''));
+  }
+  el.textContent = parts.length ? parts.join(' · ') : 'No cost centers or groups selected';
 }
 
-function openCostCenterPicker() {
+function openAssignmentPicker() {
+  maAssignmentMode = 'cost_center';
   maCostCenterSelection = new Set(maWizardCostCenters);
-  document.getElementById('ma-cc-search').value = '';
-  renderCostCenterPicker();
-  document.getElementById('ma-cost-centers-modal').classList.add('open');
+  maGroupSelection = new Set(maWizardGroups);
+  document.getElementById('ma-assignment-search').value = '';
+  updateAssignmentModeUI();
+  renderAssignmentPicker();
+  document.getElementById('ma-assignment-modal').classList.add('open');
   if (!maCostCenters.length) loadCostCenterFacets();
+  if (!maGroupFacets.length) loadGroupFacets('');
 }
 
-function closeCostCenterPicker() {
-  document.getElementById('ma-cost-centers-modal').classList.remove('open');
+function closeAssignmentPicker() {
+  document.getElementById('ma-assignment-modal').classList.remove('open');
 }
 
-function renderCostCenterPicker() {
-  var q = (document.getElementById('ma-cc-search').value || '').toLowerCase();
-  var visible = maCostCenters.filter(function(f) {
-    return !q || (f.cost_center + ' ' + (f.description || '')).toLowerCase().indexOf(q) >= 0;
-  });
-  var html = visible.map(function(f) {
-    return '<label style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12px;cursor:pointer">' +
-      '<input type="checkbox" style="width:auto;margin-top:2px" ' + (maCostCenterSelection.has(f.cost_center) ? 'checked' : '') +
-      ' onchange="toggleCostCenterPicker(\'' + esc(f.cost_center).replace(/'/g, "\\'") + '\',this.checked)">' +
-      '<span><strong>' + esc(f.cost_center) + '</strong>' +
-      (f.description ? ' <span class="ts">— ' + esc(f.description) + '</span>' : '') +
-      ' <span class="badge badge-blu" style="font-size:9px">' + (f.people || 0) + ' people</span></span></label>';
-  }).join('');
-  document.getElementById('ma-cc-list').innerHTML = html || '<div class="ts">No cost centers match the search.</div>';
-  document.getElementById('ma-cc-count').textContent = maCostCenterSelection.size + ' selected';
+function setAssignmentMode(mode) {
+  maAssignmentMode = mode;
+  document.getElementById('ma-assignment-search').value = '';
+  updateAssignmentModeUI();
+  if (mode === 'group' && !maGroupFacets.length) loadGroupFacets('');
+  renderAssignmentPicker();
 }
 
-function toggleCostCenterPicker(cc, checked) {
-  if (checked) maCostCenterSelection.add(cc); else maCostCenterSelection.delete(cc);
-  document.getElementById('ma-cc-count').textContent = maCostCenterSelection.size + ' selected';
+function updateAssignmentModeUI() {
+  var cc = document.getElementById('ma-assign-tab-cost-center');
+  var gr = document.getElementById('ma-assign-tab-group');
+  if (!cc || !gr) return;
+  cc.className = maAssignmentMode === 'cost_center' ? 'btn btn-grn' : 'btn btn-outline';
+  gr.className = maAssignmentMode === 'group' ? 'btn btn-grn' : 'btn btn-outline';
+  document.getElementById('ma-assignment-search').placeholder = maAssignmentMode === 'cost_center'
+    ? 'Search cost center code or description'
+    : 'Search SSO group (live)';
 }
 
-function selectAllCostCenterPicker(select) {
-  var boxes = document.querySelectorAll('#ma-cc-list input[type=checkbox]');
+function onAssignmentSearch() {
+  if (maAssignmentMode === 'group') {
+    clearTimeout(maGroupSearchTimer);
+    var q = document.getElementById('ma-assignment-search').value || '';
+    maGroupSearchTimer = setTimeout(function() { loadGroupFacets(q); }, 250);
+  } else {
+    renderAssignmentPicker();
+  }
+}
+
+function renderAssignmentPicker() {
+  var q = (document.getElementById('ma-assignment-search').value || '').toLowerCase();
+  var list = document.getElementById('ma-assignment-list');
+  var count = document.getElementById('ma-assignment-count');
+  if (!list) return;
+  var html = '';
+  if (maAssignmentMode === 'cost_center') {
+    var visible = maCostCenters.filter(function(f) {
+      return !q || (f.cost_center + ' ' + (f.description || '')).toLowerCase().indexOf(q) >= 0;
+    });
+    html = visible.map(function(f) {
+      return '<label data-value="' + esc(f.cost_center) + '" style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12px;cursor:pointer">' +
+        '<input type="checkbox" style="width:auto;margin-top:2px" ' + (maCostCenterSelection.has(f.cost_center) ? 'checked' : '') +
+        ' onchange="toggleAssignmentPicker(this)">' +
+        '<span><strong>' + esc(f.cost_center) + '</strong>' +
+        (f.description ? ' <span class="ts">— ' + esc(f.description) + '</span>' : '') +
+        ' <span class="badge badge-blu" style="font-size:9px">' + (f.people || 0) + ' people</span></span></label>';
+    }).join('');
+    list.innerHTML = html || '<div class="ts">No cost centers match the search.</div>';
+    count.textContent = maCostCenterSelection.size + ' selected';
+  } else {
+    html = maGroupFacets.map(function(f) {
+      return '<label data-value="' + esc(f.group) + '" style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12px;cursor:pointer">' +
+        '<input type="checkbox" style="width:auto;margin-top:2px" ' + (maGroupSelection.has(f.group) ? 'checked' : '') +
+        ' onchange="toggleAssignmentPicker(this)">' +
+        '<span><strong>' + esc(f.group) + '</strong>' +
+        ' <span class="badge badge-blu" style="font-size:9px">' + (f.people || 0) + ' people</span></span></label>';
+    }).join('');
+    list.innerHTML = html || '<div class="ts">' + (q ? 'No groups match the search.' : 'Type to search SSO groups.') + '</div>';
+    count.textContent = maGroupSelection.size + ' selected';
+  }
+}
+
+function toggleAssignmentPicker(input) {
+  var label = input.closest('label');
+  var value = label ? label.getAttribute('data-value') : '';
+  if (!value) return;
+  var set = maAssignmentMode === 'cost_center' ? maCostCenterSelection : maGroupSelection;
+  if (input.checked) set.add(value); else set.delete(value);
+  document.getElementById('ma-assignment-count').textContent = set.size + ' selected';
+}
+
+function selectAllAssignmentPicker(select) {
+  var boxes = document.querySelectorAll('#ma-assignment-list input[type=checkbox]');
+  var set = maAssignmentMode === 'cost_center' ? maCostCenterSelection : maGroupSelection;
   for (var i = 0; i < boxes.length; i++) {
     boxes[i].checked = select;
     var label = boxes[i].closest('label');
-    var cc = label ? label.querySelector('strong').textContent : '';
-    if (cc) { if (select) maCostCenterSelection.add(cc); else maCostCenterSelection.delete(cc); }
+    var value = label ? label.getAttribute('data-value') : '';
+    if (value) { if (select) set.add(value); else set.delete(value); }
   }
-  document.getElementById('ma-cc-count').textContent = maCostCenterSelection.size + ' selected';
+  document.getElementById('ma-assignment-count').textContent = set.size + ' selected';
 }
 
-function saveCostCenterPicker() {
+function saveAssignmentPicker() {
   maWizardCostCenters = Array.from(maCostCenterSelection).sort();
-  renderCostCenterSummary();
+  maWizardGroups = Array.from(maGroupSelection).sort();
+  renderAssignmentSummary();
   if (maWizardStep === 6) renderRoleWizard();
-  closeCostCenterPicker();
+  closeAssignmentPicker();
 }
 
 function closeRoleWizard() {
@@ -1384,11 +1468,18 @@ function renderRoleWizard() {
     var costCenters = maWizardCostCenters.length
       ? esc(maWizardCostCenters.join(', ')) + ' (one-time snapshot)'
       : 'none yet — assign later';
+    var groups = maWizardGroups.length
+      ? esc(maWizardGroups.join(', ')) + ' (one-time snapshot)'
+      : 'none yet — assign later';
+    var assignment = isDefault
+      ? '<div><strong>Assignment:</strong> all active people</div>'
+      : '<div><strong>Cost centers:</strong> ' + costCenters + '</div>' +
+        '<div><strong>Groups:</strong> ' + groups + '</div>';
     document.getElementById('ma-wizard-review').innerHTML =
       '<div><strong>Name:</strong> ' + esc(document.getElementById('ma-new-name').value || '') + '</div>' +
       '<div><strong>Default:</strong> ' + (isDefault ? 'yes — all active people' + (existingDefault ? ' (replaces ' + esc(existingDefault.name) + ')' : '') : 'no') + '</div>' +
       '<div><strong>Models:</strong> ' + (models.length ? esc(models.join(', ')) : 'none (grants no access)') + '</div>' +
-      '<div><strong>Cost centers:</strong> ' + (isDefault ? 'all active people' : costCenters) + '</div>' +
+      assignment +
       '<div><strong>Budget:</strong> ' + (budget > 0 ? '$' + budget + '/person/month' : 'no role budget — inherits global default') + '</div>';
   }
   document.getElementById('ma-wizard-back').style.display = step === 1 ? 'none' : '';
@@ -1412,8 +1503,8 @@ function roleWizardNext() {
     var models = maNewModels.concat(splitModels(document.getElementById('ma-new-extra').value));
     if (!models.length && !confirm('This role has no models and will grant no access. Continue?')) return;
   }
-  if (maWizardStep === 4 && !isDefault && !maWizardCostCenters.length) {
-    if (!confirm('No cost centers selected. Create the role without assigning anyone?')) return;
+  if (maWizardStep === 4 && !isDefault && !maWizardCostCenters.length && !maWizardGroups.length) {
+    if (!confirm('No cost centers or groups selected. Create the role without assigning anyone?')) return;
   }
   if (maWizardStep === 5) {
     var budget = parseFloat(document.getElementById('ma-new-budget').value || '0');
@@ -1439,9 +1530,19 @@ function createModelAccessRole() {
     name: name, description: '', models: models, is_default: isDefault,
     replace_default: !!replaceDefault, monthly_usd: monthlyUSD
   }).then(function(role) {
-    var applyPeople = !isDefault && maWizardCostCenters.length
-      ? sendJSON(maURL('/roles/' + encodeURIComponent(role.role_id) + '/subjects/filter'), 'POST', {field: 'cost_center', values: maWizardCostCenters})
-      : Promise.resolve(null);
+    var applyPeople = Promise.resolve(null);
+    if (!isDefault) {
+      if (maWizardCostCenters.length) {
+        applyPeople = applyPeople.then(function() {
+          return sendJSON(maURL('/roles/' + encodeURIComponent(role.role_id) + '/subjects/filter'), 'POST', {field: 'cost_center', values: maWizardCostCenters});
+        });
+      }
+      if (maWizardGroups.length) {
+        applyPeople = applyPeople.then(function() {
+          return sendJSON(maURL('/roles/' + encodeURIComponent(role.role_id) + '/subjects/filter'), 'POST', {field: 'group', values: maWizardGroups});
+        });
+      }
+    }
     return applyPeople.then(function() { return role; });
   }).then(function(role) {
     showToast('Role "' + role.name + '" created', 'success');
@@ -1546,6 +1647,12 @@ function showModelAccessEffective(subjectID) {
     var sub = maSubjects.filter(function(s) { return s.subject_id === subjectID; })[0] || {};
     var costCenter = [sub.cost_center, sub.cost_center_description].filter(Boolean).join(' — ');
     var sso = [sub.email, sub.organization, costCenter, sub.job_title, sub.employee_type].filter(Boolean).join(' · ');
+    var groups = sub.groups || [];
+    var groupsHtml = groups.length
+      ? '<div style="display:flex;flex-wrap:wrap;gap:4px;max-height:90px;overflow:auto;margin-top:3px">' +
+          groups.map(function(g) { return '<span class="tag tag-blu">' + esc(g) + '</span>'; }).join('') +
+        '</div>'
+      : '<span class="ts">none</span>';
     var roleChips = (e.role_refs || []).length ? e.role_refs.map(function(ref) {
       return '<span class="tag tag-blu">' + esc(ref.name) + ' <button class="btn" style="padding:0;background:none;color:inherit;font-weight:700" title="Remove role" onclick="removeRoleFromEffective(\'' + esc(ref.role_id) + '\')">&times;</button></span>';
     }).join(' ') : '<span class="ts">none</span>';
@@ -1556,6 +1663,7 @@ function showModelAccessEffective(subjectID) {
     }).join('');
     body.innerHTML =
       (sso ? '<div class="ts" style="margin-bottom:8px">' + esc(sso) + '</div>' : '') +
+      '<div style="margin-bottom:10px"><strong>Groups (' + groups.length + '):</strong>' + groupsHtml + '</div>' +
       '<div style="margin-bottom:10px"><strong>Effective:</strong> ' + (e.unrestricted ? '<span class="badge badge-grn">full catalog (super-admin)</span>' : chips(e.effective_models)) + '</div>' +
       '<div class="ts" style="margin-bottom:4px">Default role: ' + (e.default_role_name ? esc(e.default_role_name) : (e.default_role_id ? esc(e.default_role_id) : 'none')) + (e.default_excluded ? ' <span class="badge badge-red">excluded</span>' : '') + '</div>' +
       '<div class="ts" style="margin-bottom:8px">Explicit roles: ' + roleChips + '</div>' +

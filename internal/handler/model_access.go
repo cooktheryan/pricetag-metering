@@ -216,6 +216,19 @@ func (h *ModelAccessHandler) HandleAdmin(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		writeJSON(w, facets)
+	case "groups":
+		if len(parts) > 3 || r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		facets, err := h.store.ListGroupFacets(r.Context(), tenant, r.URL.Query().Get("q"), limit)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, facets)
 	default:
 		http.NotFound(w, r)
 	}
@@ -411,20 +424,24 @@ func (h *ModelAccessHandler) handleRoles(w http.ResponseWriter, r *http.Request,
 			if !decodeJSON(w, r, &body) {
 				return
 			}
-			if body.Field != "" && body.Field != "cost_center" {
-				http.Error(w, "only cost_center assignment is supported", http.StatusBadRequest)
+			field := strings.TrimSpace(body.Field)
+			if field == "" {
+				field = "cost_center"
+			}
+			if field != "cost_center" && field != "group" {
+				http.Error(w, "only cost_center or group assignment is supported", http.StatusBadRequest)
 				return
 			}
 			values := body.Values
 			if len(values) == 0 && strings.TrimSpace(body.Value) != "" {
 				values = []string{body.Value}
 			}
-			assigned, err := h.store.AssignModelAccessRoleByCostCenters(r.Context(), tenant, roleID, values, actor)
+			assigned, err := h.store.AssignModelAccessRoleByFilterValues(r.Context(), tenant, roleID, field, values, actor)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			writeJSON(w, map[string]any{"assigned": assigned, "field": "cost_center", "values": values})
+			writeJSON(w, map[string]any{"assigned": assigned, "field": field, "values": values})
 			return
 		}
 		if len(rest) == 2 && r.Method == http.MethodPost {

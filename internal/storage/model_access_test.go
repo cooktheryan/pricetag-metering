@@ -650,15 +650,15 @@ func TestAssignModelAccessRoleByFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, u := range []struct{ id, cc string }{
-		{uuid.NewString(), "CC-1"},
-		{uuid.NewString(), "CC-1"},
-		{uuid.NewString(), "CC-2"},
+	for _, u := range []struct{ id, cc, groups string }{
+		{uuid.NewString(), "CC-1", `["ai-eng"]`},
+		{uuid.NewString(), "CC-1", `["ai-eng", "platform"]`},
+		{uuid.NewString(), "CC-2", `["research"]`},
 	} {
 		if _, err := s.db.ExecContext(ctx, `
 			INSERT INTO partner_users (user_id, tags, role, active, created_by, updated_by)
-			VALUES ($1, jsonb_build_object('email', $2::text, 'cost_center', $3::text), 'user', TRUE, 'test', 'test')`,
-			u.id, u.id+"@example.com", u.cc); err != nil {
+			VALUES ($1, jsonb_build_object('email', $2::text, 'cost_center', $3::text, 'groups', $4::jsonb), 'user', TRUE, 'test', 'test')`,
+			u.id, u.id+"@example.com", u.cc, u.groups); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -694,6 +694,26 @@ func TestAssignModelAccessRoleByFilter(t *testing.T) {
 	subjects, err := s.ListModelAccessRoleSubjects(ctx, tenant, role.RoleID)
 	if err != nil || len(subjects) != 3 {
 		t.Fatalf("role subjects = %d, err %v", len(subjects), err)
+	}
+
+	groupFacets, err := s.ListGroupFacets(ctx, tenant, "ai", 10)
+	if err != nil || len(groupFacets) != 1 || groupFacets[0].Group != "ai-eng" || groupFacets[0].People != 2 {
+		t.Fatalf("group facets = %#v, err %v", groupFacets, err)
+	}
+	groupRole, err := s.CreateModelAccessRole(ctx, tenant, "admin", "Group role", "", []string{"model-a"}, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assigned, err = s.AssignModelAccessRoleByFilterValues(ctx, tenant, groupRole.RoleID, "group", []string{"ai-eng", "research"}, "admin")
+	if err != nil || assigned != 3 {
+		t.Fatalf("group assigned = %d, err %v", assigned, err)
+	}
+	assigned, err = s.AssignModelAccessRoleByFilterValues(ctx, tenant, groupRole.RoleID, "group", []string{"ai-eng", "research"}, "admin")
+	if err != nil || assigned != 0 {
+		t.Fatalf("repeat group assigned = %d, err %v", assigned, err)
+	}
+	if _, err := s.AssignModelAccessRoleByFilterValues(ctx, tenant, groupRole.RoleID, "organization", []string{"x"}, "admin"); err == nil {
+		t.Fatal("organization multi-filter should be rejected")
 	}
 }
 
