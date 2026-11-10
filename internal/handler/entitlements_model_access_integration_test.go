@@ -126,3 +126,39 @@ func TestEntitlementModelAccessModes(t *testing.T) {
 		t.Fatalf("off must preserve legacy behavior: %#v", got)
 	}
 }
+
+// A platform super-admin keeps dashboard/admin authority but is no longer
+// exempt from model access or budget enforcement. Broad inference access must
+// come from a normal role like everyone else.
+func TestSuperAdminDoesNotBypassModelAccess(t *testing.T) {
+	store, ctx := openHandlerTestStore(t)
+	tenant, err := store.EnsureDefaultTenant(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const username = "super-admin-gated@example.com"
+	userID := uuid.NewString()
+	if _, err := store.CreatePartnerUser(ctx, "test", userID, map[string]any{
+		"email": username, "first_name": "Super", "last_name": "Admin",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := store.UpdatePartnerUserAccess(ctx, "test", userID, storage.PartnerRoleSuperAdmin, nil)
+	if err != nil || updated.Role != storage.PartnerRoleSuperAdmin {
+		t.Fatalf("super-admin role = %#v, err %v", updated, err)
+	}
+	if _, err := store.CreateModelAccessRole(ctx, tenant, "test", "Engineering", "", []string{"model-a"}, true, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SyncPartnerUserSubjects(ctx, tenant); err != nil {
+		t.Fatal(err)
+	}
+
+	h := NewEntitlementsHandler(store, config.Config{ModelAccessEnforcement: "enforce"})
+	if got := entitlementFor(t, h, username, "model-a"); !got.HasAccess || !got.ModelAllowed {
+		t.Fatalf("super-admin allowed model = %#v", got)
+	}
+	if got := entitlementFor(t, h, username, "model-b"); got.HasAccess || got.ModelAllowed {
+		t.Fatalf("super-admin bypassed model access = %#v", got)
+	}
+}

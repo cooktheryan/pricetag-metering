@@ -203,7 +203,7 @@ func (h *KeysHandler) HandleWhoAmI(w http.ResponseWriter, r *http.Request) {
 		// Quota carrier (additive): the dashboard's over-limit popup/banner
 		// renders straight off this — no extra round-trip on boot. A quota
 		// lookup failure degrades the banner away, not the whole whoami.
-		if q, err := h.store.GetQuotaView(r.Context(), user, IsPartnerSuperAdmin(r.Context(), h.cfg, h.store, r)); err == nil {
+		if q, err := h.store.GetQuotaView(r.Context(), user, false); err == nil {
 			resp["quota"] = q
 		} else {
 			slog.Error("quota view lookup failed", "user", user, "error", err)

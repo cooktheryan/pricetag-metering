@@ -38,11 +38,9 @@ func NewEntitlementsHandler(store *storage.Store, cfg config.Config) *Entitlemen
 	}
 }
 
-// isSuperAdmin caches the role lookup for the entitlement hot path. The
-// per-request role query used to run for every gateway request; a short TTL
-// keeps role changes bounded by the same staleness as the quota decision.
-// Verdicts that fell back after a directory error are not cached, so the next
-// request retries the directory.
+// isSuperAdmin resolves the platform-admin verdict with a short cache. It is
+// kept for callers/tests that need the admin verdict; entitlement no longer
+// uses it to bypass quota or model access.
 func (h *EntitlementsHandler) isSuperAdmin(ctx context.Context, username string) bool {
 	key := strings.ToLower(strings.TrimSpace(username))
 	if cached, ok := h.roleCache.Get(key); ok {
@@ -60,18 +58,10 @@ func (h *EntitlementsHandler) isSuperAdmin(ctx context.Context, username string)
 // old allowlist behavior. Observe records would-deny decisions without
 // changing the answer; enforce supplies the new model verdict to the same
 // quota/accounting path.
-func (h *EntitlementsHandler) entitlementStats(ctx context.Context, username, model string, exempt bool) (storage.UsageStats, error) {
+func (h *EntitlementsHandler) entitlementStats(ctx context.Context, username, model string) (storage.UsageStats, error) {
 	mode := strings.ToLower(strings.TrimSpace(h.cfg.ModelAccessEnforcement))
 	if mode != "observe" && mode != "enforce" {
-		return h.store.GetMonthlyUsage(ctx, username, model, exempt)
-	}
-	if exempt {
-		// R6 super-admin authority; D27 will replace this with break-glass.
-		metrics.ModelAccessDecisionsTotal.WithLabelValues(mode, "allow").Inc()
-		if mode == "enforce" {
-			return h.store.GetMonthlyUsageWithModelAllowed(ctx, username, model, true, true)
-		}
-		return h.store.GetMonthlyUsage(ctx, username, model, true)
+		return h.store.GetMonthlyUsage(ctx, username, model, false)
 	}
 
 	tenantID, err := h.store.EnsureDefaultTenant(ctx)
@@ -149,11 +139,10 @@ func (h *EntitlementsHandler) HandleEntitlement(w http.ResponseWriter, r *http.R
 
 	model := r.URL.Query().Get("model")
 
-	// Operators never gate themselves: a quota misfire must not lock the
-	// people who can fix it out of their own dogfood keys.
-	exempt := h.isSuperAdmin(r.Context(), username)
-
-	stats, err := h.entitlementStats(r.Context(), username, model, exempt)
+	// Super-admins are governed by the same model-access and budget policy as
+	// everyone else. Dashboard/admin authorization is separate: broad inference
+	// access comes from a normal role, not a hardcoded bypass.
+	stats, err := h.entitlementStats(r.Context(), username, model)
 	if err != nil {
 		slog.Error("failed to get usage", "error", err, "user", username)
 		http.Error(w, "internal error", http.StatusInternalServerError)
