@@ -104,9 +104,19 @@ func TestPartnerUserDirectoryPolicyAndHistoricalUsage(t *testing.T) {
 	if err := s.RecordPartnerUserKey(ctx, "partner-m2m", id, "key-late", "alice.new@example.com", "late"); !errors.Is(err, ErrPartnerUserInactive) {
 		t.Fatalf("recording a key for a deactivated user = %v, want inactive", err)
 	}
-	blocked, err := s.GetUserModelAllowlist(ctx, "alice@example.com")
-	if err != nil || !blocked.Enabled || len(blocked.Models) != 0 {
-		t.Fatalf("inactive partner policy must fail closed: %#v, err %v", blocked, err)
+	// Deactivation must deny both the current login and every historical login
+	// mapped to the person. Resolving only the active current login would make
+	// the inactive user look unknown and fall through to the legacy allowlist,
+	// which is empty and therefore allows every model.
+	for _, login := range []string{"alice@example.com", "alice.new@example.com"} {
+		blocked, err := s.GetUserModelAllowlist(ctx, login)
+		if err != nil || !blocked.Enabled || len(blocked.Models) != 0 {
+			t.Fatalf("inactive partner policy for %s must fail closed: %#v, err %v", login, blocked, err)
+		}
+		stats, err := s.GetMonthlyUsage(ctx, login, "model-a", false)
+		if err != nil || stats.HasAccess || stats.ModelAllowed {
+			t.Fatalf("deactivated login %s must be denied: %#v, err %v", login, stats, err)
+		}
 	}
 	if _, err := s.ReactivatePartnerUser(ctx, "partner-m2m", id); !errors.Is(err, ErrPartnerUserRevocationPending) {
 		t.Fatalf("reactivation before MaaS revocation completion = %v, want pending error", err)
