@@ -162,3 +162,48 @@ func TestSuperAdminDoesNotBypassModelAccess(t *testing.T) {
 		t.Fatalf("super-admin bypassed model access = %#v", got)
 	}
 }
+
+// Deactivation must deny both the current and every historical login in
+// enforce mode. policy_subjects.status is refreshed by the deactivation
+// transaction, and the resolver also treats partner_users.active as
+// authoritative if a subject row is stale.
+func TestDeactivatedUserDeniedByModelAccess(t *testing.T) {
+	store, ctx := openHandlerTestStore(t)
+	tenant, err := store.EnsureDefaultTenant(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const oldLogin = "deactivated-old@example.com"
+	const newLogin = "deactivated-new@example.com"
+	userID := uuid.NewString()
+	if _, err := store.CreatePartnerUser(ctx, "test", userID, map[string]any{
+		"email": oldLogin, "first_name": "Deactivated", "last_name": "User",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PatchPartnerUser(ctx, "test", userID, map[string]any{
+		"email": newLogin, "first_name": "Deactivated", "last_name": "User",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateModelAccessRole(ctx, tenant, "test", "Engineering", "", []string{"model-a"}, true, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SyncPartnerUserSubjects(ctx, tenant); err != nil {
+		t.Fatal(err)
+	}
+
+	h := NewEntitlementsHandler(store, config.Config{ModelAccessEnforcement: "enforce"})
+	if got := entitlementFor(t, h, newLogin, "model-a"); !got.HasAccess || !got.ModelAllowed {
+		t.Fatalf("active user = %#v", got)
+	}
+	if _, err := store.BeginPartnerUserDeactivation(ctx, "test", userID); err != nil {
+		t.Fatal(err)
+	}
+	for _, login := range []string{oldLogin, newLogin} {
+		got := entitlementFor(t, h, login, "model-a")
+		if got.HasAccess || got.ModelAllowed {
+			t.Fatalf("deactivated login %s bypassed model access: %#v", login, got)
+		}
+	}
+}

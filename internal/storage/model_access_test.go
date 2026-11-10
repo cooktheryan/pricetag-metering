@@ -806,10 +806,10 @@ func TestRoleBudgetAndCredits(t *testing.T) {
 
 	future := time.Now().Add(24 * time.Hour)
 	past := time.Now().Add(-time.Hour)
-	if _, err := s.AddQuotaCredit(ctx, tenant, subjectID, 50, &future, "launch", "admin"); err != nil {
+	if _, err := s.AddQuotaCredit(ctx, tenant, subjectID, 50, &future, "launch", "admin", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.AddQuotaCredit(ctx, tenant, subjectID, 100, &past, "expired", "admin"); err != nil {
+	if _, err := s.AddQuotaCredit(ctx, tenant, subjectID, 100, &past, "expired", "admin", ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, got, err := s.GetRoleBudgetAndCreditsUSD(ctx, tenant, subjectID); err != nil || got != 50 {
@@ -945,5 +945,50 @@ func TestModelAccessDefaultRoleChange(t *testing.T) {
 	}
 	if !slices.Equal(got.EffectiveModels, []string{"model-a", "model-b"}) {
 		t.Fatalf("after = %v", got.EffectiveModels)
+	}
+}
+
+func TestAddQuotaCreditIdempotentByRequestID(t *testing.T) {
+	s, ctx := openTestStore(t)
+	tenant, err := s.EnsureDefaultTenant(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	username := "credit-idem@example.com"
+	userID := uuid.NewString()
+	if _, err := s.CreatePartnerUser(ctx, "test", userID, map[string]any{
+		"email": username, "first_name": "Credit", "last_name": "Idem",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SyncPartnerUserSubjects(ctx, tenant); err != nil {
+		t.Fatal(err)
+	}
+	subjectID, _, err := s.ResolvePolicySubjectByUsername(ctx, tenant, username)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.AddQuotaCredit(ctx, tenant, subjectID, 25, nil, "test", "admin", "req-idem-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.AddQuotaCredit(ctx, tenant, subjectID, 25, nil, "test", "admin", "req-idem-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.CreditID != second.CreditID {
+		t.Fatalf("idempotent replay returned a different credit: %s vs %s", first.CreditID, second.CreditID)
+	}
+	var count int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT count(*) FROM quota_credits WHERE tenant_id=$1 AND request_id=$2`,
+		tenant, "req-idem-1").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("credits with request_id = %d, want 1", count)
+	}
+	if _, err := s.AddQuotaCredit(ctx, tenant, subjectID, 30, nil, "test", "admin", "req-idem-1"); err == nil {
+		t.Fatal("reusing a request_id for a different amount must fail")
 	}
 }

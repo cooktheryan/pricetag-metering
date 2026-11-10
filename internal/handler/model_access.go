@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
@@ -66,12 +67,20 @@ func (h *ModelAccessHandler) HandleDecision(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "subject.id is required", http.StatusBadRequest)
 		return
 	}
+	if _, err := uuid.Parse(req.Subject.ID); err != nil {
+		http.Error(w, "subject.id must be a UUID", http.StatusBadRequest)
+		return
+	}
 	if req.Resource.Type != "" && req.Resource.Type != "model" {
 		http.Error(w, "resource.type must be model", http.StatusBadRequest)
 		return
 	}
 	if req.Action.Name == "" {
 		req.Action.Name = "invoke"
+	}
+	if req.Action.Name == "invoke" && strings.TrimSpace(req.Resource.ID) == "" {
+		http.Error(w, "resource.id is required for invoke", http.StatusBadRequest)
+		return
 	}
 	if req.Action.Name != "invoke" && req.Action.Name != "list" {
 		http.Error(w, "unsupported action", http.StatusBadRequest)
@@ -86,6 +95,9 @@ func (h *ModelAccessHandler) HandleDecision(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		tenant = id
+	} else if _, err := uuid.Parse(tenant); err != nil {
+		http.Error(w, "context.tenant must be a tenant UUID or 'default'", http.StatusBadRequest)
+		return
 	}
 
 	decision, err := h.store.DecideModelAccess(
@@ -93,12 +105,13 @@ func (h *ModelAccessHandler) HandleDecision(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		status, reason := policyError(err)
 		writeJSONStatus(w, status, storage.PolicyDecision{
-			TenantID:  tenant,
-			SubjectID: req.Subject.ID,
-			ModelID:   req.Resource.ID,
-			Action:    req.Action.Name,
-			Decision:  storage.PolicyDecisionDeny,
-			Reason:    reason,
+			TenantID:      tenant,
+			SubjectID:     req.Subject.ID,
+			ModelID:       req.Resource.ID,
+			Action:        req.Action.Name,
+			Decision:      storage.PolicyDecisionDeny,
+			Reason:        reason,
+			AllowedModels: []string{},
 		})
 		return
 	}
@@ -170,6 +183,7 @@ type addQuotaCreditRequest struct {
 	AmountUSD float64    `json:"amount_usd"`
 	ExpiresAt *time.Time `json:"expires_at"`
 	Reason    string     `json:"reason"`
+	RequestID string     `json:"request_id"`
 }
 
 type excludeDefaultRequest struct {
@@ -573,7 +587,7 @@ func (h *ModelAccessHandler) handleSubjects(w http.ResponseWriter, r *http.Reque
 			if !decodeJSON(w, r, &body) {
 				return
 			}
-			credit, err := h.store.AddQuotaCredit(r.Context(), tenant, subjectID, body.AmountUSD, body.ExpiresAt, body.Reason, actor)
+			credit, err := h.store.AddQuotaCredit(r.Context(), tenant, subjectID, body.AmountUSD, body.ExpiresAt, body.Reason, actor, body.RequestID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return

@@ -73,7 +73,7 @@ func TestListUsersOverLimit(t *testing.T) {
 			}
 		}
 		if p.credit > 0 {
-			if _, err := s.AddQuotaCredit(ctx, tenant, subjectID, p.credit, &future, "test", "admin"); err != nil {
+			if _, err := s.AddQuotaCredit(ctx, tenant, subjectID, p.credit, &future, "test", "admin", ""); err != nil {
 				t.Fatal(err)
 			}
 		}

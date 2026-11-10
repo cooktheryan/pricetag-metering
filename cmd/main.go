@@ -391,7 +391,7 @@ func main() {
 		m2mAuth := func(next http.HandlerFunc) http.HandlerFunc { return handler.RequireM2MAuth(cfg, next) }
 		mux.HandleFunc("/api/v1/events", m2mAuth(eventsHandler.HandleEvent))
 		mux.HandleFunc("/api/v1/customers/", m2mAuth(entitlementsHandler.HandleEntitlement))
-		mux.HandleFunc("/api/v2/policy/decide", m2mAuth(modelAccessHandler.HandleDecision))
+		mux.HandleFunc("/api/v2/policy/decide", handler.RequireM2MAuthStrict(cfg, modelAccessHandler.HandleDecision))
 		// Partner APIs use endpoint-specific bearer credentials in addition to any
 		// Route/AuthPolicy. This protects direct Service and port-forward access.
 		mux.HandleFunc("/api/v1/usage/users/", handler.RequirePartnerAPIAuthAny(cfg.UsageReportAPISecrets, usageReportHandler.HandleUserUsage))

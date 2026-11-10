@@ -187,6 +187,7 @@ func (s *Store) migrateModelAccess(ctx context.Context) error {
 			FOREIGN KEY (subject_id, tenant_id) REFERENCES policy_subjects(subject_id, tenant_id) ON DELETE CASCADE
 		)`,
 		`CREATE INDEX IF NOT EXISTS quota_credits_subject_idx ON quota_credits (tenant_id, subject_id, expires_at)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS quota_credits_request_unique ON quota_credits (tenant_id, request_id) WHERE request_id IS NOT NULL`,
 
 		`CREATE TABLE IF NOT EXISTS catalog_models (
 			tenant_id UUID NOT NULL REFERENCES policy_tenants(tenant_id) ON DELETE CASCADE,
@@ -427,8 +428,8 @@ func (s *Store) BumpPolicyVersion(ctx context.Context, tenantID string) (int64, 
 
 // GetEffectiveModelAccess resolves the subject's effective model set. It is
 // deliberately tenant-scoped: a role or grant in another tenant never leaks.
-// superAdmin is supplied by the caller (the existing entitlement exemption);
-// when true the result is Unrestricted and role/restriction data is not used.
+// superAdmin is reserved for an explicit break-glass caller; the entitlement
+// and decision paths pass false, so inference access is role-governed.
 func (s *Store) GetEffectiveModelAccess(ctx context.Context, tenantID, subjectID string, superAdmin bool) (EffectiveModelAccess, error) {
 	result := EffectiveModelAccess{
 		TenantID:  tenantID,
@@ -448,15 +449,26 @@ func (s *Store) GetEffectiveModelAccess(ctx context.Context, tenantID, subjectID
 	}
 
 	var subjectStatus string
+	var partnerActive sql.NullBool
 	if err := s.db.QueryRowContext(ctx, `
-		SELECT principal_type, status
-		FROM policy_subjects
-		WHERE tenant_id = $1 AND subject_id = $2`, tenantID, subjectID).
-		Scan(&result.PrincipalType, &subjectStatus); err != nil {
+		SELECT ps.principal_type, ps.status,
+		       CASE WHEN ps.principal_type = 'partner_user' THEN pu.active ELSE NULL END
+		FROM policy_subjects ps
+		LEFT JOIN partner_users pu
+		  ON ps.principal_type = 'partner_user' AND pu.user_id::text = ps.external_id
+		WHERE ps.tenant_id = $1 AND ps.subject_id = $2`, tenantID, subjectID).
+		Scan(&result.PrincipalType, &subjectStatus, &partnerActive); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return result, ErrModelAccessSubjectNotFound
 		}
 		return result, fmt.Errorf("policy subject lookup: %w", err)
+	}
+	// partner_users is authoritative for human subjects: policy_subjects.status
+	// is refreshed at startup/login and on deactivate/reactivate, but a stale
+	// row must never keep a deactivated person's access alive.
+	if partnerActive.Valid && !partnerActive.Bool {
+		result.Active = false
+		return result, ErrModelAccessSubjectInactive
 	}
 	result.Active = subjectStatus == "active"
 	if !result.Active {

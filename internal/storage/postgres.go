@@ -518,10 +518,10 @@ func (s *Store) GetTeamUsage(ctx context.Context, groupName string) ([]TeamUserU
 // hasAccess is the AND of two independent gates: the legacy token budget
 // (a 10B-token outer safety net; tokenQuota <= 0 disables it) and the
 // dollar quota from quota.go (inert while the policy's enforced flag is
-// false, and never applied to exempt callers — super-admins). Errors
-// propagate as a 5xx, which the gateway treats as metering unavailability
-// and admits the request (fail_open) — so a metering outage disables
-// enforcement rather than blocking traffic. That is the accepted tradeoff.
+// false). Super-admins are not exempt; broad access comes from a role.
+// Errors propagate as a 5xx, which the gateway treats according to its
+// external_metering fail_open setting (allow or 503), so a metering outage
+// is an explicit availability decision rather than an implicit bypass.
 func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exempt bool) (UsageStats, error) {
 	return s.getMonthlyUsage(ctx, username, model, exempt, nil)
 }

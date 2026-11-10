@@ -833,7 +833,7 @@ td .tag{white-space:nowrap}
 <div class="tab-panel" id="tab-safety-net">
   <div class="card">
     <div class="card-hdr"><div><span class="card-title">Monthly Safety Net</span><span class="card-count" id="safety-net-meta"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadSafetyNet()">Refresh</button></div>
-    <div class="ts" style="margin-bottom:14px">Global month-to-date spend protection. Users are blocked at the limit except for the exact models listed as bypass models. Super-admins are exempt.</div>
+    <div class="ts" style="margin-bottom:14px">Global month-to-date spend protection. Users are blocked at the limit except for the exact models listed as bypass models. Platform admins are governed by their roles like everyone else.</div>
     <div id="safety-net-body"><div class="loading"><div class="spinner"></div>Loading safety-net policy...</div></div>
   </div>
 </div>
@@ -1708,7 +1708,7 @@ function showModelAccessEffective(subjectID) {
     body.innerHTML =
       (sso ? '<div class="ts" style="margin-bottom:8px">' + esc(sso) + '</div>' : '') +
       '<div style="margin-bottom:10px"><strong>Groups (' + groups.length + '):</strong>' + groupsHtml + '</div>' +
-      '<div style="margin-bottom:10px"><strong>Effective:</strong> ' + (e.unrestricted ? '<span class="badge badge-grn">full catalog (super-admin)</span>' : chips(e.effective_models)) + '</div>' +
+      '<div style="margin-bottom:10px"><strong>Effective:</strong> ' + (e.unrestricted ? '<span class="badge badge-grn">full catalog (unrestricted)</span>' : chips(e.effective_models)) + '</div>' +
       '<div class="ts" style="margin-bottom:4px">Default role: ' + (e.default_role_name ? esc(e.default_role_name) : (e.default_role_id ? esc(e.default_role_id) : 'none')) + (e.default_excluded ? ' <span class="badge badge-red">excluded</span>' : '') + '</div>' +
       '<div class="ts" style="margin-bottom:8px">Explicit roles: ' + roleChips + '</div>' +
       (options ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><select id="ma-add-role" class="tbl-input" style="min-width:220px;padding:6px 8px;font-size:12px"><option value="">Add a role…</option>' + options + '</select><button class="btn btn-outline" onclick="addRoleToEffective()">Add role</button></div>' : '<div class="ts" style="margin-bottom:10px">All roles assigned.</div>') +
@@ -1764,7 +1764,10 @@ function addModelAccessCredit() {
   var date = document.getElementById('ma-credit-expiry').value;
   if (!(amount > 0) || !reason) { showToast('Amount and reason are required', 'error'); return; }
   var expires = date ? new Date(date + 'T23:59:59Z').toISOString() : null;
-  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/credits'), 'POST', {amount_usd: amount, expires_at: expires, reason: reason})
+  var requestId = (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/credits'), 'POST', {amount_usd: amount, expires_at: expires, reason: reason, request_id: requestId})
     .then(function() {
       showToast('Credit added', 'success');
       document.getElementById('ma-credit-amount').value = '';

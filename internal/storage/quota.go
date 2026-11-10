@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -288,7 +289,7 @@ const quotaAllowanceMax = 50
 // linked to the person.
 type QuotaDecision struct {
 	Enforced bool `json:"enforced"` // the policy flag
-	Exempt   bool `json:"exempt"`   // super-admin — never gated
+	Exempt   bool `json:"exempt"`   // reserved for an explicit break-glass path; no production caller sets it
 	// User model allowlist is enforcement state internal to the entitlement
 	// decision; the dedicated model-policy endpoint owns its public schema.
 	ModelPolicyActive bool     `json:"-"`
@@ -407,12 +408,21 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	// A per-person permanent override replaces the role sum; temporary credits
 	// add on top. If no role has a budget, fall back to the global policy.
 	var roleBudget, creditUSD float64
-	if tenantID, tenantErr := s.EnsureDefaultTenant(ctx); tenantErr == nil {
-		if subjectID, _, subjectErr := s.ResolvePolicySubjectByUsername(ctx, tenantID, username); subjectErr == nil {
-			if roleBudget, creditUSD, err = s.GetRoleBudgetAndCreditsUSD(ctx, tenantID, subjectID); err != nil {
-				return d, err
-			}
+	tenantID, tenantErr := s.EnsureDefaultTenant(ctx)
+	if tenantErr != nil {
+		return d, fmt.Errorf("default tenant lookup: %w", tenantErr)
+	}
+	subjectID, _, subjectErr := s.ResolvePolicySubjectByUsername(ctx, tenantID, username)
+	switch {
+	case subjectErr == nil:
+		if roleBudget, creditUSD, err = s.GetRoleBudgetAndCreditsUSD(ctx, tenantID, subjectID); err != nil {
+			return d, err
 		}
+	case errors.Is(subjectErr, ErrPartnerUserNotFound):
+		// An unlinked identity has no role budget; the global default applies.
+		// Model access still decides whether the identity may call the model.
+	default:
+		return d, fmt.Errorf("resolve policy subject: %w", subjectErr)
 	}
 	d.RoleBudgetUSD = roleBudget
 	d.CreditUSD = creditUSD

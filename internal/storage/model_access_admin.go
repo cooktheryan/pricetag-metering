@@ -319,13 +319,18 @@ type QuotaCredit struct {
 	CreatedAt  time.Time  `json:"created_at"`
 }
 
-func (s *Store) AddQuotaCredit(ctx context.Context, tenantID, subjectID string, amountUSD float64, expiresAt *time.Time, reason, actor string) (QuotaCredit, error) {
+func (s *Store) AddQuotaCredit(ctx context.Context, tenantID, subjectID string, amountUSD float64, expiresAt *time.Time, reason, actor, requestID string) (QuotaCredit, error) {
 	if amountUSD <= 0 {
 		return QuotaCredit{}, fmt.Errorf("credit amount must be > 0")
 	}
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		return QuotaCredit{}, fmt.Errorf("reason is required")
+	}
+	requestID = strings.TrimSpace(requestID)
+	var requestArg any
+	if requestID != "" {
+		requestArg = requestID
 	}
 	credit := QuotaCredit{
 		CreditID:  uuid.NewString(),
@@ -335,18 +340,61 @@ func (s *Store) AddQuotaCredit(ctx context.Context, tenantID, subjectID string, 
 		ExpiresAt: expiresAt,
 		Reason:    reason,
 		CreatedBy: actor,
+		RequestID: requestID,
 		CreatedAt: time.Now().UTC(),
 	}
-	if _, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return QuotaCredit{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `
 		INSERT INTO quota_credits
-			(credit_id, tenant_id, subject_id, amount_usd, expires_at, reason, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		credit.CreditID, tenantID, subjectID, amountUSD, expiresAt, reason, actor); err != nil {
+			(credit_id, tenant_id, subject_id, amount_usd, expires_at, reason, created_by, request_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (tenant_id, request_id) WHERE request_id IS NOT NULL DO NOTHING`,
+		credit.CreditID, tenantID, subjectID, amountUSD, expiresAt, reason, actor, requestArg)
+	if err != nil {
 		return QuotaCredit{}, fmt.Errorf("add quota credit: %w", err)
 	}
-	if err := s.Audit(ctx, actor, "model_access.credit_add", subjectID, map[string]any{
-		"amount_usd": amountUSD, "expires_at": expiresAt, "reason": reason,
+	inserted, err := result.RowsAffected()
+	if err != nil {
+		return QuotaCredit{}, err
+	}
+	if inserted == 0 {
+		// Idempotent replay: return the original grant if it describes the same
+		// subject and amount, otherwise reject the reused request ID.
+		var existing QuotaCredit
+		var expires sql.NullTime
+		if err := tx.QueryRowContext(ctx, `
+			SELECT credit_id::text, tenant_id::text, subject_id::text, amount_usd,
+			       expires_at, reason, created_by, COALESCE(approved_by, ''),
+			       COALESCE(request_id, ''), created_at
+			FROM quota_credits
+			WHERE tenant_id = $1 AND request_id = $2`, tenantID, requestID).
+			Scan(&existing.CreditID, &existing.TenantID, &existing.SubjectID,
+				&existing.AmountUSD, &expires, &existing.Reason, &existing.CreatedBy,
+				&existing.ApprovedBy, &existing.RequestID, &existing.CreatedAt); err != nil {
+			return QuotaCredit{}, fmt.Errorf("load idempotent quota credit: %w", err)
+		}
+		if expires.Valid {
+			t := expires.Time
+			existing.ExpiresAt = &t
+		}
+		if existing.SubjectID != subjectID || existing.AmountUSD != amountUSD {
+			return QuotaCredit{}, fmt.Errorf("request_id already used for a different credit")
+		}
+		if err := tx.Commit(); err != nil {
+			return QuotaCredit{}, err
+		}
+		return existing, nil
+	}
+	if err := s.auditTx(ctx, tx, actor, "model_access.credit_add", subjectID, map[string]any{
+		"amount_usd": amountUSD, "expires_at": expiresAt, "reason": reason, "request_id": requestID,
 	}); err != nil {
+		return QuotaCredit{}, err
+	}
+	if err := tx.Commit(); err != nil {
 		return QuotaCredit{}, err
 	}
 	s.invalidateQuotaCache()
@@ -383,7 +431,12 @@ func (s *Store) ListQuotaCredits(ctx context.Context, tenantID, subjectID string
 }
 
 func (s *Store) DeleteQuotaCredit(ctx context.Context, tenantID, subjectID, creditID, actor string) error {
-	result, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `
 		DELETE FROM quota_credits
 		WHERE tenant_id = $1 AND subject_id = $2 AND credit_id = $3`,
 		tenantID, subjectID, creditID)
@@ -393,9 +446,12 @@ func (s *Store) DeleteQuotaCredit(ctx context.Context, tenantID, subjectID, cred
 	if n, _ := result.RowsAffected(); n == 0 {
 		return fmt.Errorf("quota credit not found")
 	}
-	if err := s.Audit(ctx, actor, "model_access.credit_delete", subjectID, map[string]any{
+	if err := s.auditTx(ctx, tx, actor, "model_access.credit_delete", subjectID, map[string]any{
 		"credit_id": creditID,
 	}); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
 		return err
 	}
 	s.invalidateQuotaCache()

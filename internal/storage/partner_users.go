@@ -1124,6 +1124,11 @@ func (s *Store) BeginPartnerUserDeactivation(ctx context.Context, actor, userID 
 		if _, err := tx.ExecContext(ctx, `UPDATE partner_users SET active=FALSE,key_revocation_pending=TRUE,updated_by=$2,updated_at=NOW() WHERE user_id=$1`, id, actor); err != nil {
 			return PartnerUserDeletion{}, err
 		}
+		// Keep the policy subject in step so /decide and stale cache entries
+		// fail closed even before the next directory sync.
+		if _, err := tx.ExecContext(ctx, `UPDATE policy_subjects SET status='inactive', updated_at=NOW() WHERE principal_type='partner_user' AND external_id=$1`, id); err != nil {
+			return PartnerUserDeletion{}, err
+		}
 		if err := s.auditTx(ctx, tx, actor, "partner_user.deactivate", id, nil); err != nil {
 			return PartnerUserDeletion{}, err
 		}
@@ -1201,6 +1206,9 @@ func (s *Store) ReactivatePartnerUser(ctx context.Context, actor, userID string)
 	}
 	if !active {
 		if _, err := tx.ExecContext(ctx, `UPDATE partner_users SET active=TRUE,revoked_at=NULL,updated_by=$2,updated_at=NOW() WHERE user_id=$1`, id, actor); err != nil {
+			return PartnerUser{}, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE policy_subjects SET status='active', updated_at=NOW() WHERE principal_type='partner_user' AND external_id=$1`, id); err != nil {
 			return PartnerUser{}, err
 		}
 		if err := s.auditTx(ctx, tx, actor, "partner_user.reactivate", id, nil); err != nil {

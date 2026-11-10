@@ -542,6 +542,11 @@ func (c Config) Validate() error {
 	if _, err := ParseMeteringMode(string(c.MeteringMode)); err != nil {
 		return err
 	}
+	switch strings.ToLower(strings.TrimSpace(c.ModelAccessEnforcement)) {
+	case "", "off", "observe", "enforce":
+	default:
+		return fmt.Errorf("MODEL_ACCESS_ENFORCEMENT must be off, observe, or enforce, got %q", c.ModelAccessEnforcement)
+	}
 	return nil
 }
 

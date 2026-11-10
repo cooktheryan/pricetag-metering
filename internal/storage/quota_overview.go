@@ -218,8 +218,7 @@ func (s *Store) overLimitCTE() string {
 }
 
 func (s *Store) overLimitSpendCTE() string {
-	switch {
-	case s.monthSpendEnabled.Load():
+	if s.monthSpendEnabled.Load() {
 		return `spend AS (
 			SELECT l.user_id, SUM(ums.spent_usd) AS usd, MAX(ums.updated_at) AS last_at
 			FROM partner_user_logins l
@@ -227,24 +226,18 @@ func (s *Store) overLimitSpendCTE() string {
 			  AND ums.month = date_trunc('month', NOW())::date
 			GROUP BY l.user_id
 		)`
-	case s.rollupsLive():
-		return `spend AS (
-			SELECT l.user_id, SUM(h.cost_usd) AS usd, MAX(h.hour) AS last_at
-			FROM partner_user_logins l
-			JOIN usage_hourly h ON h.username = l.username
-			WHERE h.hour >= date_trunc('month', NOW())
-			GROUP BY l.user_id
-		)`
-	default:
-		return fmt.Sprintf(`spend AS (
-			SELECT l.user_id, SUM(%s) AS usd, MAX(e.timestamp) AS last_at
-			FROM partner_user_logins l
-			JOIN usage_events e ON e.username = l.username
-			LEFT JOIN model_pricing p ON e.model = p.model
-			WHERE e.timestamp >= date_trunc('month', NOW())
-			GROUP BY l.user_id
-		)`, costUSDExpr)
 	}
+	// Match quotaDecision exactly: when month spend is disabled the raw ledger
+	// is the enforcement source, so the admin view must use it too. Using
+	// usage_hourly here would let the report disagree with the gateway.
+	return fmt.Sprintf(`spend AS (
+		SELECT l.user_id, SUM(%s) AS usd, MAX(e.timestamp) AS last_at
+		FROM partner_user_logins l
+		JOIN usage_events e ON e.username = l.username
+		LEFT JOIN model_pricing p ON e.model = p.model
+		WHERE e.timestamp >= date_trunc('month', NOW())
+		GROUP BY l.user_id
+	)`, costUSDExpr)
 }
 
 func roundUSD(v float64) float64 {
