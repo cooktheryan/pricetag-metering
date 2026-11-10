@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -130,7 +132,7 @@ func TestValidateTokenCountsRejectsPostgresIntegerOverflow(t *testing.T) {
 }
 
 func TestHandleEvent_AcceptsValidEvent_NoStore(t *testing.T) {
-	h := &EventsHandler{store: nil}
+	h := &EventsHandler{store: nil, modelAliases: map[string]string{"gateway/fixture": "fixture"}}
 	event := cloudEvent{
 		SpecVersion: "1.0",
 		ID:          "evt-001",
@@ -139,7 +141,7 @@ func TestHandleEvent_AcceptsValidEvent_NoStore(t *testing.T) {
 		Subject:     "user1",
 		Data: cloudEventData{
 			User:         "user1",
-			Model:        "gpt-4o",
+			Model:        "gateway/fixture",
 			PromptTokens: 10,
 		},
 	}
@@ -153,5 +155,43 @@ func TestHandleEvent_AcceptsValidEvent_NoStore(t *testing.T) {
 	// This tests the parsing path at minimum
 	if w.Code != http.StatusNoContent && w.Code != http.StatusInternalServerError {
 		t.Errorf("status: got %d, want 204 or 500", w.Code)
+	}
+}
+
+func TestNormalizeGatewayModelAlias(t *testing.T) {
+	h := &EventsHandler{modelAliases: map[string]string{
+		"gateway/fixture":    "fixture",
+		"gateway/demo-cheap": "fixture-cheap",
+	}}
+	if got := h.normalizeModel("gateway/fixture"); got != "fixture" {
+		t.Fatalf("alias: got %q", got)
+	}
+	if got := h.normalizeModel("unknown"); got != "unknown" {
+		t.Fatalf("unknown model: got %q", got)
+	}
+}
+
+func TestLoadGatewayModelAliases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "models.json")
+	os.WriteFile(path, []byte(`[
+	  {"id":"gateway/fixture","model":"fixture","provider":"mock"},
+	  {"id":"gateway/demo-cheap","model":"fixture-cheap","provider":"mock"}
+	]`), 0600)
+
+	aliases, err := LoadGatewayModelAliases(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"gateway/fixture":    "fixture",
+		"gateway/demo-cheap": "fixture-cheap",
+	}
+	if len(aliases) != len(want) {
+		t.Fatalf("aliases = %v, want %v", aliases, want)
+	}
+	for alias, target := range want {
+		if aliases[alias] != target {
+			t.Fatalf("aliases[%q] = %q, want %q", alias, aliases[alias], target)
+		}
 	}
 }

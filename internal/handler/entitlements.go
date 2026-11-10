@@ -15,8 +15,9 @@ import (
 )
 
 type EntitlementsHandler struct {
-	store *storage.Store
-	cfg   config.Config
+	store        *storage.Store
+	cfg          config.Config
+	modelAliases map[string]string
 
 	roleCache   *expirable.LRU[string, bool]
 	resolveRole func(context.Context, string) (bool, bool)
@@ -28,10 +29,15 @@ const (
 )
 
 func NewEntitlementsHandler(store *storage.Store, cfg config.Config) *EntitlementsHandler {
+	return NewEntitlementsHandlerWithAliases(store, cfg, nil)
+}
+
+func NewEntitlementsHandlerWithAliases(store *storage.Store, cfg config.Config, modelAliases map[string]string) *EntitlementsHandler {
 	return &EntitlementsHandler{
-		store:     store,
-		cfg:       cfg,
-		roleCache: expirable.NewLRU[string, bool](roleCacheMaxEntries, nil, roleCacheTTL),
+		store:        store,
+		cfg:          cfg,
+		modelAliases: modelAliases,
+		roleCache:    expirable.NewLRU[string, bool](roleCacheMaxEntries, nil, roleCacheTTL),
 		resolveRole: func(ctx context.Context, username string) (bool, bool) {
 			return partnerSuperAdminVerdict(ctx, cfg, store, username)
 		},
@@ -98,6 +104,9 @@ func (h *EntitlementsHandler) HandleEntitlement(w http.ResponseWriter, r *http.R
 	}
 
 	model := r.URL.Query().Get("model")
+	if target, exists := h.modelAliases[model]; exists {
+		model = target
+	}
 
 	// Operators never gate themselves: a quota misfire must not lock the
 	// people who can fix it out of their own dogfood keys.

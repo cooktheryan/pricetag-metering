@@ -6,6 +6,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/redhat-et/pricetag-metering/internal/storage"
@@ -42,7 +44,8 @@ type cloudEventData struct {
 }
 
 type EventsHandler struct {
-	store *storage.Store
+	store        *storage.Store
+	modelAliases map[string]string
 }
 
 const maxEventBodyBytes = 1 << 20
@@ -69,8 +72,48 @@ func validateTokenCounts(data cloudEventData) error {
 	return nil
 }
 
-func NewEventsHandler(store *storage.Store) *EventsHandler {
-	return &EventsHandler{store: store}
+func NewEventsHandler(store *storage.Store, modelAliases map[string]string) *EventsHandler {
+	return &EventsHandler{store: store, modelAliases: modelAliases}
+}
+
+func LoadGatewayModelAliases(path string) (map[string]string, error) {
+	if path == "" {
+		return nil, nil
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var configured []struct {
+		ID    string `json:"id"`
+		Model string `json:"model"`
+	}
+	decoder := json.NewDecoder(io.LimitReader(file, 1<<20))
+	if err := decoder.Decode(&configured); err != nil || decoder.Decode(new(any)) != io.EOF {
+		return nil, fmt.Errorf("invalid gateway catalog")
+	}
+
+	aliases := make(map[string]string, len(configured))
+	for _, model := range configured {
+		if strings.TrimSpace(model.ID) == "" || strings.TrimSpace(model.Model) == "" ||
+			len(model.ID) > 512 || len(model.Model) > 512 {
+			return nil, fmt.Errorf("invalid gateway model mapping %q", model.ID)
+		}
+		if existing, exists := aliases[model.ID]; exists && existing != model.Model {
+			return nil, fmt.Errorf("conflicting gateway model mapping %q", model.ID)
+		}
+		aliases[model.ID] = model.Model
+	}
+	return aliases, nil
+}
+
+func (h *EventsHandler) normalizeModel(model string) string {
+	if target, exists := h.modelAliases[model]; exists {
+		return target
+	}
+	return model
 }
 
 func (h *EventsHandler) HandleEvent(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +141,7 @@ func (h *EventsHandler) HandleEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing or invalid required CloudEvent fields", http.StatusBadRequest)
 		return
 	}
+	event.Data.Model = h.normalizeModel(event.Data.Model)
 	if len(event.ID) > 256 || len(event.Data.User) > 512 || len(event.Data.Model) > 512 {
 		http.Error(w, "CloudEvent field too long", http.StatusBadRequest)
 		return

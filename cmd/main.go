@@ -305,8 +305,13 @@ func main() {
 
 	mux := http.NewServeMux()
 	if meteringMode.ServesAPIRoutes() {
-		eventsHandler := handler.NewEventsHandler(store)
-		entitlementsHandler := handler.NewEntitlementsHandler(store, cfg)
+		modelAliases, aliasesErr := handler.LoadGatewayModelAliases(cfg.GatewayModelsFile)
+		if aliasesErr != nil {
+			slog.Error("gateway model catalog invalid", "error", aliasesErr)
+			os.Exit(1)
+		}
+		eventsHandler := handler.NewEventsHandler(store, modelAliases)
+		entitlementsHandler := handler.NewEntitlementsHandlerWithAliases(store, cfg, modelAliases)
 		dashboardHandler := handler.NewDashboardHandler(store, cfg)
 
 		// Kubernetes adapter — optional. It stays disabled until model/provider
