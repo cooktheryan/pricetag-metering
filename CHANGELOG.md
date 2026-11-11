@@ -10,7 +10,7 @@ the section to the corresponding GitHub tag.
 
 ### Added
 
-Nothing yet.
+- Zero-rate pricing for the Curvebender-hosted Muse Spark Open model `rits/meta-models/Muse-Spark-Open-816B-A42B-NVFP4` ([PR #148](https://github.com/redhat-et/pricetag-metering/pull/148)).
 
 ### Changed
 

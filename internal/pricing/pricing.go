@@ -132,6 +132,9 @@ func LocalPrices() []ModelPrice {
 		// row was manually inserted 2026-10-21 for the prod deploy; this
 		// makes the pricing reproducible across DB rebuilds and restarts.
 		{Model: "rits/deepseek-ai/DeepSeek-V4.1-Flash-1017", Provider: "vllm"},
+		// Muse Spark Open on the curvebender cluster, same rationale as GLM
+		// and DeepSeek: hosted via LiteLLM and billed at $0.
+		{Model: "rits/meta-models/Muse-Spark-Open-816B-A42B-NVFP4", Provider: "vllm"},
 	}
 }
 

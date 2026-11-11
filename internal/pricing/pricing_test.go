@@ -235,13 +235,15 @@ func TestLocalPrices_OpenRouterParity(t *testing.T) {
 
 	// Rates are an OpenRouter parity snapshot (per MTok). If these drift the
 	// dashboard's hosted-vs-vendor comparison silently lies, so pin them.
-	// GLM is the deliberate exception: every rate 0 by design (free), and
-	// retired Qwen ids are deprecated — priced for history, off the list.
+	// GLM, DeepSeek, and Muse are the deliberate zero-rate exceptions: every
+	// rate is 0 by design (free), while retired Qwen ids are deprecated —
+	// priced for history, off the list.
 	want := map[string]ModelPrice{
-		"Qwen3.8-27B-FP8":                           {InputCost: 0.214, OutputCost: 2.55, CacheReadCost: 0.15},
-		"Inferact/Qwen3.8-Flash-Next-NVFP4":         {InputCost: 0.15, OutputCost: 0.47, CacheReadCost: 0.016},
-		"rits/zai-org/glm-5-3":                      {},
-		"rits/deepseek-ai/DeepSeek-V4.1-Flash-1017": {},
+		"Qwen3.8-27B-FP8":                                  {Provider: "vllm", InputCost: 0.214, OutputCost: 2.55, CacheReadCost: 0.15},
+		"Inferact/Qwen3.8-Flash-Next-NVFP4":                {Provider: "vllm", InputCost: 0.15, OutputCost: 0.47, CacheReadCost: 0.016},
+		"rits/zai-org/glm-5-3":                             {Provider: "vllm"},
+		"rits/deepseek-ai/DeepSeek-V4.1-Flash-1017":        {Provider: "vllm"},
+		"rits/meta-models/Muse-Spark-Open-816B-A42B-NVFP4": {Provider: "vllm"},
 	}
 	wantDeprecated := map[string]bool{
 		"Qwen3.8-27B-FP8":                   true,
@@ -258,7 +260,7 @@ func TestLocalPrices_OpenRouterParity(t *testing.T) {
 			continue
 		}
 		seen[p.Model] = true
-		if p.InputCost != w.InputCost || p.OutputCost != w.OutputCost ||
+		if p.Provider != w.Provider || p.InputCost != w.InputCost || p.OutputCost != w.OutputCost ||
 			p.CacheReadCost != w.CacheReadCost || p.CacheWriteCost != 0 {
 			t.Errorf("local model %q off parity: got %+v want %+v", p.Model, p, w)
 		}
