@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -320,6 +321,9 @@ type QuotaCredit struct {
 }
 
 func (s *Store) AddQuotaCredit(ctx context.Context, tenantID, subjectID string, amountUSD float64, expiresAt *time.Time, reason, actor, requestID string) (QuotaCredit, error) {
+	// The column is numeric(12,2); normalise before insert so the returned
+	// value and the idempotency comparison both use the stored precision.
+	amountUSD = math.Round(amountUSD*100) / 100
 	if amountUSD <= 0 {
 		return QuotaCredit{}, fmt.Errorf("credit amount must be > 0")
 	}
@@ -381,7 +385,7 @@ func (s *Store) AddQuotaCredit(ctx context.Context, tenantID, subjectID string, 
 			t := expires.Time
 			existing.ExpiresAt = &t
 		}
-		if existing.SubjectID != subjectID || existing.AmountUSD != amountUSD {
+		if existing.SubjectID != subjectID || math.Round(existing.AmountUSD*100) != math.Round(amountUSD*100) {
 			return QuotaCredit{}, fmt.Errorf("request_id already used for a different credit")
 		}
 		if err := tx.Commit(); err != nil {

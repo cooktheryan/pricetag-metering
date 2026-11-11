@@ -452,10 +452,18 @@ func (s *Store) GetEffectiveModelAccess(ctx context.Context, tenantID, subjectID
 	var partnerActive sql.NullBool
 	if err := s.db.QueryRowContext(ctx, `
 		SELECT ps.principal_type, ps.status,
-		       CASE WHEN ps.principal_type = 'partner_user' THEN pu.active ELSE NULL END
+		       CASE
+		         WHEN ps.principal_type <> 'partner_user' THEN NULL
+		         WHEN pu.user_id IS NULL THEN FALSE
+		         ELSE pu.active
+		       END
 		FROM policy_subjects ps
 		LEFT JOIN partner_users pu
-		  ON ps.principal_type = 'partner_user' AND pu.user_id::text = ps.external_id
+		  ON ps.principal_type = 'partner_user'
+		 AND pu.user_id = CASE
+		       WHEN ps.external_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+		       THEN ps.external_id::uuid
+		     END
 		WHERE ps.tenant_id = $1 AND ps.subject_id = $2`, tenantID, subjectID).
 		Scan(&result.PrincipalType, &subjectStatus, &partnerActive); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -465,7 +473,8 @@ func (s *Store) GetEffectiveModelAccess(ctx context.Context, tenantID, subjectID
 	}
 	// partner_users is authoritative for human subjects: policy_subjects.status
 	// is refreshed at startup/login and on deactivate/reactivate, but a stale
-	// row must never keep a deactivated person's access alive.
+	// row must never keep a deactivated person's access alive. A partner_user
+	// subject with no partner_users row is treated as inactive, not as unknown.
 	if partnerActive.Valid && !partnerActive.Bool {
 		result.Active = false
 		return result, ErrModelAccessSubjectInactive

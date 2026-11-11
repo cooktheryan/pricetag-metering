@@ -27,6 +27,18 @@ func createTestTenant(t *testing.T, s *Store, ctx context.Context, slug string, 
 
 func createTestSubject(t *testing.T, s *Store, ctx context.Context, tenantID, principal, external, status string) string {
 	t.Helper()
+	if principal == PrincipalPartnerUser {
+		// Production partner_user subjects always have a partner_users row.
+		// Keep the test fixtures faithful so the resolver's
+		// partner_users.active check is exercised rather than bypassed.
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT INTO partner_users (user_id, tags, role, active, key_revocation_pending, created_by, updated_by)
+			VALUES ($1::uuid, jsonb_build_object('email', $2::text), 'user', $3, false, 'test', 'test')
+			ON CONFLICT (user_id) DO UPDATE SET active = EXCLUDED.active`,
+			external, external+"@test.invalid", status == "active"); err != nil {
+			t.Fatalf("create partner user for subject: %v", err)
+		}
+	}
 	id := uuid.NewString()
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO policy_subjects
@@ -972,12 +984,15 @@ func TestAddQuotaCreditIdempotentByRequestID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := s.AddQuotaCredit(ctx, tenant, subjectID, 25, nil, "test", "admin", "req-idem-1")
+	second, err := s.AddQuotaCredit(ctx, tenant, subjectID, 25.004, nil, "test", "admin", "req-idem-1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if first.CreditID != second.CreditID {
 		t.Fatalf("idempotent replay returned a different credit: %s vs %s", first.CreditID, second.CreditID)
+	}
+	if first.AmountUSD != 25 || second.AmountUSD != 25 {
+		t.Fatalf("amounts = %v/%v, want 25/25 after numeric(12,2) rounding", first.AmountUSD, second.AmountUSD)
 	}
 	var count int
 	if err := s.db.QueryRowContext(ctx, `
