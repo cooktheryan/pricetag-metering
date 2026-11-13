@@ -62,7 +62,12 @@
   .scope-note .ico{color:var(--org);font-size:14px;line-height:1.35;flex:0 0 auto}
   .scope-note b{color:var(--org)}
   .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
-  .kpi{background:var(--c1);border:1px solid var(--bdr);border-radius:12px;padding:18px 20px}
+  .kpi{background:var(--c1);border:1px solid var(--bdr);border-radius:12px;padding:18px 20px;position:relative;overflow:hidden}
+  .kpi::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent,var(--blu))}
+  .kpi::after{content:'';position:absolute;right:-40px;top:-40px;width:110px;height:110px;border-radius:50%;
+             background:radial-gradient(circle,var(--accent,var(--blu)) 0%,transparent 70%);opacity:.09;pointer-events:none}
+  .kpi:nth-child(1){--accent:var(--org)}.kpi:nth-child(2){--accent:var(--blu)}
+  .kpi:nth-child(3){--accent:var(--grn)}.kpi:nth-child(4){--accent:var(--pur)}
   .kpi-label{font-size:10px;text-transform:uppercase;letter-spacing:.9px;color:var(--t2);font-weight:700}
   .kpi-value{font-size:26px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums}
   .kpi-value.blu{color:var(--blu)}.kpi-value.grn{color:var(--grn)}.kpi-value.org{color:var(--org)}.kpi-value.pur{color:var(--pur)}
@@ -104,6 +109,36 @@
   .pill.expired,.pill.revoked{background:rgba(232,85,78,.12);color:var(--red);border:1px solid rgba(232,85,78,.3)}
   .pill.hosted{background:rgba(61,204,110,.12);color:var(--grn);border:1px solid rgba(61,204,110,.3)}
   .pill.frontier{background:rgba(168,140,248,.12);color:var(--pur);border:1px solid rgba(168,140,248,.3)}
+  .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .card-head h2{margin-bottom:2px}
+  .card-head .hint{margin-bottom:0}
+  .recent-actions{display:flex;align-items:center;gap:8px}
+  .live-tag{display:inline-flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;text-transform:uppercase;
+            letter-spacing:.6px;color:var(--grn);background:rgba(61,204,110,.12);border:1px solid rgba(61,204,110,.35);
+            border-radius:99px;padding:2px 8px;vertical-align:1px}
+  .live-dot{width:6px;height:6px;border-radius:50%;background:var(--grn);box-shadow:0 0 6px var(--grn);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .refresh-btn{display:inline-flex;align-items:center;gap:6px;background:var(--c2);border:1px solid var(--bdr);color:var(--t2);
+               border-radius:7px;padding:5px 11px;font:600 10.5px Inter,sans-serif;cursor:pointer}
+  .refresh-btn:hover{color:var(--t);border-color:var(--blu)}
+  .refresh-btn svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .refresh-btn.spinning svg{animation:spin .8s linear infinite}
+  .recent-scroll{max-height:420px;overflow:auto;border-radius:8px}
+  .recent-scroll thead th{position:sticky;top:0;z-index:2}
+  .recent-scroll::-webkit-scrollbar{width:8px;height:8px}
+  .recent-scroll::-webkit-scrollbar-thumb{background:var(--c3);border-radius:4px}
+  .recent-scroll::-webkit-scrollbar-track{background:var(--c1)}
+  .model-chip{display:inline-flex;align-items:center;gap:6px;max-width:280px;border-radius:6px;padding:2px 8px;
+              border:1px solid transparent;font-family:'SF Mono',SFMono-Regular,Consolas,Menlo,monospace;font-size:11px;line-height:1.5}
+  .model-chip .mdot{width:6px;height:6px;border-radius:50%;flex:0 0 auto;box-shadow:0 0 6px currentColor}
+  .model-chip .mname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tok-in{color:var(--blu)}.tok-out{color:var(--grn)}.tok-cached{color:var(--cyn)}
+  .tok-cache-write{color:var(--pur)}.tok-total{color:var(--t);font-weight:700}
+  .tok-legend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 14px;font-size:10px;color:var(--t2)}
+  .tok-legend span{display:inline-flex;align-items:center;gap:5px}
+  .tok-legend i{width:7px;height:7px;border-radius:2px;display:inline-block}
+  .status-ok{color:var(--grn);font-weight:700}.status-err{color:var(--red);font-weight:700}
+  .client-chip{font-weight:600}
   .empty{padding:40px 20px;text-align:center;color:var(--t2)}
   .empty b{display:block;color:var(--t);font-size:14px;margin-bottom:6px}
   .loading{padding:40px;text-align:center;color:var(--t2)}
@@ -278,12 +313,37 @@
     </div>
 
     <div class="card">
-      <h2>Recent transactions</h2>
-      <div class="hint">Your last requests through the gateway</div>
-      <div class="tbl-wrap" style="max-height:380px;overflow-y:auto">
+      <div class="card-head">
+        <div>
+          <h2>Recent transactions <span class="live-tag"><span class="live-dot"></span>live</span></h2>
+          <div class="hint">Your last requests through the gateway, with full token breakdown</div>
+        </div>
+        <div class="recent-actions">
+          <button class="refresh-btn" id="recent-refresh" type="button" title="Refresh recent transactions">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 3v6h-6"></path></svg>
+            Refresh
+          </button>
+        </div>
+      </div>
+      <div class="tok-legend" aria-label="Token type legend">
+        <span><i style="background:var(--blu)"></i>Input</span>
+        <span><i style="background:var(--grn)"></i>Output</span>
+        <span><i style="background:var(--cyn)"></i>Cached</span>
+        <span><i style="background:var(--pur)"></i>Cache write</span>
+        <span><i style="background:var(--t)"></i>Total</span>
+      </div>
+      <div class="recent-scroll">
         <table>
-          <thead><tr><th>Time</th><th>Model</th><th>Tool</th><th>Provider</th><th class="num">Input</th><th class="num">Output</th><th class="num">Cost</th><th>Status</th></tr></thead>
-          <tbody id="recent-rows"><tr><td colspan="8"><div class="loading"><span class="spinner"></span>Loading transactions…</div></td></tr></tbody>
+          <thead><tr>
+            <th>Time</th><th>Model</th><th>Client</th><th>Provider</th><th>Status</th>
+            <th class="num" title="Prompt / input tokens">Input</th>
+            <th class="num" title="Completion / output tokens">Output</th>
+            <th class="num" title="Prompt tokens served from cache">Cached</th>
+            <th class="num" title="Tokens written to the cache">Cache write</th>
+            <th class="num" title="Input + output tokens">Total</th>
+            <th class="num">Cost</th>
+          </tr></thead>
+          <tbody id="recent-rows"><tr><td colspan="11"><div class="loading"><span class="spinner"></span>Loading transactions…</div></td></tr></tbody>
         </table>
       </div>
     </div>
@@ -394,7 +454,14 @@
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function money(v){ var n=Number(v||0); return '$'+(n>=1000?n.toLocaleString(undefined,{maximumFractionDigits:0}):n.toFixed(2)); }
-  function wholeMoney(v){ return '$'+Math.round(Number(v||0)).toLocaleString(); }
+  // Sub-cent spend is common for single requests against cheap models. Keep
+  // two decimals for normal amounts, but never render a real cost as "$0.00".
+  function preciseMoney(v){
+    var n=Number(v||0), a=Math.abs(n);
+    if(a>0&&a<0.01) return '$'+n.toFixed(4);
+    if(a>0&&a<1) return '$'+n.toFixed(3);
+    return money(n);
+  }
   function compact(v){ var n=Number(v||0); if(n>=1e9)return (n/1e9).toFixed(1)+'B'; if(n>=1e6)return (n/1e6).toFixed(1)+'M'; if(n>=1e3)return (n/1e3).toFixed(1)+'K'; return String(Math.round(n)); }
   function when(iso){ if(!iso)return '—'; var d=new Date(iso); if(isNaN(d))return '—';
     var diff=(Date.now()-d.getTime())/1000;
@@ -460,6 +527,7 @@
   }
   $('tab-usage').onclick=function(){ setTab('usage'); };
   $('tab-keys').onclick=function(){ setTab('keys'); };
+  $('recent-refresh').onclick=function(){ loadRecent(); };
   document.querySelectorAll('[data-model-metric]').forEach(function(btn){
     btn.onclick=function(){
       state.modelMetric=this.getAttribute('data-model-metric') || 'cost';
@@ -511,7 +579,7 @@
       state.overview = d.overview || {};
       var q = d.quota || state.quota;
       var o = state.overview;
-      $('kpi-spend').textContent = money(o.total_cost_usd);
+      $('kpi-spend').textContent = preciseMoney(o.total_cost_usd);
       $('kpi-requests').textContent = compact(o.total_requests);
       $('kpi-tokens').textContent = compact(o.total_tokens);
       if(q && typeof q.limit_usd === 'number' && q.limit_usd>0){
@@ -546,10 +614,18 @@
       $('model-rows').innerHTML='<tr><td colspan="6"><div class="empty">Could not load model usage.</div></td></tr>';
     });
 
-    api('/api/v1/me/usage/recent?limit=20').then(function(rows){
+    loadRecent();
+  }
+
+  function loadRecent(){
+    var btn=$('recent-refresh');
+    if(btn){ btn.classList.add('spinning'); btn.disabled=true; }
+    return api('/api/v1/me/usage/recent?limit=20').then(function(rows){
       renderRecent(rows || []);
     }).catch(function(){
-      $('recent-rows').innerHTML='<tr><td colspan="8"><div class="empty">Could not load transactions.</div></td></tr>';
+      $('recent-rows').innerHTML='<tr><td colspan="11"><div class="empty">Could not load transactions.</div></td></tr>';
+    }).then(function(){
+      if(btn){ btn.classList.remove('spinning'); btn.disabled=false; }
     });
   }
 
@@ -582,7 +658,7 @@
   function renderModels(changed){
     var metric=state.modelMetric;
     function value(r){ return metric==='tokens' ? (r.total_tokens||0) : metric==='requests' ? (r.requests||0) : (r.cost_usd||0); }
-    function display(v){ return metric==='cost' ? wholeMoney(v) : compact(v); }
+    function display(v){ return metric==='cost' ? preciseMoney(v) : compact(v); }
     var rows = state.models.slice().sort(function(a,b){ return value(b)-value(a); });
     var total = rows.reduce(function(s,r){ return s+value(r); },0);
     if(changed !== 'split'){
@@ -616,7 +692,7 @@
     // Hosted vs frontier donut
     var splitMetric=state.splitMetric;
     function splitValue(r){ return splitMetric==='tokens' ? (r.total_tokens||0) : splitMetric==='requests' ? (r.requests||0) : (r.cost_usd||0); }
-    function splitDisplay(v){ return splitMetric==='cost' ? money(v) : compact(v); }
+    function splitDisplay(v){ return splitMetric==='cost' ? preciseMoney(v) : compact(v); }
     var splitTotal = rows.reduce(function(s,r){ return s+splitValue(r); },0);
     var hosted = rows.filter(function(r){ return r.hosted; }).reduce(function(s,r){return s+splitValue(r);},0);
     var frontier = Math.max(splitTotal-hosted,0);
@@ -656,11 +732,11 @@
     var total=rows.reduce(function(s,r){return s+(r.cost_usd||0);},0);
     $('model-rows').innerHTML=rows.map(function(r){
       var share=total>0?Math.round((r.cost_usd||0)/total*100):0;
-      return '<tr><td class="mono">'+esc(r.model)+'</td>'+ 
+      return '<tr><td>'+modelChip(r.model)+'</td>'+ 
         '<td><span class="pill '+(r.hosted?'hosted':'frontier')+'">'+(r.hosted?'Hosted':'Frontier')+'</span></td>'+
         '<td class="num">'+compact(r.requests)+'</td>'+ 
         '<td class="num">'+compact(r.total_tokens)+'</td>'+ 
-        '<td class="num">'+money(r.cost_usd)+'</td>'+ 
+        '<td class="num">'+preciseMoney(r.cost_usd)+'</td>'+ 
         '<td class="num">'+share+'%</td></tr>';
     }).join('');
   }
@@ -739,22 +815,97 @@
     el._animationFrame=requestAnimationFrame(tick);
   }
 
+  var MODEL_PALETTE=['#58a6ff','#3fb950','#d29922','#bc8cff','#39d2c0','#f85149','#f778ba','#79c0ff','#7ee787','#ffa657','#a5d6ff','#ff7b72'];
+  function rgba(hex,a){
+    var n=parseInt(String(hex).replace('#',''),16);
+    return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';
+  }
+  // Stable colour per model name, so the same model keeps its colour across
+  // the detail table and the recent feed.
+  function modelColor(model){
+    var s=String(model||''), h=0;
+    for(var i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0;
+    return MODEL_PALETTE[h%MODEL_PALETTE.length];
+  }
+  function modelChip(model){
+    if(!model) return '—';
+    var c=modelColor(model);
+    return '<span class="model-chip" style="color:'+c+';background:'+rgba(c,.12)+';border-color:'+rgba(c,.4)+'">'+
+      '<span class="mdot" style="background:'+c+'"></span>'+
+      '<span class="mname" title="'+esc(model)+'">'+esc(model)+'</span></span>';
+  }
+  function friendlyClient(ua){
+    if(!ua) return '';
+    var n=String(ua).toLowerCase();
+    if(n.indexOf('claude-cli')===0||n.indexOf('claude-code')===0) return 'Claude Code';
+    if(n.indexOf('codex-tui')===0||n.indexOf('codex/')===0) return 'Codex';
+    if(n==='opencode'||n.indexOf('opencode/')===0||n.indexOf('opencode-')===0||n.indexOf('opencode.')===0) return 'OpenCode';
+    if(n==='pi'||n.indexOf('pi/')===0||n.indexOf('pi-')===0||n.indexOf('pi.')===0||n.indexOf('pi ')===0) return 'Pi';
+    if(n.indexOf('charm-crush/')===0) return 'Charm-Crush';
+    if(n.indexOf('openai/')===0) return 'OpenAI';
+    if(n.indexOf('gemini-cli/')===0) return 'Gemini CLI';
+    if(n.indexOf('aider/')===0) return 'Aider';
+    if(n.indexOf('omp/')===0) return 'omp';
+    if(n.indexOf('curl/')===0) return 'curl';
+    return 'Other';
+  }
+  function clientColor(name){
+    return {'Claude Code':'#d29922','Codex':'#3fb950','OpenCode':'#58a6ff','Pi':'#bc8cff',
+      'Charm-Crush':'#f778ba','OpenAI':'#39d2c0','Gemini CLI':'#79c0ff','Aider':'#7ee787',
+      'omp':'#ffa657','curl':'#8090a8'}[name]||'#38d4c2';
+  }
+  var PROVIDER_COLORS={
+    'anthropic':'#d97757','openai':'#3fb950','azure':'#79c0ff',
+    'vertex':'#58a6ff','google':'#f2cc60','gemini':'#f2cc60','bedrock':'#7ee787',
+    'cb-glm':'#bc8cff','glm':'#bc8cff','zai':'#a371f7',
+    'cb-litellm':'#f778ba','litellm':'#f778ba',
+    'qwen':'#39d2c0','vllm':'#e3b341','ollama':'#ffa657','gateway':'#8b949e'
+  };
+  var PROVIDER_PALETTE=['#58a6ff','#3fb950','#d29922','#bc8cff','#39d2c0','#f85149','#f778ba','#79c0ff','#7ee787','#ffa657','#a5d6ff','#ff7b72','#d97757','#e3b341'];
+  function providerColor(name){
+    var p=String(name||'').toLowerCase();
+    if(PROVIDER_COLORS[p]) return PROVIDER_COLORS[p];
+    // Unknown provider: stable colour from the name so it never changes
+    // between page loads and stays distinct from the curated mappings.
+    var h=0;
+    for(var i=0;i<p.length;i++) h=(h*31+p.charCodeAt(i))>>>0;
+    return PROVIDER_PALETTE[h%PROVIDER_PALETTE.length];
+  }
+  function statusMeta(code){
+    if(code===null||code===undefined) return {text:'—',cls:'',title:'unknown (recorded before status tracking)'};
+    if(code===0) return {text:'ERR',cls:'status-err',title:'no upstream response'};
+    var ok=code>=200&&code<300;
+    return {text:String(code),cls:ok?'status-ok':'status-err',title:ok?'success':'error response'};
+  }
+  function exact(n){
+    return Number(n||0).toLocaleString();
+  }
+
   function renderRecent(rows){
     if(!rows.length){
-       $('recent-rows').innerHTML='<tr><td colspan="8"><div class="empty"><b>No transactions yet</b>Requests appear here as soon as your tools use a key.</div></td></tr>';
+       $('recent-rows').innerHTML='<tr><td colspan="11"><div class="empty"><b>No transactions yet</b>Requests appear here as soon as your tools use a key.</div></td></tr>';
       return;
     }
     $('recent-rows').innerHTML = rows.map(function(e){
-      var ok = e.status_code == null || (e.status_code>=200 && e.status_code<300);
+      var st=statusMeta(e.status_code);
+      var client=friendlyClient(e.user_agent);
+      var clientLabel=client==='Other'&&e.user_agent ? e.user_agent : (client||'—');
+      var cCol=clientColor(client);
+      var pCol=providerColor(e.provider);
+      var input=e.prompt_tokens||0, output=e.completion_tokens||0;
+      var total=e.total_tokens||(input+output);
       return '<tr>'+
         '<td style="color:var(--t2)">'+when(e.timestamp)+'</td>'+
-         '<td class="mono">'+esc(e.model)+'</td>'+
-         '<td class="mono" style="color:var(--t2)" title="'+esc(e.user_agent||'')+'">'+esc(e.user_agent||'—')+'</td>'+
-        '<td style="color:var(--t2)">'+esc(e.provider||'—')+'</td>'+
-        '<td class="num">'+compact(e.prompt_tokens)+'</td>'+
-        '<td class="num">'+compact(e.completion_tokens)+'</td>'+
-        '<td class="num">'+money(e.cost_usd)+'</td>'+
-        '<td><span class="pill '+(ok?'active':'revoked')+'">'+esc(e.status_code==null?'—':e.status_code)+'</span></td></tr>';
+        '<td>'+modelChip(e.model)+'</td>'+
+        '<td class="client-chip" style="color:'+cCol+'" title="'+esc(e.user_agent||clientLabel)+'">'+esc(clientLabel)+'</td>'+
+        '<td style="color:'+pCol+';font-weight:600">'+esc(e.provider||'—')+'</td>'+
+        '<td class="'+st.cls+'" title="'+esc(st.title)+'">'+st.text+'</td>'+
+        '<td class="num tok-in" title="'+exact(input)+' input tokens">'+compact(input)+'</td>'+
+        '<td class="num tok-out" title="'+exact(output)+' output tokens">'+compact(output)+'</td>'+
+        '<td class="num tok-cached" title="'+exact(e.cached_input_tokens)+' cached input tokens">'+compact(e.cached_input_tokens||0)+'</td>'+
+        '<td class="num tok-cache-write" title="'+exact(e.cache_creation_tokens)+' cache write tokens">'+compact(e.cache_creation_tokens||0)+'</td>'+
+        '<td class="num tok-total" title="'+exact(total)+' total tokens">'+compact(total)+'</td>'+
+        '<td class="num" style="color:var(--org);font-weight:600" title="'+esc('$'+Number(e.cost_usd||0).toFixed(6))+'">'+preciseMoney(e.cost_usd)+'</td></tr>';
     }).join('');
   }
 
