@@ -324,3 +324,16 @@ func TestQosKeyAliasConfiguration(t *testing.T) {
 			cfg.QosKeyAliasPremium, cfg.QosKeyAliasMain, cfg.QosKeyAliasRatelimit)
 	}
 }
+
+func TestValidateRejectsInvalidModelAccessEnforcement(t *testing.T) {
+	t.Setenv("MODEL_ACCESS_ENFORCEMENT", "enforc")
+	if err := Load().Validate(); err == nil {
+		t.Fatal("Validate() accepted an invalid MODEL_ACCESS_ENFORCEMENT")
+	}
+	for _, mode := range []string{"off", "observe", "enforce", "ENFORCE"} {
+		t.Setenv("MODEL_ACCESS_ENFORCEMENT", mode)
+		if err := Load().Validate(); err != nil {
+			t.Fatalf("Validate() rejected %q: %v", mode, err)
+		}
+	}
+}

@@ -75,7 +75,10 @@ echo "==> starting metering-service"
   OIDC_REDIRECT_URL=http://localhost:8080/oauth/callback \
   OIDC_SCOPES="openid profile email" \
   OIDC_CLAIMS_DEBUG=false \
+  OIDC_DEVELOPMENT_MODE=true \
   OIDC_TEST_LOGIN=true \
+  MODEL_CATALOG_FILE="$ROOT/tools/local/model-catalog.yaml" \
+  MODEL_ACCESS_ENFORCEMENT=observe \
   DEFAULT_KEY_EXPIRY_HOURS=2160 \
   MAX_KEY_EXPIRY_HOURS=8760 \
   WELCOME_GATEWAY_URL=http://localhost:18081 \
@@ -106,6 +109,8 @@ docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T postgres \
   psql -q -U metering -d metering < "$ROOT/tools/local/seed-sso-personas.sql"
 docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T postgres \
   psql -q -U metering -d metering < "$ROOT/tools/local/seed-dashboard-demo.sql"
+docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T postgres \
+  psql -q -U metering -d metering < "$ROOT/tools/local/seed-model-access.sql"
 
 echo "==> starting synthetic live traffic"
 nohup bash "$ROOT/tools/local/live-demo-traffic.sh" >"$STATE/live-traffic.log" 2>&1 &
@@ -122,9 +127,18 @@ EnMaaS local demo is running.
 
   Personas (Test sign-in or pick at the mock IdP):
     new-user          regular user → My usage + API keys
-    returning-user    regular user with keys + month-to-date usage
+    returning-user    regular user with keys + month-to-date usage; \$500 role budget + \$75 credit
     manager-user      Maya Manager, two direct reports + seeded team traffic → My team
-    admin             super-admin → org usage
+    admin             super-admin → org usage and Admin → Model access
+
+  Model access demo (Admin → Model access):
+    catalog           8 local models imported from tools/local/model-catalog.yaml
+    Standard          default role, \$300/person
+    Super users       +\$200/person (returning-user, manager-user → \$500 total)
+    Research          models only, no budget (team-alice)
+    credit            \$75 for returning-user, expires end of month
+    exclusion         team-bob is excluded from the default role
+    enforcement       MODEL_ACCESS_ENFORCEMENT=observe (evaluates, never blocks)
 
   Logs: $STATE/metering.log · $STATE/oidc-mock.log · $STATE/live-traffic.log
   Stop: $ROOT/tools/local/start-local.sh stop

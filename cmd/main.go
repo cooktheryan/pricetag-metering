@@ -133,6 +133,18 @@ func main() {
 		KeyAliasMain:        cfg.QosKeyAliasMain,
 		KeyAliasRatelimit:   cfg.QosKeyAliasRatelimit,
 	})
+	if path := os.Getenv("MODEL_CATALOG_FILE"); path != "" {
+		tenantID, tenErr := store.EnsureDefaultTenant(context.Background())
+		if tenErr != nil {
+			slog.Warn("model catalog sync: tenant lookup failed", "error", tenErr)
+		} else if n, catErr := store.SyncCatalogFromPraxisConfig(context.Background(), tenantID, path); catErr != nil {
+			slog.Warn("model catalog sync failed", "path", path, "error", catErr)
+		} else {
+			slog.Info("model catalog synced", "models", n, "path", path)
+		}
+	} else {
+		slog.Info("model catalog sync disabled; set MODEL_CATALOG_FILE to import the Praxis model_catalog lists")
+	}
 	if cfg.DashboardUseRollups && !cfg.LiveRollupsEnabled {
 		slog.Warn("dashboard rollups are eventually consistent because live writes are disabled", "refresh_interval_seconds", cfg.RollupRefreshSeconds)
 	} else if cfg.DashboardUseRollups && cfg.LiveRollupsEnabled {
@@ -307,6 +319,7 @@ func main() {
 	if meteringMode.ServesAPIRoutes() {
 		eventsHandler := handler.NewEventsHandler(store)
 		entitlementsHandler := handler.NewEntitlementsHandler(store, cfg)
+		modelAccessHandler := handler.NewModelAccessHandler(store)
 		dashboardHandler := handler.NewDashboardHandler(store, cfg)
 
 		// Kubernetes adapter — optional. It stays disabled until model/provider
@@ -378,6 +391,7 @@ func main() {
 		m2mAuth := func(next http.HandlerFunc) http.HandlerFunc { return handler.RequireM2MAuth(cfg, next) }
 		mux.HandleFunc("/api/v1/events", m2mAuth(eventsHandler.HandleEvent))
 		mux.HandleFunc("/api/v1/customers/", m2mAuth(entitlementsHandler.HandleEntitlement))
+		mux.HandleFunc("/api/v2/policy/decide", handler.RequireM2MAuthStrict(cfg, modelAccessHandler.HandleDecision))
 		// Partner APIs use endpoint-specific bearer credentials in addition to any
 		// Route/AuthPolicy. This protects direct Service and port-forward access.
 		mux.HandleFunc("/api/v1/usage/users/", handler.RequirePartnerAPIAuthAny(cfg.UsageReportAPISecrets, usageReportHandler.HandleUserUsage))
@@ -385,6 +399,7 @@ func main() {
 		mux.HandleFunc("/api/v1/models", handler.RequirePartnerAPIAuthAny(cfg.ModelCatalogAPISecrets, modelCatalogHandler.Handle))
 		mux.HandleFunc("/api/v1/users", handler.RequirePartnerAPIAuth(cfg.UserManagementAPISecret, partnerUsersHandler.HandleUsers))
 		mux.HandleFunc("/api/v1/users/", handler.RequirePartnerAPIAuth(cfg.UserManagementAPISecret, partnerUsersHandler.HandleUsers))
+		mux.HandleFunc("/api/v2/tenants/", auth(handler.RequirePartnerSuperAdmin(cfg, store, modelAccessHandler.HandleAdmin)))
 		mux.HandleFunc("/api/v1/admin/partner-users/", auth(handler.RequirePartnerSuperAdmin(cfg, store, partnerUsersHandler.HandleAdminAccess)))
 		mux.HandleFunc("/api/v1/admin/partner-users", auth(handler.RequirePartnerSuperAdmin(cfg, store, partnerUsersHandler.HandleAdminUsers)))
 		mux.HandleFunc("/api/v1/model-policies/users/", handler.RequirePartnerAPIAuthAny(cfg.ModelPolicyAPISecrets, userModelPolicyHandler.HandleUserModelPolicy))

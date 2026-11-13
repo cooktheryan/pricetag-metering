@@ -19,17 +19,38 @@ func RequireM2MAuth(cfg config.Config, next http.HandlerFunc) http.HandlerFunc {
 			next(w, r)
 			return
 		}
-		header := r.Header.Get("Authorization")
-		provided := ""
-		if strings.HasPrefix(header, bearerPrefix) {
-			provided = strings.TrimSpace(strings.TrimPrefix(header, bearerPrefix))
-		}
-		if provided == "" || subtle.ConstantTimeCompare([]byte(provided), []byte(cfg.M2MSharedSecret)) != 1 {
+		if !m2mBearerOK(r, cfg.M2MSharedSecret) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		next(w, r)
 	}
+}
+
+// RequireM2MAuthStrict is for decision endpoints that must never be
+// unauthenticated. Unlike RequireM2MAuth it does not honor the global
+// compatibility bypass: an unset secret fails closed.
+func RequireM2MAuthStrict(cfg config.Config, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if strings.TrimSpace(cfg.M2MSharedSecret) == "" {
+			http.Error(w, "machine-to-machine auth is not configured", http.StatusServiceUnavailable)
+			return
+		}
+		if !m2mBearerOK(r, cfg.M2MSharedSecret) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
+	}
+}
+
+func m2mBearerOK(r *http.Request, secret string) bool {
+	header := r.Header.Get("Authorization")
+	provided := ""
+	if strings.HasPrefix(header, bearerPrefix) {
+		provided = strings.TrimSpace(strings.TrimPrefix(header, bearerPrefix))
+	}
+	return provided != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(secret)) == 1
 }
 
 // RequirePartnerAPIAuth protects one partner API with its endpoint-specific

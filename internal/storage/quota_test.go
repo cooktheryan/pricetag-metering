@@ -61,3 +61,31 @@ func TestUserModelAllowlistDecision(t *testing.T) {
 		})
 	}
 }
+
+func TestQuotaDecisionDoesNotFallBackOnTenantLookupFailure(t *testing.T) {
+	s, ctx := openTestStore(t)
+	if _, err := s.db.ExecContext(ctx, `DROP TABLE policy_tenants CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.QuotaDecisionCached(ctx, "unlinked@example.com", false); err == nil {
+		t.Fatal("expected an error, got a decision (silent global fallback)")
+	}
+}
+
+func TestQuotaDecisionUnlinkedIdentityUsesGlobalDefault(t *testing.T) {
+	s, ctx := openTestStore(t)
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO quota_policy (id, default_monthly_usd, enforced, allowed_over_limit_models)
+		VALUES (true, 123, true, '{}')
+		ON CONFLICT (id) DO UPDATE SET
+			default_monthly_usd=123, enforced=true, allowed_over_limit_models='{}'`); err != nil {
+		t.Fatal(err)
+	}
+	d, _, err := s.QuotaDecisionCached(ctx, "unlinked@example.com", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.BudgetSource != "default" || d.LimitUSD != 123 {
+		t.Fatalf("decision = %#v", d)
+	}
+}

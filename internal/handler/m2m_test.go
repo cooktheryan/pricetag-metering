@@ -97,3 +97,34 @@ func TestRequirePartnerAPIAuthAnyAcceptsConfiguredPartner(t *testing.T) {
 		t.Fatal("configured additional partner bearer did not reach the handler")
 	}
 }
+
+func TestRequireM2MAuthStrictFailsClosedWhenUnconfigured(t *testing.T) {
+	h := RequireM2MAuthStrict(config.Config{}, func(http.ResponseWriter, *http.Request) {
+		t.Fatal("request should be rejected")
+	})
+	rec := httptest.NewRecorder()
+	h(rec, httptest.NewRequest(http.MethodPost, "/api/v2/policy/decide", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestRequireM2MAuthStrictRequiresBearerEvenWhenGlobalBypassIsOff(t *testing.T) {
+	cfg := config.Config{M2MSharedSecret: "s3cret", M2MAuthRequired: false}
+	reached := false
+	h := RequireM2MAuthStrict(cfg, func(http.ResponseWriter, *http.Request) { reached = true })
+
+	rec := httptest.NewRecorder()
+	h(rec, httptest.NewRequest(http.MethodPost, "/api/v2/policy/decide", nil))
+	if rec.Code != http.StatusUnauthorized || reached {
+		t.Fatalf("missing bearer: status = %d reached = %v", rec.Code, reached)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/policy/decide", nil)
+	req.Header.Set("Authorization", "Bearer s3cret")
+	rec = httptest.NewRecorder()
+	h(rec, req)
+	if rec.Code != http.StatusOK || !reached {
+		t.Fatalf("valid bearer: status = %d reached = %v", rec.Code, reached)
+	}
+}

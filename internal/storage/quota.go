@@ -3,7 +3,9 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -287,13 +289,16 @@ const quotaAllowanceMax = 50
 // linked to the person.
 type QuotaDecision struct {
 	Enforced bool `json:"enforced"` // the policy flag
-	Exempt   bool `json:"exempt"`   // super-admin — never gated
+	Exempt   bool `json:"exempt"`   // reserved for an explicit break-glass path; no production caller sets it
 	// User model allowlist is enforcement state internal to the entitlement
 	// decision; the dedicated model-policy endpoint owns its public schema.
 	ModelPolicyActive bool     `json:"-"`
 	UserAllowedModels []string `json:"-"`
-	BaseUSD           float64  `json:"base_usd"`  // user override or policy default
-	LimitUSD          float64  `json:"limit_usd"` // effective monthly limit
+	BaseUSD           float64  `json:"base_usd"` // user override, role budget, or policy default
+	RoleBudgetUSD     float64  `json:"role_budget_usd,omitempty"`
+	CreditUSD         float64  `json:"credit_usd,omitempty"`
+	BudgetSource      string   `json:"budget_source,omitempty"` // user_override | role | default
+	LimitUSD          float64  `json:"limit_usd"`               // effective monthly limit
 	SpentUSD          float64  `json:"spent_usd"`
 	TokensUsed        int64    `json:"-"`
 	// Subject is the canonical partner user UUID behind the requested
@@ -390,15 +395,49 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	if err != nil {
 		return d, fmt.Errorf("quota policy lookup: %w", err)
 	}
-
-	// Resolution order: user override → policy default.
-	// -1 marks "no override row" (NUMERIC is never negative for a real row).
-	if userOv >= 0 {
-		d.BaseUSD = userOv
-	} else {
-		d.BaseUSD = defaultUSD
+	// Zero-cost models are always allowed after the dollar cap: using them
+	// cannot increase spend. Add them to the post-cap allowlist so free and
+	// hosted models do not depend on a manually maintained global list.
+	if err := s.addZeroCostOverLimitModels(ctx, &d); err != nil {
+		// Free-model allowance is an optimization, not a security gate. A
+		// pricing lookup failure must not break every entitlement decision.
+		slog.Warn("zero-cost model lookup failed; using explicit over-limit list", "error", err)
 	}
-	d.LimitUSD = d.BaseUSD
+
+	// Role budgets are additive across all active roles (default + explicit).
+	// A per-person permanent override replaces the role sum; temporary credits
+	// add on top. If no role has a budget, fall back to the global policy.
+	var roleBudget, creditUSD float64
+	tenantID, tenantErr := s.EnsureDefaultTenant(ctx)
+	if tenantErr != nil {
+		return d, fmt.Errorf("default tenant lookup: %w", tenantErr)
+	}
+	subjectID, _, subjectErr := s.ResolvePolicySubjectByUsername(ctx, tenantID, username)
+	switch {
+	case subjectErr == nil:
+		if roleBudget, creditUSD, err = s.GetRoleBudgetAndCreditsUSD(ctx, tenantID, subjectID); err != nil {
+			return d, err
+		}
+	case errors.Is(subjectErr, ErrPartnerUserNotFound):
+		// An unlinked identity has no role budget; the global default applies.
+		// Model access still decides whether the identity may call the model.
+	default:
+		return d, fmt.Errorf("resolve policy subject: %w", subjectErr)
+	}
+	d.RoleBudgetUSD = roleBudget
+	d.CreditUSD = creditUSD
+	switch {
+	case userOv >= 0:
+		d.BaseUSD = userOv
+		d.BudgetSource = "user_override"
+	case roleBudget > 0:
+		d.BaseUSD = roleBudget
+		d.BudgetSource = "role"
+	default:
+		d.BaseUSD = defaultUSD
+		d.BudgetSource = "default"
+	}
+	d.LimitUSD = d.BaseUSD + creditUSD
 
 	if s.monthSpendEnabled.Load() {
 		err = s.db.QueryRowContext(ctx, `
@@ -428,9 +467,73 @@ func (s *Store) quotaDecision(ctx context.Context, username string, exempt bool)
 	return d, nil
 }
 
+// addZeroCostOverLimitModels appends every model with a known zero input and
+// output list price to the post-cap allowlist. The model still has to pass the
+// separate role-based model-access gate; this only prevents the dollar cap
+// from blocking a request that cannot add spend.
+func (s *Store) zeroCostModelList(ctx context.Context) ([]string, error) {
+	now := time.Now()
+	s.zeroCostMu.RLock()
+	if now.Before(s.zeroCostExpires) {
+		models := append([]string(nil), s.zeroCostModels...)
+		s.zeroCostMu.RUnlock()
+		return models, nil
+	}
+	s.zeroCostMu.RUnlock()
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT model FROM model_pricing
+		WHERE input_cost_per_mtok = 0 AND output_cost_per_mtok = 0
+		ORDER BY model`)
+	if err != nil {
+		return nil, fmt.Errorf("zero-cost model lookup: %w", err)
+	}
+	defer rows.Close()
+	models := []string{}
+	for rows.Next() {
+		var model string
+		if err := rows.Scan(&model); err != nil {
+			return nil, err
+		}
+		models = append(models, model)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	s.zeroCostMu.Lock()
+	s.zeroCostModels = models
+	s.zeroCostExpires = now.Add(zeroCostCacheTTL)
+	s.zeroCostMu.Unlock()
+	return models, nil
+}
+
+func (s *Store) addZeroCostOverLimitModels(ctx context.Context, d *QuotaDecision) error {
+	models, err := s.zeroCostModelList(ctx)
+	if err != nil {
+		return err
+	}
+	seen := make(map[string]struct{}, len(d.OverLimitModels))
+	for _, model := range d.OverLimitModels {
+		seen[model] = struct{}{}
+	}
+	for _, model := range models {
+		if _, ok := seen[model]; ok {
+			continue
+		}
+		seen[model] = struct{}{}
+		d.OverLimitModels = append(d.OverLimitModels, model)
+	}
+	return nil
+}
+
 // --- Decision cache (the gateway's synchronous dependency) ---
 
-const quotaCacheTTL = 15 * time.Second
+const (
+	quotaCacheTTL = 15 * time.Second
+	// Pricing changes rarely, so the global zero-price list is safe to hold
+	// longer than a decision; a new free model becomes usable within a minute.
+	zeroCostCacheTTL = 60 * time.Second
+)
 
 type quotaCacheEntry struct {
 	decision QuotaDecision

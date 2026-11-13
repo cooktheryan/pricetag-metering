@@ -564,7 +564,7 @@ td .tag{white-space:nowrap}
 
 <!-- Console tabs -->
 <div class="vtabs">
-  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button><button class="vtab" id="vtab-safety-net" onclick="showTab('safety-net')">Safety Net</button><button class="vtab" id="vtab-pricing-discounts" onclick="showTab('pricing-discounts')">Pricing Discounts</button><button class="vtab" id="vtab-model-restrictions" onclick="showTab('model-restrictions')">Model Restrictions</button>
+  <button class="vtab" id="vtab-people" onclick="showTab('people')">Users<span class="tcount" id="badge-people" style="display:none"></span></button><button class="vtab" id="vtab-model-access" onclick="showTab('model-access')">Model access</button><button class="vtab" id="vtab-over-limit" onclick="showTab('over-limit')">Over limit<span class="tcount" id="badge-over-limit" style="display:none"></span></button><button class="vtab" id="vtab-safety-net" onclick="showTab('safety-net')">Safety Net</button><button class="vtab" id="vtab-pricing-discounts" onclick="showTab('pricing-discounts')">Pricing Discounts</button><button class="vtab" id="vtab-model-restrictions" onclick="showTab('model-restrictions')">Legacy restrictions</button>
   <div class="vtab-tools">
     <span id="last-updated"></span>
     <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="refreshTab(activeTab,true)">Refresh</button>
@@ -650,11 +650,190 @@ td .tag{white-space:nowrap}
 
 </div>
 
+<!-- ============ TAB: Model access ============ -->
+<div class="tab-panel" id="tab-model-access">
+  <div class="card">
+    <div class="card-hdr">
+      <div><span class="card-title">Model access roles</span><span class="card-count" id="ma-roles-count"></span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="syncModelAccessCatalog()">Import catalog</button>
+        <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelAccess()">Refresh</button>
+      </div>
+    </div>
+    <div class="ts" style="margin-bottom:12px">Roles grant exact public model IDs and may add a per-member monthly budget. The default role applies to everyone active; role budgets add up. Model access and budget are enforced separately.</div>
+    <div id="ma-catalog-note" class="ts" style="margin-bottom:10px"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+      <button class="btn btn-grn" onclick="openRoleWizard()">Create role…</button>
+      <input id="ma-role-search" class="tbl-input" placeholder="Filter roles" oninput="renderModelAccessRoles()" style="width:180px;padding:7px 10px;font-size:12px">
+      <span class="ts">Guided: name → default → models → cost centers → budget → review.</span>
+    </div>
+    <div id="ma-roles"><div class="loading"><div class="spinner"></div>Loading roles...</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hdr">
+      <div><span class="card-title">People &amp; service identities</span><span class="card-count" id="ma-subjects-count"></span></div>
+      <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelAccessSubjects()">Refresh</button>
+    </div>
+    <div style="margin-bottom:10px"><input id="ma-subject-search" class="tbl-input" placeholder="Search name, email, external ID, cost center, or group" oninput="loadModelAccessSubjects()" style="width:100%;padding:7px 10px;font-size:12px"></div>
+    <div id="ma-subjects"><div class="loading"><div class="spinner"></div>Loading subjects...</div></div>
+  </div>
+</div>
+
+<!-- ============ TAB: Over limit ============ -->
+<div class="tab-panel" id="tab-over-limit">
+  <div class="card">
+    <div class="card-hdr">
+      <div><span class="card-title">People over budget</span><span class="card-count" id="ol-count"></span></div>
+      <button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadOverLimit()">Refresh</button>
+    </div>
+    <div class="ts" id="ol-note" style="margin-bottom:12px">People at or above their effective monthly budget. Budgets are additive across roles; temporary credits add on top. Free and zero-cost models stay available after the cap; paid requests return 429 while enforcement is on.</div>
+    <div style="margin-bottom:10px"><input id="ol-search" class="tbl-input" placeholder="Search name, email, cost center, or username" oninput="loadOverLimit()" style="width:100%;padding:7px 10px;font-size:12px"></div>
+    <div id="ol-list"><div class="loading"><div class="spinner"></div>Loading over-limit users...</div></div>
+    <div class="partner-users-pager"><button id="ol-prev" onclick="changeOverLimitPage(-1)">Previous</button><span id="ol-page-label">Page 1</span><button id="ol-next" onclick="changeOverLimitPage(1)">Next</button></div>
+  </div>
+</div>
+
+<div class="partner-detail-ov" id="ma-effective-ov" onclick="if(event.target===this)closeModelAccessEffective()">
+  <section class="partner-detail-card" role="dialog" aria-modal="true" aria-labelledby="ma-effective-title">
+    <div class="partner-detail-head"><h2 id="ma-effective-title">Effective model access</h2><button class="partner-detail-close" onclick="closeModelAccessEffective()">×</button></div>
+    <div class="partner-detail-body" id="ma-effective-body"></div>
+  </section>
+</div>
+
+<div class="modal-overlay" id="ma-role-wizard">
+  <div class="modal" style="max-width:640px">
+    <button class="modal-close" onclick="closeRoleWizard()">&times;</button>
+    <div class="modal-title">Create model-access role</div>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t2);margin-bottom:4px">
+        <span id="ma-wizard-progress-label">Step 1 of 6</span>
+        <span id="ma-wizard-progress-pct">17%</span>
+      </div>
+      <div style="height:6px;background:var(--c2);border-radius:999px;overflow:hidden">
+        <div id="ma-wizard-progress-fill" style="height:100%;width:16.67%;background:var(--grn);transition:width .2s"></div>
+      </div>
+    </div>
+
+    <div id="ma-wizard-step1">
+      <div class="field"><label>Role name</label><input type="text" id="ma-new-name" placeholder="e.g. Research"></div>
+    </div>
+
+    <div id="ma-wizard-step2" style="display:none">
+      <label style="font-size:12px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="ma-new-default" style="width:auto" onchange="renderRoleWizard()"> Make this the default role (applies to every active person)</label>
+      <div class="ts" style="margin-top:6px">The default role is the baseline every active person receives. Only one default role can exist.</div>
+      <div id="ma-wizard-replace-wrap" style="display:none;margin-top:10px">
+        <div class="warning"><span class="icon">!</span><div id="ma-wizard-replace-text"></div></div>
+        <label style="font-size:12px;display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="ma-wizard-replace" style="width:auto"> Replace the existing default role</label>
+      </div>
+    </div>
+
+    <div id="ma-wizard-step3" style="display:none">
+      <div class="field"><label>Models</label><div id="ma-new-models-summary" class="ts">No models selected</div></div>
+      <button class="btn btn-outline" onclick="openModelPicker('new')">Choose models</button>
+      <div class="ts" style="margin-top:8px">A role with no models grants no access. Default-role models are the baseline everyone receives.</div>
+    </div>
+
+    <div id="ma-wizard-step4" style="display:none">
+      <div id="ma-wizard-people" class="field">
+        <label>Assign cost centers or groups (optional)</label>
+        <div id="ma-new-assignment-summary" class="ts" style="margin-bottom:6px">No cost centers or groups selected</div>
+        <button class="btn btn-outline" onclick="openAssignmentPicker()">Choose cost centers or groups</button>
+        <div class="ts" style="margin-top:6px">Everyone currently in the selected cost centers or SSO groups is assigned once; future directory changes are not automatic. Individuals can also be added later from a person's effective-access drawer.</div>
+      </div>
+    </div>
+
+    <div id="ma-wizard-step5" style="display:none">
+      <div class="field"><label>Monthly budget per member (USD, optional)</label><input type="number" id="ma-new-budget" min="0" step="1" placeholder="e.g. 300"><div class="ts">Adds to the member's budget across roles. Empty/0 falls back to the global default. Temporary extra credits are added per person later.</div></div>
+      <div id="ma-new-free-models" class="ts"></div>
+    </div>
+
+    <div id="ma-wizard-step6" style="display:none">
+      <div id="ma-wizard-review" class="ts"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="ma-wizard-back" onclick="roleWizardBack()" style="padding:7px 18px;font-size:11px">Back</button>
+      <button class="btn btn-outline" onclick="closeRoleWizard()" style="padding:7px 18px;font-size:11px">Cancel</button>
+      <button class="btn btn-grn" id="ma-wizard-next" onclick="roleWizardNext()">Next</button>
+      <button class="btn btn-grn" id="ma-wizard-create" onclick="createModelAccessRole()" style="display:none">Create role</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="ma-role-edit-modal">
+  <div class="modal" style="max-width:620px">
+    <button class="modal-close" onclick="closeRoleEditor()">&times;</button>
+    <div class="modal-title" id="ma-role-edit-title">Edit role</div>
+    <div class="ts" id="ma-role-edit-meta" style="margin-bottom:14px"></div>
+    <div class="field">
+      <label>Models</label>
+      <div id="ma-role-models-summary" class="ts" style="margin-bottom:6px">No models selected</div>
+      <button class="btn btn-outline" onclick="openModelPicker('role')">Choose models</button>
+      <div id="ma-role-free-models" class="ts" style="margin-top:6px"></div>
+    </div>
+    <div class="field">
+      <label>$ / person / month</label>
+      <input id="ma-role-budget" type="number" min="0" step="1" placeholder="0" style="width:160px">
+      <div class="ts">Adds to each member's budget. Empty/0 falls back to the global default.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="ma-role-retire" style="color:#ff6b6b;margin-right:auto" onclick="retireModelAccessRole()">Retire role</button>
+      <button class="btn btn-outline" onclick="closeRoleEditor()" style="padding:7px 18px;font-size:11px">Cancel</button>
+      <button class="btn btn-grn" onclick="saveRoleEditor()">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="ma-assignment-modal">
+  <div class="modal" style="max-width:620px">
+    <button class="modal-close" onclick="closeAssignmentPicker()">&times;</button>
+    <div class="modal-title">Choose cost centers or groups</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn btn-outline" id="ma-assign-tab-cost-center" onclick="setAssignmentMode('cost_center')">Cost centers</button>
+      <button class="btn btn-outline" id="ma-assign-tab-group" onclick="setAssignmentMode('group')">SSO groups</button>
+    </div>
+    <div class="field">
+      <input type="search" id="ma-assignment-search" class="tbl-input" placeholder="Search cost center code or description" oninput="onAssignmentSearch()" style="width:100%;padding:8px 10px;font-size:12px">
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-outline" style="padding:4px 10px;font-size:10px" onclick="selectAllAssignmentPicker(true)">Select all visible</button>
+      <button class="btn btn-outline" style="padding:4px 10px;font-size:10px" onclick="selectAllAssignmentPicker(false)">Clear</button>
+      <span class="ts" id="ma-assignment-count"></span>
+    </div>
+    <div id="ma-assignment-list" style="max-height:45vh;overflow:auto;border:1px solid var(--bdr);border-radius:6px;padding:8px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeAssignmentPicker()" style="padding:7px 18px;font-size:11px">Cancel</button>
+      <button class="btn btn-grn" onclick="saveAssignmentPicker()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="ma-models-modal">
+  <div class="modal" style="max-width:760px">
+    <button class="modal-close" onclick="closeModelPicker()">&times;</button>
+    <div class="modal-title" id="ma-models-title">Select models</div>
+    <div class="field">
+      <input type="search" id="ma-models-search" class="tbl-input" placeholder="Search model ID, name, or provider" oninput="renderModelPicker()" style="width:100%;padding:8px 10px;font-size:12px">
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-outline" style="padding:4px 10px;font-size:10px" onclick="selectAllModelPicker(true)">Select all visible</button>
+      <button class="btn btn-outline" style="padding:4px 10px;font-size:10px" onclick="selectAllModelPicker(false)">Clear</button>
+      <span class="ts" id="ma-models-count"></span>
+    </div>
+    <div id="ma-models-list" style="max-height:45vh;overflow:auto;border:1px solid var(--bdr);border-radius:6px;padding:8px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModelPicker()" style="padding:7px 18px;font-size:11px">Cancel</button>
+      <button class="btn btn-grn" onclick="saveModelPicker()">Apply</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ TAB: Safety Net ============ -->
 <div class="tab-panel" id="tab-safety-net">
   <div class="card">
     <div class="card-hdr"><div><span class="card-title">Monthly Safety Net</span><span class="card-count" id="safety-net-meta"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadSafetyNet()">Refresh</button></div>
-    <div class="ts" style="margin-bottom:14px">Global month-to-date spend protection. Users are blocked at the limit except for the exact models listed as bypass models. Super-admins are exempt.</div>
+    <div class="ts" style="margin-bottom:14px">Global month-to-date spend protection. Users are blocked at the limit except for the exact models listed as bypass models. Platform admins are governed by their roles like everyone else.</div>
     <div id="safety-net-body"><div class="loading"><div class="spinner"></div>Loading safety-net policy...</div></div>
   </div>
 </div>
@@ -671,8 +850,9 @@ td .tag{white-space:nowrap}
 <!-- ============ TAB: Model Restrictions ============ -->
 <div class="tab-panel" id="tab-model-restrictions">
   <div class="card">
-    <div class="card-hdr"><div><span class="card-title">External Model Restrictions</span><span class="card-count" id="model-restrictions-count"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelRestrictions()">Refresh</button></div>
-    <div class="ts" style="margin-bottom:14px">Read-only view of users restricted by the external model-policy API. An empty allowed-model list means deny-all.</div>
+    <div class="card-hdr"><div><span class="card-title">Legacy external restrictions</span><span class="card-count" id="model-restrictions-count"></span></div><button class="btn btn-outline" style="padding:5px 12px;font-size:10px" onclick="loadModelRestrictions()">Refresh</button></div>
+    <div class="warning" style="margin-bottom:14px"><span class="icon">!</span><div>This tab is a read-only view of the old external model-policy API. To create roles, assign people, or add restrictions, use <strong>Model access</strong>. <button class="btn btn-outline" style="padding:3px 8px;font-size:10px;margin-left:6px" onclick="showTab('model-access')">Open Model access</button></div></div>
+    <div class="ts" style="margin-bottom:14px">An empty allowed-model list means deny-all. New restrictions are created from a person in Model access.</div>
     <div id="model-restrictions-list"><div class="loading"><div class="spinner"></div>Loading model restrictions...</div></div>
     <div class="partner-users-pager"><button id="model-restrictions-prev" onclick="changeModelRestrictionsPage(-1)">Previous</button><span id="model-restrictions-page-label">Page 1</span><button id="model-restrictions-next" onclick="changeModelRestrictionsPage(1)">Next</button></div>
   </div>
@@ -866,7 +1046,7 @@ function resolveModelName(crdName) {
 /* ================================================================
    Tabs — one panel visible, lazy load on first open, deep-linkable
    ================================================================ */
-var TABS = ['people', 'safety-net', 'pricing-discounts', 'model-restrictions'];
+var TABS = ['people', 'model-access', 'over-limit', 'safety-net', 'pricing-discounts', 'model-restrictions'];
 
 function showTab(name, pushHash) {
   if (TABS.indexOf(name) < 0) name = 'people';
@@ -888,6 +1068,10 @@ function showTab(name, pushHash) {
 function refreshTab(name, manual) {
   if (name === 'people') {
     loadPartnerUsers();
+  } else if (name === 'model-access') {
+    loadModelAccess();
+  } else if (name === 'over-limit') {
+    loadOverLimit();
   } else if (name === 'safety-net') {
     loadSafetyNet();
   } else if (name === 'pricing-discounts') {
@@ -913,6 +1097,755 @@ function setTabBadge(tab, n, alert) {
   } else {
     b.style.display = 'none';
   }
+}
+
+/* ================================================================
+   Model access
+   ================================================================ */
+var maRoles = [], maRole = null, maSubjects = [], maCatalog = [], maEffectiveSubject = null;
+var maHighlightRoleID = null;
+var maNewModels = [], maRoleModels = [], maPickerTarget = null, maPickerSelection = new Set();
+
+function maURL(path) { return '/api/v2/tenants/default/model-access' + path; }
+
+function sendJSON(url, method, body) {
+  return fetch(url, {
+    method: method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  }).then(function(r) {
+    if (!r.ok) {
+      return r.text().then(function(t) { throw new Error(t.trim() || (r.status + ' ' + r.statusText)); });
+    }
+    if (r.status === 204) return null;
+    return r.json();
+  });
+}
+
+function splitModels(value) {
+  return String(value || '').split(/[\n,]+/).map(function(s) { return s.trim(); }).filter(Boolean);
+}
+
+function loadModelAccess() {
+  return Promise.all([
+    fetchJSON(maURL('/roles')),
+    fetchJSON(maURL('/subjects?limit=200')),
+    fetchJSON(maURL('/catalog')).catch(function() { return []; })
+  ]).then(function(res) {
+    maRoles = res[0] || [];
+    maRoles.sort(function(a, b) {
+      if (a.is_default !== b.is_default) return a.is_default ? -1 : 1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+    maSubjects = res[1] || [];
+    maCatalog = res[2] || [];
+    renderModelAccessRoles();
+    renderModelAccessSubjects();
+    renderModelSummary('new');
+    renderCatalogNote();
+  }).catch(function(err) {
+    var el = document.getElementById('ma-roles');
+    if (el) el.innerHTML = '<div class="err-msg">' + esc(err.message) + '</div>';
+  });
+}
+
+function renderCatalogNote() {
+  var note = document.getElementById('ma-catalog-note');
+  if (!note) return;
+  note.innerHTML = maCatalog.length
+    ? maCatalog.length + ' models available. Use “Choose models” to pick from the catalog.'
+    : '<span style="color:var(--amb)">Catalog is empty. Click “Import catalog” first.</span>';
+}
+
+function modelSummaryText(models) {
+  if (!models || !models.length) return 'No models selected';
+  return models.length + ' selected: ' + models.slice(0, 6).join(', ') + (models.length > 6 ? '…' : '');
+}
+
+function renderModelSummary(kind) {
+  var models = kind === 'new' ? maNewModels : maRoleModels;
+  var el = document.getElementById(kind === 'new' ? 'ma-new-models-summary' : 'ma-role-models-summary');
+  if (el) el.textContent = modelSummaryText(models);
+  renderFreeModelNote(kind, models);
+}
+
+function freeSelectedModelIDs(models) {
+  var byID = {};
+  maCatalog.forEach(function(m) { byID[m.id] = m; });
+  return (models || []).filter(function(id) {
+    var m = byID[id];
+    return m && m.zero_cost;
+  });
+}
+
+function renderFreeModelNote(kind, models) {
+  var el = document.getElementById(kind === 'new' ? 'ma-new-free-models' : 'ma-role-free-models');
+  if (!el) return;
+  var free = freeSelectedModelIDs(models);
+  el.innerHTML = free.length
+    ? '<strong>Free models (always allowed after the budget cap):</strong> ' + free.map(function(id) { return '<span class="tag tag-blu">' + esc(id) + '</span>'; }).join(' ')
+    : 'No zero-cost models selected. Paid models are blocked after the budget cap unless explicitly allowed.';
+}
+
+function openModelPicker(kind) {
+  maPickerTarget = kind;
+  var base = (kind === 'new' ? maNewModels : maRoleModels).slice();
+  if (kind === 'new') maNewModels = base; else maRoleModels = base;
+  maPickerSelection = new Set(base);
+  document.getElementById('ma-models-title').textContent = kind === 'new' ? 'Choose models for the new role' : 'Edit role models';
+  document.getElementById('ma-models-search').value = '';
+  renderModelPicker();
+  document.getElementById('ma-models-modal').classList.add('open');
+}
+
+function closeModelPicker() {
+  document.getElementById('ma-models-modal').classList.remove('open');
+}
+
+function renderModelPicker() {
+  var q = (document.getElementById('ma-models-search').value || '').toLowerCase();
+  var visible = maCatalog.filter(function(m) {
+    return !q || (m.id + ' ' + (m.display_name || '') + ' ' + (m.provider || '')).toLowerCase().indexOf(q) >= 0;
+  });
+  var groups = {};
+  visible.forEach(function(m) {
+    var provider = m.provider || 'other';
+    if (!groups[provider]) groups[provider] = [];
+    groups[provider].push(m);
+  });
+  var html = Object.keys(groups).sort().map(function(provider) {
+    return '<div style="margin-bottom:10px"><div class="ts" style="font-weight:700;margin-bottom:4px">' + esc(provider) + '</div>' +
+      groups[provider].map(function(m) {
+        return '<label style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:12px;cursor:pointer">' +
+          '<input type="checkbox" style="width:auto;margin-top:2px" ' + (maPickerSelection.has(m.id) ? 'checked' : '') +
+          ' onchange="toggleModelPicker(\'' + esc(m.id).replace(/'/g, "\\'") + '\',this.checked)">' +
+          '<span><strong>' + esc(m.id) + '</strong>' + (m.display_name ? ' <span class="ts">— ' + esc(m.display_name) + '</span>' : '') +
+          (m.zero_cost ? ' <span class="badge badge-grn" style="font-size:9px">free</span>' : '') +
+          (m.dialects && m.dialects.length ? ' <span class="badge badge-blu" style="font-size:9px">' + esc(m.dialects.join(', ')) + '</span>' : '') +
+          '</span></label>';
+      }).join('') + '</div>';
+  }).join('');
+  document.getElementById('ma-models-list').innerHTML = html || '<div class="ts">No models match the search.</div>';
+  document.getElementById('ma-models-count').textContent = maPickerSelection.size + ' selected';
+}
+
+function toggleModelPicker(id, checked) {
+  if (checked) maPickerSelection.add(id); else maPickerSelection.delete(id);
+  document.getElementById('ma-models-count').textContent = maPickerSelection.size + ' selected';
+}
+
+function selectAllModelPicker(select) {
+  var boxes = document.querySelectorAll('#ma-models-list input[type=checkbox]');
+  for (var i = 0; i < boxes.length; i++) {
+    boxes[i].checked = select;
+    var label = boxes[i].closest('label');
+    var id = label ? label.querySelector('strong').textContent : '';
+    if (id) { if (select) maPickerSelection.add(id); else maPickerSelection.delete(id); }
+  }
+  document.getElementById('ma-models-count').textContent = maPickerSelection.size + ' selected';
+}
+
+function saveModelPicker() {
+  var models = Array.from(maPickerSelection);
+  if (maPickerTarget === 'new') maNewModels = models; else maRoleModels = models;
+  renderModelSummary(maPickerTarget);
+  if (maPickerTarget === 'new' && document.getElementById('ma-role-wizard').classList.contains('open')) renderRoleWizard();
+  closeModelPicker();
+}
+
+function syncModelAccessCatalog() {
+  sendJSON(maURL('/catalog/sync'), 'POST').then(function(res) {
+    showToast('Catalog imported: ' + ((res && res.synced) || 0) + ' models', 'success');
+    loadModelAccess();
+  }).catch(function(err) { showToast('Catalog import failed: ' + err.message, 'error'); });
+}
+
+function renderModelAccessRoles() {
+  var count = document.getElementById('ma-roles-count');
+  if (count) count.textContent = maRoles.length ? '(' + maRoles.length + ')' : '';
+  var el = document.getElementById('ma-roles');
+  if (!el) return;
+  if (!maRoles.length) {
+    el.innerHTML = '<div class="ts">No roles yet. Create one above; set “Default role” for the baseline everyone receives.</div>';
+    return;
+  }
+  var q = ((document.getElementById('ma-role-search') || {}).value || '').toLowerCase();
+  var visible = maRoles.filter(function(r) {
+    return !q || (r.name + ' ' + (r.models || []).join(' ')).toLowerCase().indexOf(q) >= 0;
+  });
+  var rows = visible.map(function(r) {
+    var models = r.models || [];
+    var sample = models.slice(0, 4).join(', ') + (models.length > 4 ? '…' : '');
+    var retire = r.is_default
+      ? '<button class="btn btn-outline" style="padding:4px 10px;font-size:10px" disabled title="Replace the default role before retiring it">Retire</button>'
+      : '<button class="btn btn-outline" style="padding:4px 10px;font-size:10px;color:#ff6b6b" onclick="retireModelAccessRole(\'' + esc(r.role_id) + '\')">Retire</button>';
+    return '<tr' + (r.role_id === maHighlightRoleID ? ' style="background:var(--c2)"' : '') + '>' +
+      '<td><strong>' + esc(r.name) + '</strong>' + (r.is_default ? ' <span class="badge badge-grn">default</span>' : '') + '</td>' +
+      '<td>' + models.length + '</td>' +
+      '<td>' + (r.monthly_usd ? '$' + r.monthly_usd + '/person' : '—') + '</td>' +
+      '<td>' + (r.subject_count || 0).toLocaleString('en-US') + '</td>' +
+      '<td class="ts" title="' + esc(models.join(', ')) + '">' + esc(sample || '—') + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn btn-outline" style="padding:4px 10px;font-size:10px;margin-right:6px" onclick="editModelAccessRole(\'' + esc(r.role_id) + '\')">Edit</button>' +
+        retire +
+      '</td>' +
+    '</tr>';
+  }).join('');
+  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>Role</th><th>Models</th><th>Budget</th><th>People</th><th>Sample models</th><th>Actions</th></tr></thead><tbody>' +
+    (rows || '<tr><td colspan="6" class="ts">No roles match the filter.</td></tr>') +
+    '</tbody></table></div>';
+}
+
+var maWizardStep = 1;
+var maCostCenters = [];
+var maCostCenterSelection = new Set();
+var maWizardCostCenters = [];
+var maCostCenterPeople = {};
+var maGroupFacets = [];
+var maGroupSelection = new Set();
+var maWizardGroups = [];
+var maGroupPeople = {};
+var maAssignmentMode = 'cost_center';
+var maGroupSearchTimer = null;
+
+function openRoleWizard() {
+  closeRoleEditor();
+  maWizardStep = 1;
+  maNewModels = [];
+  maWizardCostCenters = [];
+  maWizardGroups = [];
+  maCostCenterSelection = new Set();
+  maGroupSelection = new Set();
+  document.getElementById('ma-new-name').value = '';
+  document.getElementById('ma-new-budget').value = '';
+  document.getElementById('ma-new-default').checked = false;
+  document.getElementById('ma-wizard-replace').checked = false;
+  renderModelSummary('new');
+  renderAssignmentSummary();
+  loadCostCenterFacets();
+  renderRoleWizard();
+  document.getElementById('ma-role-wizard').classList.add('open');
+}
+
+function loadCostCenterFacets() {
+  fetchJSON(maURL('/cost-centers')).then(function(facets) {
+    maCostCenters = facets || [];
+    maCostCenters.forEach(function(f) { maCostCenterPeople[f.cost_center] = f.people || 0; });
+    renderAssignmentSummary();
+    if (document.getElementById('ma-assignment-modal').classList.contains('open') && maAssignmentMode === 'cost_center') renderAssignmentPicker();
+  }).catch(function(err) { showToast('Cost centers failed: ' + err.message, 'error'); });
+}
+
+function loadGroupFacets(query) {
+  return fetchJSON(maURL('/groups?limit=50&q=' + encodeURIComponent(query || ''))).then(function(facets) {
+    maGroupFacets = facets || [];
+    maGroupFacets.forEach(function(f) { maGroupPeople[f.group] = f.people || 0; });
+    renderAssignmentSummary();
+    if (document.getElementById('ma-assignment-modal').classList.contains('open') && maAssignmentMode === 'group') renderAssignmentPicker();
+  }).catch(function(err) { showToast('Groups failed: ' + err.message, 'error'); });
+}
+
+function renderAssignmentSummary() {
+  var el = document.getElementById('ma-new-assignment-summary');
+  if (!el) return;
+  var parts = [];
+  if (maWizardCostCenters.length) {
+    var ccTotal = maWizardCostCenters.reduce(function(sum, cc) { return sum + (maCostCenterPeople[cc] || 0); }, 0);
+    parts.push('Cost centers: ' + maWizardCostCenters.join(', ') + (ccTotal ? ' (' + ccTotal + ' people now)' : ''));
+  }
+  if (maWizardGroups.length) {
+    var gTotal = maWizardGroups.reduce(function(sum, g) { return sum + (maGroupPeople[g] || 0); }, 0);
+    parts.push('Groups: ' + maWizardGroups.join(', ') + (gTotal ? ' (' + gTotal + ' people now)' : ''));
+  }
+  el.textContent = parts.length ? parts.join(' · ') : 'No cost centers or groups selected';
+}
+
+function openAssignmentPicker() {
+  maAssignmentMode = 'cost_center';
+  maCostCenterSelection = new Set(maWizardCostCenters);
+  maGroupSelection = new Set(maWizardGroups);
+  document.getElementById('ma-assignment-search').value = '';
+  updateAssignmentModeUI();
+  renderAssignmentPicker();
+  document.getElementById('ma-assignment-modal').classList.add('open');
+  if (!maCostCenters.length) loadCostCenterFacets();
+  if (!maGroupFacets.length) loadGroupFacets('');
+}
+
+function closeAssignmentPicker() {
+  document.getElementById('ma-assignment-modal').classList.remove('open');
+}
+
+function setAssignmentMode(mode) {
+  maAssignmentMode = mode;
+  document.getElementById('ma-assignment-search').value = '';
+  updateAssignmentModeUI();
+  if (mode === 'group' && !maGroupFacets.length) loadGroupFacets('');
+  renderAssignmentPicker();
+}
+
+function updateAssignmentModeUI() {
+  var cc = document.getElementById('ma-assign-tab-cost-center');
+  var gr = document.getElementById('ma-assign-tab-group');
+  if (!cc || !gr) return;
+  cc.className = maAssignmentMode === 'cost_center' ? 'btn btn-grn' : 'btn btn-outline';
+  gr.className = maAssignmentMode === 'group' ? 'btn btn-grn' : 'btn btn-outline';
+  document.getElementById('ma-assignment-search').placeholder = maAssignmentMode === 'cost_center'
+    ? 'Search cost center code or description'
+    : 'Search SSO group (live)';
+}
+
+function onAssignmentSearch() {
+  if (maAssignmentMode === 'group') {
+    clearTimeout(maGroupSearchTimer);
+    var q = document.getElementById('ma-assignment-search').value || '';
+    maGroupSearchTimer = setTimeout(function() { loadGroupFacets(q); }, 250);
+  } else {
+    renderAssignmentPicker();
+  }
+}
+
+function renderAssignmentPicker() {
+  var q = (document.getElementById('ma-assignment-search').value || '').toLowerCase();
+  var list = document.getElementById('ma-assignment-list');
+  var count = document.getElementById('ma-assignment-count');
+  if (!list) return;
+  var html = '';
+  if (maAssignmentMode === 'cost_center') {
+    var visible = maCostCenters.filter(function(f) {
+      return !q || (f.cost_center + ' ' + (f.description || '')).toLowerCase().indexOf(q) >= 0;
+    });
+    html = visible.map(function(f) {
+      return '<label data-value="' + esc(f.cost_center) + '" style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12px;cursor:pointer">' +
+        '<input type="checkbox" style="width:auto;margin-top:2px" ' + (maCostCenterSelection.has(f.cost_center) ? 'checked' : '') +
+        ' onchange="toggleAssignmentPicker(this)">' +
+        '<span><strong>' + esc(f.cost_center) + '</strong>' +
+        (f.description ? ' <span class="ts">— ' + esc(f.description) + '</span>' : '') +
+        ' <span class="badge badge-blu" style="font-size:9px">' + (f.people || 0) + ' people</span></span></label>';
+    }).join('');
+    list.innerHTML = html || '<div class="ts">No cost centers match the search.</div>';
+    count.textContent = maCostCenterSelection.size + ' selected';
+  } else {
+    html = maGroupFacets.map(function(f) {
+      return '<label data-value="' + esc(f.group) + '" style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12px;cursor:pointer">' +
+        '<input type="checkbox" style="width:auto;margin-top:2px" ' + (maGroupSelection.has(f.group) ? 'checked' : '') +
+        ' onchange="toggleAssignmentPicker(this)">' +
+        '<span><strong>' + esc(f.group) + '</strong>' +
+        ' <span class="badge badge-blu" style="font-size:9px">' + (f.people || 0) + ' people</span></span></label>';
+    }).join('');
+    list.innerHTML = html || '<div class="ts">' + (q ? 'No groups match the search.' : 'Type to search SSO groups.') + '</div>';
+    count.textContent = maGroupSelection.size + ' selected';
+  }
+}
+
+function toggleAssignmentPicker(input) {
+  var label = input.closest('label');
+  var value = label ? label.getAttribute('data-value') : '';
+  if (!value) return;
+  var set = maAssignmentMode === 'cost_center' ? maCostCenterSelection : maGroupSelection;
+  if (input.checked) set.add(value); else set.delete(value);
+  document.getElementById('ma-assignment-count').textContent = set.size + ' selected';
+}
+
+function selectAllAssignmentPicker(select) {
+  var boxes = document.querySelectorAll('#ma-assignment-list input[type=checkbox]');
+  var set = maAssignmentMode === 'cost_center' ? maCostCenterSelection : maGroupSelection;
+  for (var i = 0; i < boxes.length; i++) {
+    boxes[i].checked = select;
+    var label = boxes[i].closest('label');
+    var value = label ? label.getAttribute('data-value') : '';
+    if (value) { if (select) set.add(value); else set.delete(value); }
+  }
+  document.getElementById('ma-assignment-count').textContent = set.size + ' selected';
+}
+
+function saveAssignmentPicker() {
+  maWizardCostCenters = Array.from(maCostCenterSelection).sort();
+  maWizardGroups = Array.from(maGroupSelection).sort();
+  renderAssignmentSummary();
+  if (maWizardStep === 6) renderRoleWizard();
+  closeAssignmentPicker();
+}
+
+function closeRoleWizard() {
+  document.getElementById('ma-role-wizard').classList.remove('open');
+}
+
+function renderRoleWizard() {
+  var step = maWizardStep;
+  var pct = (step / 6) * 100;
+  document.getElementById('ma-wizard-progress-label').textContent = 'Step ' + step + ' of 6';
+  document.getElementById('ma-wizard-progress-pct').textContent = Math.round(pct) + '%';
+  document.getElementById('ma-wizard-progress-fill').style.width = pct + '%';
+  for (var i = 1; i <= 6; i++) {
+    var el = document.getElementById('ma-wizard-step' + i);
+    if (el) el.style.display = i === step ? '' : 'none';
+  }
+  var isDefault = document.getElementById('ma-new-default').checked;
+  var existingDefault = maRoles.filter(function(r) { return r.is_default; })[0];
+  var replaceWrap = document.getElementById('ma-wizard-replace-wrap');
+  if (replaceWrap) {
+    replaceWrap.style.display = isDefault && existingDefault ? '' : 'none';
+    document.getElementById('ma-wizard-replace-text').textContent = existingDefault
+      ? 'A default role already exists: "' + existingDefault.name + '". Creating another default replaces it.'
+      : '';
+  }
+  if (document.getElementById('ma-wizard-people')) {
+    document.getElementById('ma-wizard-people').style.display = isDefault ? 'none' : '';
+  }
+  if (step === 3) renderModelSummary('new');
+  if (step === 5) renderFreeModelNote('new', maNewModels);
+  if (step === 6) {
+    var models = maNewModels;
+    var freeModels = freeSelectedModelIDs(models);
+    var budget = parseFloat(document.getElementById('ma-new-budget').value || '0') || 0;
+    var costCenters = maWizardCostCenters.length
+      ? esc(maWizardCostCenters.join(', ')) + ' (one-time snapshot)'
+      : 'none yet — assign later';
+    var groups = maWizardGroups.length
+      ? esc(maWizardGroups.join(', ')) + ' (one-time snapshot)'
+      : 'none yet — assign later';
+    var assignment = isDefault
+      ? '<div><strong>Assignment:</strong> all active people</div>'
+      : '<div><strong>Cost centers:</strong> ' + costCenters + '</div>' +
+        '<div><strong>Groups:</strong> ' + groups + '</div>';
+    document.getElementById('ma-wizard-review').innerHTML =
+      '<div><strong>Name:</strong> ' + esc(document.getElementById('ma-new-name').value || '') + '</div>' +
+      '<div><strong>Default:</strong> ' + (isDefault ? 'yes — all active people' + (existingDefault ? ' (replaces ' + esc(existingDefault.name) + ')' : '') : 'no') + '</div>' +
+      '<div><strong>Models:</strong> ' + (models.length ? esc(models.join(', ')) : 'none (grants no access)') + '</div>' +
+      '<div><strong>Free over budget:</strong> ' + (freeModels.length ? esc(freeModels.join(', ')) : 'none') + '</div>' +
+      assignment +
+      '<div><strong>Budget:</strong> ' + (budget > 0 ? '$' + budget + '/person/month' : 'no role budget — inherits global default') + '</div>';
+  }
+  document.getElementById('ma-wizard-back').style.display = step === 1 ? 'none' : '';
+  document.getElementById('ma-wizard-next').style.display = step === 6 ? 'none' : '';
+  document.getElementById('ma-wizard-create').style.display = step === 6 ? '' : 'none';
+}
+
+function roleWizardNext() {
+  var name = (document.getElementById('ma-new-name').value || '').trim();
+  var isDefault = document.getElementById('ma-new-default').checked;
+  var existingDefault = maRoles.filter(function(r) { return r.is_default; })[0];
+  if (maWizardStep === 1) {
+    if (!name) { showToast('Role name is required', 'error'); return; }
+  }
+  if (maWizardStep === 2) {
+    if (isDefault && existingDefault && !document.getElementById('ma-wizard-replace').checked) {
+      showToast('Confirm replacing the existing default role', 'error'); return;
+    }
+  }
+  if (maWizardStep === 3) {
+    var models = maNewModels;
+    if (!models.length && !confirm('This role has no models and will grant no access. Continue?')) return;
+  }
+  if (maWizardStep === 4 && !isDefault && !maWizardCostCenters.length && !maWizardGroups.length) {
+    if (!confirm('No cost centers or groups selected. Create the role without assigning anyone?')) return;
+  }
+  if (maWizardStep === 5) {
+    var budget = parseFloat(document.getElementById('ma-new-budget').value || '0');
+    if (isNaN(budget) || budget < 0) { showToast('Budget must be zero or positive', 'error'); return; }
+  }
+  maWizardStep++;
+  renderRoleWizard();
+}
+
+function roleWizardBack() {
+  if (maWizardStep > 1) { maWizardStep--; renderRoleWizard(); }
+}
+
+function createModelAccessRole() {
+  var name = (document.getElementById('ma-new-name').value || '').trim();
+  var models = maNewModels;
+  var isDefault = document.getElementById('ma-new-default').checked;
+  var monthlyUSD = parseFloat(document.getElementById('ma-new-budget').value || '0') || 0;
+  if (!name) { showToast('Role name is required', 'error'); return; }
+  var duplicate = maRoles.filter(function(r) { return (r.name || '').toLowerCase() === name.toLowerCase(); })[0];
+  if (duplicate) { showToast('A role named "' + duplicate.name + '" already exists. Choose another name.', 'error'); return; }
+  var existingDefault = maRoles.filter(function(r) { return r.is_default; })[0];
+  var replaceDefault = isDefault && existingDefault && document.getElementById('ma-wizard-replace').checked;
+  sendJSON(maURL('/roles'), 'POST', {
+    name: name, description: '', models: models, is_default: isDefault,
+    replace_default: !!replaceDefault, monthly_usd: monthlyUSD
+  }).then(function(role) {
+    var applyPeople = Promise.resolve(null);
+    if (!isDefault) {
+      if (maWizardCostCenters.length) {
+        applyPeople = applyPeople.then(function() {
+          return sendJSON(maURL('/roles/' + encodeURIComponent(role.role_id) + '/subjects/filter'), 'POST', {field: 'cost_center', values: maWizardCostCenters});
+        });
+      }
+      if (maWizardGroups.length) {
+        applyPeople = applyPeople.then(function() {
+          return sendJSON(maURL('/roles/' + encodeURIComponent(role.role_id) + '/subjects/filter'), 'POST', {field: 'group', values: maWizardGroups});
+        });
+      }
+    }
+    return applyPeople.then(function() { return role; });
+  }).then(function(role) {
+    showToast('Role "' + role.name + '" created', 'success');
+    closeRoleWizard();
+    closeRoleEditor();
+    maHighlightRoleID = role.role_id;
+    loadModelAccess().then(function() {
+      setTimeout(function() { maHighlightRoleID = null; renderModelAccessRoles(); }, 3000);
+    });
+  }).catch(function(err) {
+    var msg = err.message || String(err);
+    if (msg.indexOf('model access role name already exists') >= 0) {
+      showToast('That role name is already in use, including by a retired role. Choose another name.', 'error');
+    } else {
+      showToast('Create failed: ' + msg, 'error');
+    }
+  });
+}
+
+function editModelAccessRole(roleID) {
+  var role = maRoles.filter(function(r) { return r.role_id === roleID; })[0];
+  if (!role) return;
+  maRole = role;
+  document.getElementById('ma-role-edit-title').textContent = role.name;
+  document.getElementById('ma-role-edit-meta').textContent =
+    (role.is_default ? 'Default role · applies to every active person' : 'Explicit role') +
+    ' · ' + (role.subject_count || 0).toLocaleString('en-US') + ' people';
+  document.getElementById('ma-role-budget').value = role.monthly_usd || '';
+  maRoleModels = (role.models || []).slice();
+  renderModelSummary('role');
+  var retire = document.getElementById('ma-role-retire');
+  retire.disabled = !!role.is_default;
+  retire.title = role.is_default ? 'Replace the default role before retiring it' : '';
+  document.getElementById('ma-role-edit-modal').classList.add('open');
+}
+
+function closeRoleEditor() {
+  maRole = null;
+  document.getElementById('ma-role-edit-modal').classList.remove('open');
+}
+
+function saveRoleEditor() {
+  if (!maRole) return;
+  var models = maRoleModels;
+  var amount = parseFloat(document.getElementById('ma-role-budget').value || '0') || 0;
+  Promise.all([
+    sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/models'), 'PUT', {models: models}),
+    sendJSON(maURL('/roles/' + encodeURIComponent(maRole.role_id) + '/budget'), 'PUT', {monthly_usd: amount})
+  ]).then(function() {
+    showToast('Role updated', 'success');
+    closeRoleEditor();
+    loadModelAccess();
+  }).catch(function(err) { showToast('Save failed: ' + err.message, 'error'); });
+}
+
+function retireModelAccessRole(roleID) {
+  var role = roleID ? maRoles.filter(function(r) { return r.role_id === roleID; })[0] : maRole;
+  if (!role) return;
+  if (role.is_default) { showToast('Replace the default role before retiring it', 'error'); return; }
+  if (!confirm('Retire role "' + role.name + '"? Its assignments disappear; the role row is kept for audit.')) return;
+  sendJSON(maURL('/roles/' + encodeURIComponent(role.role_id)), 'DELETE')
+    .then(function() {
+      showToast('Role retired', 'success');
+      closeRoleEditor();
+      loadModelAccess();
+    }).catch(function(err) { showToast('Retire failed: ' + err.message, 'error'); });
+}
+
+function loadModelAccessSubjects() {
+  var q = (document.getElementById('ma-subject-search') || {}).value || '';
+  fetchJSON(maURL('/subjects?limit=200&q=' + encodeURIComponent(q))).then(function(subjects) {
+    maSubjects = subjects || [];
+    renderModelAccessSubjects();
+  }).catch(function(err) { showToast('Subjects failed: ' + err.message, 'error'); });
+}
+
+function renderModelAccessSubjects() {
+  var count = document.getElementById('ma-subjects-count');
+  if (count) count.textContent = maSubjects.length ? '(' + maSubjects.length + ')' : '';
+  var el = document.getElementById('ma-subjects');
+  if (!el) return;
+  if (!maSubjects.length) {
+    el.innerHTML = '<div class="ts">No subjects yet. People appear after SSO login or partner-user sync; service identities need an explicit subject.</div>';
+    return;
+  }
+  var rows = maSubjects.map(function(s) {
+    var cc = s.cost_center || '';
+    var ccDesc = s.cost_center_description || '';
+    var ccText = cc ? (ccDesc && ccDesc !== cc ? cc + ' — ' + ccDesc : cc) : (ccDesc || '—');
+    var personName = s.display_name || s.email || s.external_id;
+    var personSub = s.email && s.email !== personName ? s.email : '';
+    return '<tr style="cursor:pointer" onclick="showModelAccessEffective(\'' + esc(s.subject_id) + '\')">' +
+      '<td class="ts">' + esc(s.first_name || '—') + '</td>' +
+      '<td class="ts">' + esc(s.last_name || '—') + '</td>' +
+      '<td><strong>' + esc(personName) + '</strong>' + (personSub ? '<div class="ts" style="font-size:10px">' + esc(personSub) + '</div>' : '') + '</td>' +
+      '<td class="ts">' + esc(ccText) + '</td>' +
+      '<td class="ts">' + esc(s.principal_type) + '</td>' +
+      '<td>' + esc(s.status) + '</td>' +
+    '</tr>';
+  }).join('');
+  el.innerHTML = '<div class="tbl-wrap"><table><thead><tr><th>First name</th><th>Last name</th><th>Person</th><th>Cost center</th><th>Type</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function showModelAccessEffective(subjectID) {
+  maEffectiveSubject = subjectID;
+  fetchJSON(maURL('/subjects/' + encodeURIComponent(subjectID) + '/effective')).then(function(e) {
+    var body = document.getElementById('ma-effective-body');
+    var chips = function(arr) { return (arr || []).length ? arr.map(function(m) { return '<span class="tag tag-blu">' + esc(m) + '</span>'; }).join(' ') : '<span class="ts">none</span>'; };
+    var sub = maSubjects.filter(function(s) { return s.subject_id === subjectID; })[0] || {};
+    var costCenter = [sub.cost_center, sub.cost_center_description].filter(Boolean).join(' — ');
+    var sso = [sub.email, sub.organization, costCenter, sub.job_title, sub.employee_type].filter(Boolean).join(' · ');
+    var groups = sub.groups || [];
+    var groupsHtml = groups.length
+      ? '<div style="display:flex;flex-wrap:wrap;gap:4px;max-height:90px;overflow:auto;margin-top:3px">' +
+          groups.map(function(g) { return '<span class="tag tag-blu">' + esc(g) + '</span>'; }).join('') +
+        '</div>'
+      : '<span class="ts">none</span>';
+    var roleChips = (e.role_refs || []).length ? e.role_refs.map(function(ref) {
+      return '<span class="tag tag-blu">' + esc(ref.name) + ' <button class="btn" style="padding:0;background:none;color:inherit;font-weight:700" title="Remove role" onclick="removeRoleFromEffective(\'' + esc(ref.role_id) + '\')">&times;</button></span>';
+    }).join(' ') : '<span class="ts">none</span>';
+    var assigned = {};
+    (e.role_ids || []).forEach(function(id) { assigned[id] = true; });
+    var options = maRoles.filter(function(r) { return !assigned[r.role_id]; }).map(function(r) {
+      return '<option value="' + esc(r.role_id) + '">' + esc(r.name) + '</option>';
+    }).join('');
+    body.innerHTML =
+      (sso ? '<div class="ts" style="margin-bottom:8px">' + esc(sso) + '</div>' : '') +
+      '<div style="margin-bottom:10px"><strong>Groups (' + groups.length + '):</strong>' + groupsHtml + '</div>' +
+      '<div style="margin-bottom:10px"><strong>Effective:</strong> ' + (e.unrestricted ? '<span class="badge badge-grn">full catalog (unrestricted)</span>' : chips(e.effective_models)) + '</div>' +
+      '<div class="ts" style="margin-bottom:4px">Default role: ' + (e.default_role_name ? esc(e.default_role_name) : (e.default_role_id ? esc(e.default_role_id) : 'none')) + (e.default_excluded ? ' <span class="badge badge-red">excluded</span>' : '') + '</div>' +
+      '<div class="ts" style="margin-bottom:8px">Explicit roles: ' + roleChips + '</div>' +
+      (options ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><select id="ma-add-role" class="tbl-input" style="min-width:220px;padding:6px 8px;font-size:12px"><option value="">Add a role…</option>' + options + '</select><button class="btn btn-outline" onclick="addRoleToEffective()">Add role</button></div>' : '<div class="ts" style="margin-bottom:10px">All roles assigned.</div>') +
+      '<div class="ts" style="margin-bottom:4px">Direct grants: ' + chips(e.direct_models) + '</div>' +
+      '<div class="ts" style="margin-bottom:10px">Restriction: ' + (e.restriction_enabled ? chips(e.restriction_models) : 'none') + '</div>' +
+      '<div class="ts" style="margin-bottom:4px">Extra budget credits</div>' +
+      '<div id="ma-credit-list" class="ts" style="margin-bottom:6px">Loading…</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
+        '<input id="ma-credit-amount" type="number" min="1" step="1" class="tbl-input" placeholder="$" style="width:80px;padding:6px 8px;font-size:12px">' +
+        '<input id="ma-credit-expiry" type="date" class="tbl-input" style="padding:6px 8px;font-size:12px">' +
+        '<input id="ma-credit-reason" class="tbl-input" placeholder="Reason" style="flex:1;min-width:150px;padding:6px 8px;font-size:12px">' +
+        '<button class="btn btn-outline" onclick="addModelAccessCredit()">Add credit</button>' +
+      '</div>' +
+      '<div class="ts" style="margin-bottom:14px">Policy version: ' + esc(String(e.policy_version || 0)) + '</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn btn-outline" onclick="editModelAccessGrants()">Edit direct grants</button>' +
+        '<button class="btn btn-outline" onclick="editModelAccessRestriction(true)">Set restriction</button>' +
+        '<button class="btn btn-outline" onclick="editModelAccessRestriction(false)">Remove restriction</button>' +
+        '<button class="btn btn-outline" onclick="excludeModelAccessDefault()">Exclude from default</button>' +
+        (e.default_excluded ? '<button class="btn btn-outline" onclick="clearModelAccessDefaultExclusion()">Clear default exclusion</button>' : '') +
+      '</div>';
+    var expiry = document.getElementById('ma-credit-expiry');
+    if (expiry && !expiry.value) {
+      var now = new Date();
+      var eom = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      expiry.value = eom.toISOString().slice(0, 10);
+    }
+    document.getElementById('ma-effective-ov').classList.add('show');
+    loadModelAccessCredits(subjectID);
+  }).catch(function(err) { showToast('Effective access failed: ' + err.message, 'error'); });
+}
+
+function loadModelAccessCredits(subjectID) {
+  fetchJSON(maURL('/subjects/' + encodeURIComponent(subjectID) + '/credits')).then(function(credits) {
+    var el = document.getElementById('ma-credit-list');
+    if (!el) return;
+    if (!credits.length) { el.textContent = 'No extra credits.'; return; }
+    el.innerHTML = credits.map(function(c) {
+      return '<div style="display:flex;gap:8px;align-items:center;margin:2px 0">' +
+        '<span class="tag tag-blu">$' + esc(String(c.amount_usd)) + '</span>' +
+        '<span>' + (c.expires_at ? 'expires ' + esc(String(c.expires_at).slice(0, 10)) : 'no expiry') + '</span>' +
+        '<span class="ts">' + esc(c.reason) + '</span>' +
+        '<button class="btn btn-outline" style="padding:2px 6px;font-size:10px" onclick="removeModelAccessCredit(\'' + esc(c.credit_id) + '\')">Remove</button>' +
+      '</div>';
+    }).join('');
+  }).catch(function() { var el = document.getElementById('ma-credit-list'); if (el) el.textContent = 'Credits unavailable.'; });
+}
+
+function addModelAccessCredit() {
+  if (!maEffectiveSubject) return;
+  var amount = parseFloat(document.getElementById('ma-credit-amount').value || '0');
+  var reason = (document.getElementById('ma-credit-reason').value || '').trim();
+  var date = document.getElementById('ma-credit-expiry').value;
+  if (!(amount > 0) || !reason) { showToast('Amount and reason are required', 'error'); return; }
+  var expires = date ? new Date(date + 'T23:59:59Z').toISOString() : null;
+  var requestId = (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : String(Date.now()) + '-' + Math.random().toString(16).slice(2);
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/credits'), 'POST', {amount_usd: amount, expires_at: expires, reason: reason, request_id: requestId})
+    .then(function() {
+      showToast('Credit added', 'success');
+      document.getElementById('ma-credit-amount').value = '';
+      document.getElementById('ma-credit-reason').value = '';
+      loadModelAccessCredits(maEffectiveSubject);
+    }).catch(function(err) { showToast('Credit failed: ' + err.message, 'error'); });
+}
+
+function removeModelAccessCredit(creditID) {
+  if (!maEffectiveSubject) return;
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/credits/' + encodeURIComponent(creditID)), 'DELETE')
+    .then(function() { showToast('Credit removed', 'success'); loadModelAccessCredits(maEffectiveSubject); })
+    .catch(function(err) { showToast('Remove credit failed: ' + err.message, 'error'); });
+}
+
+function addRoleToEffective() {
+  if (!maEffectiveSubject) return;
+  var sel = document.getElementById('ma-add-role');
+  var roleID = sel ? sel.value : '';
+  if (!roleID) { showToast('Select a role first', 'error'); return; }
+  sendJSON(maURL('/roles/' + encodeURIComponent(roleID) + '/subjects'), 'POST', {subject_id: maEffectiveSubject})
+    .then(function() {
+      showToast('Role added', 'success');
+      loadModelAccess().then(function() { showModelAccessEffective(maEffectiveSubject); });
+    }).catch(function(err) { showToast('Add role failed: ' + err.message, 'error'); });
+}
+
+function removeRoleFromEffective(roleID) {
+  if (!maEffectiveSubject) return;
+  sendJSON(maURL('/roles/' + encodeURIComponent(roleID) + '/subjects/' + encodeURIComponent(maEffectiveSubject)), 'DELETE')
+    .then(function() {
+      showToast('Role removed', 'success');
+      loadModelAccess().then(function() { showModelAccessEffective(maEffectiveSubject); });
+    }).catch(function(err) { showToast('Remove role failed: ' + err.message, 'error'); });
+}
+
+function closeModelAccessEffective() {
+  document.getElementById('ma-effective-ov').classList.remove('show');
+}
+
+function editModelAccessGrants() {
+  if (!maEffectiveSubject) return;
+  var value = prompt('Direct grants: comma-separated exact model IDs (empty clears grants)', '');
+  if (value === null) return;
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/grants'), 'PUT', {models: splitModels(value)})
+    .then(function() { showToast('Grants saved', 'success'); showModelAccessEffective(maEffectiveSubject); })
+    .catch(function(err) { showToast('Grants failed: ' + err.message, 'error'); });
+}
+
+function editModelAccessRestriction(enable) {
+  if (!maEffectiveSubject) return;
+  if (!enable) {
+    sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/restriction'), 'PUT', {enabled: false, models: []})
+      .then(function() { showToast('Restriction removed', 'success'); showModelAccessEffective(maEffectiveSubject); })
+      .catch(function(err) { showToast('Restriction failed: ' + err.message, 'error'); });
+    return;
+  }
+  var value = prompt('Restrict to these exact model IDs. Leave empty to deny all models.', '');
+  if (value === null) return;
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/restriction'), 'PUT', {enabled: true, models: splitModels(value)})
+    .then(function() { showToast('Restriction saved', 'success'); showModelAccessEffective(maEffectiveSubject); })
+    .catch(function(err) { showToast('Restriction failed: ' + err.message, 'error'); });
+}
+
+function clearModelAccessDefaultExclusion() {
+  if (!maEffectiveSubject) return;
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/exclude-default'), 'DELETE')
+    .then(function() { showToast('Default exclusion cleared', 'success'); showModelAccessEffective(maEffectiveSubject); })
+    .catch(function(err) { showToast('Clear failed: ' + err.message, 'error'); });
+}
+
+function excludeModelAccessDefault() {
+  if (!maEffectiveSubject) return;
+  var reason = prompt('Reason for excluding this subject from the default role', '');
+  if (!reason) return;
+  sendJSON(maURL('/subjects/' + encodeURIComponent(maEffectiveSubject) + '/exclude-default'), 'POST', {reason: reason})
+    .then(function() { showToast('Excluded from default', 'success'); showModelAccessEffective(maEffectiveSubject); })
+    .catch(function(err) { showToast('Exclude failed: ' + err.message, 'error'); });
 }
 
 var safetyNetPolicy = null, safetyNetModels = [], safetyNetDraft = null;
@@ -1050,6 +1983,65 @@ function changeModelRestrictionsPage(delta) {
 }
 
 /* ================================================================
+   Over limit — read-only budget overage list
+   ================================================================ */
+var overLimitPage = 0, overLimitPageSize = 50, overLimitHasMore = false;
+
+function olMoney(v) {
+  return '$' + (Number(v) || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function loadOverLimit(page) {
+  if (typeof page === 'number') overLimitPage = page;
+  var q = (document.getElementById('ol-search') || {}).value || '';
+  var offset = overLimitPage * overLimitPageSize;
+  fetchJSON(maURL('/over-limit?limit=' + overLimitPageSize + '&offset=' + offset + '&q=' + encodeURIComponent(q))).then(function(payload) {
+    var rows = (payload && payload.users) || [];
+    var total = (payload && payload.total) || 0;
+    overLimitHasMore = offset + rows.length < total;
+    document.getElementById('ol-count').textContent = '(' + total + ')';
+    setTabBadge('over-limit', total, true);
+    var note = document.getElementById('ol-note');
+    if (payload && !payload.enforced) {
+      note.innerHTML = 'Enforcement is currently <b>off</b>. These people are over their effective budget, but requests are not being blocked. Free and zero-cost models stay available after the cap.';
+    } else {
+      note.innerHTML = 'People at or above their effective monthly budget. Budgets are additive across roles; temporary credits add on top. Free and zero-cost models stay available after the cap; paid requests return 429.';
+    }
+    var html = '<div class="tbl-wrap"><table><thead><tr><th>Person</th><th>Cost center</th><th>Roles</th><th>Budget</th><th>Spent</th><th>Over by</th><th>Used</th><th>Last activity</th></tr></thead><tbody>';
+    rows.forEach(function(u) {
+      var name = u.display_name || u.email || u.username || u.user_id;
+      var sub = [u.email && u.email !== name ? u.email : '', u.username && u.username !== (u.email || name) ? u.username : ''].filter(Boolean).join(' · ');
+      var roles = (u.roles || []).length ? u.roles.map(function(r) { return '<span class="tag tag-blu">' + esc(r) + '</span>'; }).join(' ') : '<span class="ts">none</span>';
+      var pct = u.limit_usd > 0 ? Math.round(u.spent_usd / u.limit_usd * 100) : 0;
+      html += '<tr>' +
+        '<td><strong>' + esc(name) + '</strong>' + (sub ? '<div class="ts" style="font-size:10px">' + esc(sub) + '</div>' : '') + '</td>' +
+        '<td class="ts">' + esc(u.cost_center || '—') + '</td>' +
+        '<td>' + roles + '</td>' +
+        '<td>' + olMoney(u.limit_usd) + '<div class="ts" style="font-size:10px">' + esc(u.budget_source || '') + '</div></td>' +
+        '<td>' + olMoney(u.spent_usd) + '</td>' +
+        '<td><span class="badge badge-red">+' + olMoney(u.over_by_usd) + '</span></td>' +
+        '<td>' + pct + '%</td>' +
+        '<td class="ts">' + (u.last_activity_at ? esc(new Date(u.last_activity_at).toLocaleString('en-US', {hour12:false})) : '—') + '</td>' +
+      '</tr>';
+    });
+    if (!rows.length) html += '<tr><td colspan="8" class="loading">Nobody is over budget this month.</td></tr>';
+    html += '</tbody></table></div>';
+    document.getElementById('ol-list').innerHTML = html;
+    document.getElementById('ol-prev').disabled = overLimitPage === 0;
+    document.getElementById('ol-next').disabled = !overLimitHasMore;
+    document.getElementById('ol-page-label').textContent = 'Page ' + (overLimitPage + 1);
+  }).catch(function(err) {
+    document.getElementById('ol-list').innerHTML = '<div class="err-msg">' + esc(err.message) + '</div>';
+  });
+}
+
+function changeOverLimitPage(delta) {
+  var next = overLimitPage + delta;
+  if (next < 0 || (delta > 0 && !overLimitHasMore)) return;
+  loadOverLimit(next);
+}
+
+/* ================================================================
    Init — friendly model map, then the saved/deep-linked tab
    ================================================================ */
 fetchJSON('/api/v1/admin/models').then(function(models) {
@@ -1074,7 +2066,7 @@ refreshTimer = setInterval(function() {
   if (document.querySelector('.modal-overlay.open, .confirm-overlay.open')) return;
   var ae = document.activeElement;
   if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return;
-  if (activeTab === 'people' || activeTab === 'safety-net') return; // editable tabs use explicit refresh/save
+  if (activeTab === 'people' || activeTab === 'model-access' || activeTab === 'safety-net') return; // editable tabs use explicit refresh/save
   refreshTab(activeTab, false);
 }, REFRESH_INTERVAL);
 

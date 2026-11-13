@@ -55,9 +55,12 @@ type UsageStats struct {
 	// Dollar quota (see quota.go). QuotaUSD is the effective monthly limit
 	// including grants; SpendUSD the month-to-date spend on the same basis
 	// the dashboard shows. MonthEnds is when the month's budget resets.
-	QuotaUSD  float64 `json:"quotaUsd"`
-	SpendUSD  float64 `json:"spendUsd"`
-	MonthEnds string  `json:"monthEnds"`
+	QuotaUSD      float64 `json:"quotaUsd"`
+	RoleBudgetUSD float64 `json:"roleBudgetUsd,omitempty"`
+	CreditUSD     float64 `json:"creditUsd,omitempty"`
+	BudgetSource  string  `json:"budgetSource,omitempty"`
+	SpendUSD      float64 `json:"spendUsd"`
+	MonthEnds     string  `json:"monthEnds"`
 
 	// OverLimitModel marks that this request passed via the post-cap model
 	// allowance (issue #22) rather than being under budget. Additive for
@@ -107,6 +110,12 @@ type Store struct {
 	quotaEnforcement  atomic.Bool
 	monthSpendEnabled atomic.Bool
 	monthSpendWrites  atomic.Bool
+
+	// zeroCostMu memoises the global zero-price model list. The list changes
+	// only when pricing changes, but every quota cache miss consults it.
+	zeroCostMu      sync.RWMutex
+	zeroCostModels  []string
+	zeroCostExpires time.Time
 
 	// QoS classification state. The cached decisions are process-local,
 	// like the quota cache; the short-window and 5m-guard caches have
@@ -509,11 +518,22 @@ func (s *Store) GetTeamUsage(ctx context.Context, groupName string) ([]TeamUserU
 // hasAccess is the AND of two independent gates: the legacy token budget
 // (a 10B-token outer safety net; tokenQuota <= 0 disables it) and the
 // dollar quota from quota.go (inert while the policy's enforced flag is
-// false, and never applied to exempt callers — super-admins). Errors
-// propagate as a 5xx, which the gateway treats as metering unavailability
-// and admits the request (fail_open) — so a metering outage disables
-// enforcement rather than blocking traffic. That is the accepted tradeoff.
+// false). Super-admins are not exempt; broad access comes from a role.
+// Errors propagate as a 5xx, which the gateway treats according to its
+// external_metering fail_open setting (allow or 503), so a metering outage
+// is an explicit availability decision rather than an implicit bypass.
 func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exempt bool) (UsageStats, error) {
+	return s.getMonthlyUsage(ctx, username, model, exempt, nil)
+}
+
+// GetMonthlyUsageWithModelAllowed is the compatibility bridge for the new
+// role policy: quota and accounting are computed exactly as before, but the
+// model gate is supplied by the caller instead of the legacy allowlist.
+func (s *Store) GetMonthlyUsageWithModelAllowed(ctx context.Context, username, model string, exempt bool, modelAllowed bool) (UsageStats, error) {
+	return s.getMonthlyUsage(ctx, username, model, exempt, &modelAllowed)
+}
+
+func (s *Store) getMonthlyUsage(ctx context.Context, username, model string, exempt bool, modelAllowed *bool) (UsageStats, error) {
 	decision, cached, err := s.QuotaDecisionCached(ctx, username, exempt)
 	if err != nil {
 		return UsageStats{}, err
@@ -521,9 +541,15 @@ func (s *Store) GetMonthlyUsage(ctx context.Context, username, model string, exe
 	stats := computeUsageStats(decision.TokensUsed, s.tokenQuota)
 	enforce := s.quotaEnforcement.Load()
 	stats.QuotaUSD = decision.LimitUSD
+	stats.RoleBudgetUSD = decision.RoleBudgetUSD
+	stats.CreditUSD = decision.CreditUSD
+	stats.BudgetSource = decision.BudgetSource
 	stats.SpendUSD = decision.SpentUSD
 	stats.MonthEnds = decision.MonthEnds.UTC().Format(time.RFC3339)
 	stats.ModelAllowed = decision.ModelAllowed(model)
+	if modelAllowed != nil {
+		stats.ModelAllowed = *modelAllowed
+	}
 	allowed := true
 	if enforce {
 		allowed = decision.Allowed()
@@ -1767,6 +1793,16 @@ func (s *Store) migrate(ctx context.Context) error {
 		return err
 	}
 	if err := s.migratePartnerUsers(ctx); err != nil {
+		return err
+	}
+	if err := s.migrateModelAccess(ctx); err != nil {
+		return err
+	}
+	tenantID, err := s.EnsureDefaultTenant(ctx)
+	if err != nil {
+		return err
+	}
+	if _, err := s.SyncPartnerUserSubjects(ctx, tenantID); err != nil {
 		return err
 	}
 	slog.Info("database migrations complete")

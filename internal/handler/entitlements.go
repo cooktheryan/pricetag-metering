@@ -10,6 +10,7 @@ import (
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/redhat-et/pricetag-metering/internal/config"
+	"github.com/redhat-et/pricetag-metering/internal/metrics"
 	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
@@ -37,11 +38,9 @@ func NewEntitlementsHandler(store *storage.Store, cfg config.Config) *Entitlemen
 	}
 }
 
-// isSuperAdmin caches the role lookup for the entitlement hot path. The
-// per-request role query used to run for every gateway request; a short TTL
-// keeps role changes bounded by the same staleness as the quota decision.
-// Verdicts that fell back after a directory error are not cached, so the next
-// request retries the directory.
+// isSuperAdmin resolves the platform-admin verdict with a short cache. It is
+// kept for callers/tests that need the admin verdict; entitlement no longer
+// uses it to bypass quota or model access.
 func (h *EntitlementsHandler) isSuperAdmin(ctx context.Context, username string) bool {
 	key := strings.ToLower(strings.TrimSpace(username))
 	if cached, ok := h.roleCache.Get(key); ok {
@@ -52,6 +51,71 @@ func (h *EntitlementsHandler) isSuperAdmin(ctx context.Context, username string)
 		h.roleCache.Add(key, superAdmin)
 	}
 	return superAdmin
+}
+
+// entitlementStats evaluates the legacy entitlement path and, when enabled,
+// the new role policy. The default is off, so existing deployments keep the
+// old allowlist behavior. Observe records would-deny decisions without
+// changing the answer; enforce supplies the new model verdict to the same
+// quota/accounting path.
+func (h *EntitlementsHandler) entitlementStats(ctx context.Context, username, model string) (storage.UsageStats, error) {
+	mode := strings.ToLower(strings.TrimSpace(h.cfg.ModelAccessEnforcement))
+	if mode != "observe" && mode != "enforce" {
+		return h.store.GetMonthlyUsage(ctx, username, model, false)
+	}
+
+	tenantID, err := h.store.EnsureDefaultTenant(ctx)
+	if err != nil {
+		return h.modelAccessUnavailable(ctx, mode, username, model, false, err)
+	}
+	subjectID, _, err := h.store.ResolvePolicySubjectByUsername(ctx, tenantID, username)
+	if err != nil {
+		return h.modelAccessUnavailable(ctx, mode, username, model, true, err)
+	}
+	effective, err := h.store.GetEffectiveModelAccess(ctx, tenantID, subjectID, false)
+	if err != nil {
+		return h.modelAccessUnavailable(ctx, mode, username, model, true, err)
+	}
+	allowed := effective.Unrestricted
+	if !allowed && strings.TrimSpace(model) != "" {
+		for _, candidate := range effective.EffectiveModels {
+			if candidate == model {
+				allowed = true
+				break
+			}
+		}
+	}
+	result := "would_allow"
+	if !allowed {
+		result = "would_deny"
+		slog.Debug("model access would deny", "user", username, "model", model, "mode", mode)
+	}
+	if mode == "enforce" {
+		if allowed {
+			result = "allow"
+		} else {
+			result = "deny"
+		}
+		metrics.ModelAccessDecisionsTotal.WithLabelValues(mode, result).Inc()
+		return h.store.GetMonthlyUsageWithModelAllowed(ctx, username, model, false, allowed)
+	}
+	metrics.ModelAccessDecisionsTotal.WithLabelValues(mode, result).Inc()
+	return h.store.GetMonthlyUsage(ctx, username, model, false)
+}
+
+func (h *EntitlementsHandler) modelAccessUnavailable(ctx context.Context, mode, username, model string, missingPolicy bool, cause error) (storage.UsageStats, error) {
+	if mode == "enforce" {
+		metrics.ModelAccessDecisionsTotal.WithLabelValues(mode, "deny").Inc()
+		slog.Warn("model access policy unavailable; denying", "user", username, "model", model, "error", cause)
+		return h.store.GetMonthlyUsageWithModelAllowed(ctx, username, model, false, false)
+	}
+	result := "error"
+	if missingPolicy {
+		result = "would_deny"
+	}
+	metrics.ModelAccessDecisionsTotal.WithLabelValues(mode, result).Inc()
+	slog.Warn("model access policy unavailable; preserving legacy decision", "user", username, "model", model, "error", cause)
+	return h.store.GetMonthlyUsage(ctx, username, model, false)
 }
 
 func (h *EntitlementsHandler) HandleEntitlement(w http.ResponseWriter, r *http.Request) {
@@ -75,11 +139,10 @@ func (h *EntitlementsHandler) HandleEntitlement(w http.ResponseWriter, r *http.R
 
 	model := r.URL.Query().Get("model")
 
-	// Operators never gate themselves: a quota misfire must not lock the
-	// people who can fix it out of their own dogfood keys.
-	exempt := h.isSuperAdmin(r.Context(), username)
-
-	stats, err := h.store.GetMonthlyUsage(r.Context(), username, model, exempt)
+	// Super-admins are governed by the same model-access and budget policy as
+	// everyone else. Dashboard/admin authorization is separate: broad inference
+	// access comes from a normal role, not a hardcoded bypass.
+	stats, err := h.entitlementStats(r.Context(), username, model)
 	if err != nil {
 		slog.Error("failed to get usage", "error", err, "user", username)
 		http.Error(w, "internal error", http.StatusInternalServerError)
