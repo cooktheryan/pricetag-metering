@@ -421,6 +421,10 @@ const currentPriceUSDExpr = `GREATEST(e.prompt_tokens - COALESCE(e.cached_input_
 // Reads retain event-time charges; missing legacy values use the current estimate.
 const costUSDExpr = `COALESCE(e.cost_usd, (` + currentPriceUSDExpr + `))`
 
+// legacyChargeBatch bounds the legacy NULL-cost freeze in SeedPricing: each
+// batch is one auto-committed statement, mirroring the rollup cost backfill.
+const legacyChargeBatch = 50000
+
 // listCostUSDExpr mirrors costUSDExpr but prices each term at the vendor
 // list rate (model_pricing.list_*), with a two-tier fallback per term:
 //   - list rate = 0 means "no list price seeded" for this model — fall back
@@ -1966,38 +1970,53 @@ var migrations = []string{
 
 // SeedPricing upserts model pricing from an external source (e.g., LiteLLM).
 func (s *Store) SeedPricing(ctx context.Context, prices []ModelPrice) (int, error) {
+	// Freeze legacy ledger rows before changing the rates used by their
+	// fallback calculation. New events already persist cost_usd at ingestion.
+	// The drain runs in bounded batches, each statement its own transaction,
+	// so a large NULL-cost backlog cannot hold one unbounded rewrite (the
+	// same contract as the rollup cost backfill).
+	if len(prices) > 0 {
+		models := make([]string, 0, len(prices))
+		for _, price := range prices {
+			models = append(models, price.Model)
+		}
+		for {
+			result, err := s.db.ExecContext(ctx, fmt.Sprintf(`UPDATE usage_events u SET cost_usd=q.cost FROM (SELECT e.id,%s AS cost FROM usage_events e LEFT JOIN model_pricing p ON p.model=e.model WHERE e.model=ANY($1) AND e.cost_usd IS NULL LIMIT %d) q WHERE u.id=q.id`, currentPriceUSDExpr, legacyChargeBatch), pq.Array(models))
+			if err != nil {
+				return 0, fmt.Errorf("preserve legacy charges: %w", err)
+			}
+			count, err := result.RowsAffected()
+			if err != nil {
+				return 0, err
+			}
+			if count < legacyChargeBatch {
+				break
+			}
+			// Yield between batches: this competes with live traffic.
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	// Freeze legacy ledger rows before changing the rates used by their
-	// fallback calculation. New events already persist cost_usd at ingestion.
-	if len(prices) > 0 {
-		models := make([]string, 0, len(prices))
-		for _, price := range prices {
-			models = append(models, price.Model)
-		}
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE usage_events u SET cost_usd=q.cost FROM (SELECT e.id,%s AS cost FROM usage_events e LEFT JOIN model_pricing p ON p.model=e.model WHERE e.model=ANY($1) AND e.cost_usd IS NULL) q WHERE u.id=q.id`, currentPriceUSDExpr), pq.Array(models)); err != nil {
-			return 0, fmt.Errorf("preserve legacy charges: %w", err)
-		}
-	}
-
 	updated := 0
 	for _, p := range prices {
 		result, err := tx.ExecContext(ctx, `
-			INSERT INTO model_pricing (model, provider, input_cost_per_mtok, output_cost_per_mtok, cache_write_cost_per_mtok, cache_read_cost_per_mtok, deprecated)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			INSERT INTO model_pricing (model, provider, input_cost_per_mtok, output_cost_per_mtok, cache_write_cost_per_mtok, cache_read_cost_per_mtok, deprecated, managed_rate)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			ON CONFLICT (model) DO UPDATE SET
 				provider = EXCLUDED.provider,
 				input_cost_per_mtok = EXCLUDED.input_cost_per_mtok,
 				output_cost_per_mtok = EXCLUDED.output_cost_per_mtok,
 				cache_write_cost_per_mtok = EXCLUDED.cache_write_cost_per_mtok,
 				cache_read_cost_per_mtok = EXCLUDED.cache_read_cost_per_mtok,
-				deprecated = EXCLUDED.deprecated
+				deprecated = EXCLUDED.deprecated,
+				managed_rate = EXCLUDED.managed_rate
  WHERE NOT model_pricing.managed_rate`,
-			p.Model, p.Provider, p.InputCost, p.OutputCost, p.CacheWriteCost, p.CacheReadCost, p.Deprecated)
+			p.Model, p.Provider, p.InputCost, p.OutputCost, p.CacheWriteCost, p.CacheReadCost, p.Deprecated, p.Managed)
 		if err != nil {
 			return 0, fmt.Errorf("upsert %s: %w", p.Model, err)
 		}
@@ -2133,6 +2152,11 @@ func (s *Store) GetCurrentPricing(ctx context.Context) ([]ModelPrice, error) {
 			return nil, err
 		}
 		prices = append(prices, p)
+	}
+	// An iteration error after the last successful scan must not be reported
+	// as a valid (incomplete) catalog.
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return prices, nil
 }

@@ -438,7 +438,12 @@ func (h *AuthHandler) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 					http.Error(w, "target account unavailable; return to your administrator view", 403)
 					return
 				}
-				if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+				// Read-only means GET/HEAD only. OPTIONS is deliberately
+				// excluded: browser preflights never carry the session
+				// cookie, so an authenticated OPTIONS under impersonation is
+				// a non-browser client and must not reach a downstream
+				// handler with the impersonated identity.
+				if r.Method != http.MethodGet && r.Method != http.MethodHead {
 					http.Error(w, "impersonated views are read-only", 403)
 					return
 				}

@@ -386,11 +386,10 @@ func main() {
 		historicalRepricingHandler := handler.NewHistoricalRepricingHandler(store)
 		modelPolicyAdminHandler := handler.NewModelPolicyAdminHandler(store)
 		auth := authHandler.RequireAuth
-		if cfg.ManagementAPISecret != "" {
-			auth = func(next http.HandlerFunc) http.HandlerFunc {
-				return authHandler.RequireAuth(handler.RequireBrowserOrigin(cfg.ManagementPublicOrigin, next))
-			}
-		}
+		// The management endpoints and the login flow apply their own
+		// same-origin (RequireBrowserOrigin) checks; the general session
+		// wrapper must stay unchanged so ordinary dashboard routes keep
+		// their legacy behavior.
 		mux.HandleFunc("/api/v1/management/key-revocations", handler.RequireManagement(cfg, store, auth, handler.NewManagementKeyRevocationsHandler(store, cfg, maasClient)))
 		mux.HandleFunc("/api/v1/management/keys", handler.RequireManagement(cfg, store, auth, handler.NewManagementKeysHandler(store, cfg, maasClient)))
 		mux.HandleFunc("/api/v1/management/", handler.RequireManagement(cfg, store, auth, handler.NewManagementHandler(store, cfg)))

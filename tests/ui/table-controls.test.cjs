@@ -22,13 +22,16 @@ test('pagination clamps empty and shortened results and reports exact page bound
  let p=t.page(Array.from({length:11},(_,i)=>i),5,5);assert.equal(p.offset,5);assert.deepEqual(Array.from(p.rows),[5,6,7,8,9]);assert.equal(p.hasMore,true);
  p=t.page([1,2,3,4,5],10,5);assert.equal(p.offset,0);assert.equal(p.hasMore,false);
  p=t.page([],5,5);assert.equal(p.offset,0);assert.equal(p.rows.length,0);
+ assert.throws(()=>t.page([1,2,3],0,0),/invalid page size/i);
+ assert.throws(()=>t.page([1,2,3],0,-1),/invalid page size/i);
+ assert.throws(()=>t.page([1,2,3],0,NaN),/invalid page size/i);
 });
-test('key loader walks all pages before search and fails rather than silently truncating',async()=>{
+test('key loader returns the complete server-side list and rejects malformed responses',async()=>{
  const t=controls().TableControls;const calls=[];
- const keys=await t.loadKeys(async url=>{calls.push(url);return calls.length===1?{data:[{id:'first'}],has_more:true}:{data:[{id:'second'}],has_more:false};});
- assert.equal(keys.length,2);assert.match(calls[1],/offset=50/);
- await assert.rejects(t.loadKeys(async()=>({data:[],has_more:true})),/empty page/i);
- await assert.rejects(t.loadKeys(async()=>({data:[{id:'same'}],has_more:true}),2),/too many|limit/i);
+ const keys=await t.loadKeys(async url=>{calls.push(url);return {data:[{id:'first'},{id:'second'}]};});
+ assert.equal(keys.length,2);assert.match(calls[0],/\/me\/keys$/);
  await assert.rejects(t.loadKeys(async()=>({data:null})),/invalid/i);
+ await assert.rejects(t.loadKeys(async()=>({data:[{id:'ok'},{no:'id'}]})),/invalid key metadata/i);
+ await assert.rejects(t.loadKeys(async()=>({data:[{id:'ok'}],has_more:true})),/truncated/i);
  await assert.rejects(t.loadKeys(async()=>{throw new Error('HTTP 503');}),/503/);
 });

@@ -211,14 +211,14 @@ func (h *PartnerUsersHandler) HandleUsers(w http.ResponseWriter, r *http.Request
 func (h *PartnerUsersHandler) HandleAdminAccess(w http.ResponseWriter, r *http.Request) {
 	const prefix = "/api/v1/admin/partner-users/"
 	userID := strings.TrimPrefix(r.URL.Path, prefix)
-	if strings.HasSuffix(userID, "/keys") && !strings.Contains(strings.TrimSuffix(userID, "/keys"), "/") {
+	if owner := strings.TrimSuffix(userID, "/keys"); strings.HasSuffix(userID, "/keys") && owner != "" && !strings.Contains(owner, "/") {
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", http.MethodGet)
 			http.Error(w, "method not allowed", 405)
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
-		h.listKeys(w, r, strings.TrimSuffix(userID, "/keys"))
+		h.listKeys(w, r, owner)
 		return
 	}
 	if userID == r.URL.Path || userID == "" || strings.Contains(userID, "/") {
@@ -264,7 +264,10 @@ func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if limitText == "" && offsetText == "" && search == "" && state == "" {
+	// state=all means no state filter, exactly like an omitted state, so it
+	// must keep the unbounded full-list contract instead of silently
+	// truncating to the first paged slice.
+	if limitText == "" && offsetText == "" && search == "" && (state == "" || state == "all") {
 		users, err := h.store.ListAllPartnerUsers(r.Context())
 		if err != nil {
 			http.Error(w, "partner user list failed", http.StatusInternalServerError)
@@ -319,13 +322,18 @@ func (h *PartnerUsersHandler) HandleAdminUsers(w http.ResponseWriter, r *http.Re
 		Total:    total,
 		HasMore:  hasMore,
 	}
+	userIDs := make([]string, 0, len(users))
+	for _, user := range users {
+		userIDs = append(userIDs, user.UserID)
+	}
+	logins, err := h.store.ListPartnerUsernamesBatch(r.Context(), userIDs)
+	if err != nil {
+		http.Error(w, "user logins unavailable", 500)
+		return
+	}
 	for _, user := range users {
 		entry := adminPartnerUser(user)
-		entry.Logins, err = h.store.ListPartnerUsernames(r.Context(), user.UserID)
-		if err != nil {
-			http.Error(w, "user logins unavailable", 500)
-			return
-		}
+		entry.Logins = logins[user.UserID]
 		page.Users = append(page.Users, entry)
 	}
 	for _, user := range managers {

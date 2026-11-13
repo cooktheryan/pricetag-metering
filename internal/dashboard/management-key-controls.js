@@ -18,8 +18,13 @@ const KeyControls = (() => {
   function state(key, now = Date.now()) {
     if (key.status === 'revoked' || key.status === 'expired') return key.status;
     if (key.status !== 'active') return 'unknown';
-    const timestamp = Date.parse(expiry(key));
-    return Number.isFinite(timestamp) && timestamp <= now ? 'expired' : 'active';
+    // A key with no reported expiry is non-expiring by policy; an unparsable
+    // expiry is unverifiable and must not be presented as active.
+    const raw = expiry(key);
+    if (!raw) return 'active';
+    const timestamp = Date.parse(raw);
+    if (!Number.isFinite(timestamp)) return 'unknown';
+    return timestamp <= now ? 'expired' : 'active';
   }
   function remaining(key, now = Date.now()) {
     if (!expiry(key)) return 'No expiry reported';

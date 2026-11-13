@@ -53,7 +53,12 @@ window.loadManagedUserKeys=async user=>{
   try{
    const result=await api('/api/v1/admin/partner-users/'+encodeURIComponent(user.user_id)+'/keys');
    if(!section.isConnected)return;
-   keys=(result.keys||[]).filter(key=>KeyControls.state(key)==='active');
+   if(!Array.isArray(result.keys))throw new Error('Invalid key list response.');
+   for(const key of result.keys){if(!key||typeof key.id!=='string'||!key.id)throw new Error('Invalid key list response.');}
+   // Keep every key that is not confirmed revoked or expired: a key with an
+   // unrecognized status may still grant access and must stay visible and
+   // revocable here rather than being silently dropped.
+   keys=result.keys.filter(key=>{const state=KeyControls.state(key);return state!=='revoked'&&state!=='expired';});
    heading.textContent='Active keys ('+keys.length+')';render();
    revoke.disabled=!login||!keys.length;
   }catch(error){if(section.isConnected){content.textContent=error.message;pages.replaceChildren();}}
@@ -87,7 +92,8 @@ function renderPrices(){
  el('prices').replaceChildren(table);if(!rows.length)el('prices').textContent='No matching models.';
  TableControls.pager(el('pricePages'),{offset:priceOffset,size,count:rows.length,hasMore:page.hasMore,onPage:offset=>{priceOffset=offset;renderPrices();}});
 }
-async function loadPrices(){priceRows=await api('/api/v1/management/prices')||[];priceOffset=0;renderPrices();}
+let priceGeneration=0;
+async function loadPrices(){const generation=++priceGeneration;const rows=await api('/api/v1/management/prices')||[];if(generation!==priceGeneration)return;priceRows=rows;priceOffset=0;renderPrices();}
 el('listPrices').onclick=report(loadPrices,false);
 bind('priceSearch',async()=>{if(!priceRows.length)await loadPrices();priceOffset=0;renderPrices();},false);
 let budgetOffset=0, budgetListGeneration=0;
@@ -97,15 +103,35 @@ async function loadSelectedBudget(){
  const subject=el('budget').elements.subject.value;
  el('budget').elements.monthly_usd.disabled=true;el('budget').querySelector('button').disabled=true;el('removeBudget').disabled=true;
  el('budget').elements.monthly_usd.value='';el('budgetCurrent').textContent='Loading current allowance…';
- if(!subject){el('budgetCurrent').textContent='Select a user.';return;}
- const result=await api('/api/v1/management/budgets?subject='+encodeURIComponent(subject));
- if(generation!==budgetGeneration)return;
- const override=result.data[0];
- el('budget').elements.monthly_usd.value=override?override.monthly_usd:result.default_monthly_usd;
- el('budgetCurrent').textContent=override?'Current override: $'+Number(override.monthly_usd).toFixed(2)+' per month.':'Inherits global default: $'+Number(result.default_monthly_usd).toFixed(2)+' per month.';
- el('removeBudget').disabled=!override;el('budget').elements.monthly_usd.disabled=false;el('budget').querySelector('button').disabled=false;
+ try{
+  if(!subject){el('budgetCurrent').textContent='Select a user.';return;}
+  const result=await api('/api/v1/management/budgets?subject='+encodeURIComponent(subject));
+  if(generation!==budgetGeneration)return;
+  if(!Array.isArray(result.data)||!Number.isFinite(result.default_monthly_usd))throw new Error('Invalid budget response.');
+  const override=result.data[0];
+  el('budget').elements.monthly_usd.value=override?override.monthly_usd:result.default_monthly_usd;
+  el('budgetCurrent').textContent=override?'Current override: $'+Number(override.monthly_usd).toFixed(2)+' per month.':'Inherits global default: $'+Number(result.default_monthly_usd).toFixed(2)+' per month.';
+  el('removeBudget').disabled=!override;
+  el('budget').elements.monthly_usd.disabled=false;el('budget').querySelector('button').disabled=false;
+ }catch(error){
+  // The editor stays disabled on failure: the current value is unknown and
+  // a blind save could overwrite it. A stale generation belongs to a newer
+  // invocation that owns the controls and the status line now, so its
+  // error is dropped; otherwise the rethrow is deliberate — every caller
+  // (bind/remove handlers and the tab loader) wraps this in report().
+  if(generation!==budgetGeneration)return;
+  el('budgetCurrent').textContent='Could not load the current allowance. Select the user again to retry.';
+  throw error;
+ }
 }
-async function updateBudgetViews(){await loadSelectedBudget();await listBudgets();}
+async function updateBudgetViews(){
+ // The allowance error must not be masked by a later table-refresh error,
+ // but a table error alone must still surface.
+ let failure=null;
+ try{await loadSelectedBudget();}catch(error){failure=error;}
+ try{await listBudgets();}catch(error){failure=failure||error;}
+ if(failure)throw failure;
+}
 async function listBudgets(offset=budgetOffset){
  const generation=++budgetListGeneration,size=Number(el('budgetPageSize').value);
  const result=await api('/api/v1/management/budgets?limit='+size+'&offset='+offset+'&search='+encodeURIComponent(el('budgetSearch').elements.search.value));

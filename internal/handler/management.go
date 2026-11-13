@@ -37,14 +37,18 @@ func NewManagementHandler(store *storage.Store, cfg config.Config) http.HandlerF
 					adminPartnerUserResponse
 					Logins []string `json:"logins"`
 				}
+				userIDs := make([]string, 0, len(users))
+				for _, u := range users {
+					userIDs = append(userIDs, u.UserID)
+				}
+				loginsByUser, err := store.ListPartnerUsernamesBatch(r.Context(), userIDs)
+				if err != nil {
+					http.Error(w, "user query failed", 500)
+					return
+				}
 				rows := make([]managedUser, 0, len(users))
 				for _, u := range users {
-					logins, err := store.ListPartnerUsernames(r.Context(), u.UserID)
-					if err != nil {
-						http.Error(w, "user query failed", 500)
-						return
-					}
-					rows = append(rows, managedUser{adminPartnerUser(u), logins})
+					rows = append(rows, managedUser{adminPartnerUser(u), loginsByUser[u.UserID]})
 				}
 				writeJSON(w, rows)
 				return
@@ -57,7 +61,13 @@ func NewManagementHandler(store *storage.Store, cfg config.Config) http.HandlerF
 			if !decodeJSON(w, r, &body) {
 				return
 			}
-			if body.Subject == actor && ((body.Active != nil && !*body.Active) || (body.Role != "" && body.Role != storage.PartnerRoleSuperAdmin)) {
+			// Compare stable identities, not login spellings: a renamed
+			// administrator can submit one of their retained logins as the
+			// subject, and ProvisionLogin resolves it back to their own
+			// account, which a plain string comparison would miss.
+			actorID, actorErr := store.PartnerUserIDByLogin(r.Context(), actor)
+			targetID, targetErr := store.PartnerUserIDByLogin(r.Context(), body.Subject)
+			if actorErr == nil && targetErr == nil && actorID == targetID && ((body.Active != nil && !*body.Active) || (body.Role != "" && body.Role != storage.PartnerRoleSuperAdmin)) {
 				http.Error(w, "cannot remove own management access", 400)
 				return
 			}
@@ -68,7 +78,7 @@ func NewManagementHandler(store *storage.Store, cfg config.Config) http.HandlerF
 			}
 			writeJSON(w, adminPartnerUser(user))
 		case "budgets":
-			if r.Method == http.MethodGet && r.URL.RawQuery != "" {
+			if r.Method == http.MethodGet {
 				query := r.URL.Query()
 				for name, values := range query {
 					if (name != "offset" && name != "search" && name != "subject" && name != "limit") || len(values) != 1 {
@@ -109,18 +119,6 @@ func NewManagementHandler(store *storage.Store, cfg config.Config) http.HandlerF
 					return
 				}
 				writeJSON(w, map[string]any{"data": rows, "has_more": more, "default_monthly_usd": policy.DefaultMonthlyUSD})
-				return
-			}
-			if r.Method == http.MethodGet {
-				rows, err := store.ListQuotaOverrides(r.Context())
-				if err != nil {
-					http.Error(w, "budget query failed", 500)
-					return
-				}
-				if rows == nil {
-					rows = []storage.QuotaOverride{}
-				}
-				writeJSON(w, rows)
 				return
 			}
 			var body struct {

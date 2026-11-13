@@ -33,6 +33,12 @@ func (s *Store) ManagedUserByLogin(ctx context.Context, username string) (Partne
 // ProvisionLogin preserves an existing login's UUID and all usage records.
 // It does not create keys or change budgets. Those are separate API operations.
 func (s *Store) ProvisionLogin(ctx context.Context, actor string, p LoginProvision) (PartnerUser, error) {
+	// Logins resolve case-insensitively everywhere (LOWER(username) =
+	// LOWER($1)); provisioning must not be able to mint a second case-variant
+	// identity for a person whose login already exists. Canonicalize the
+	// subject first so the advisory lock, the duplicate check, and the stored
+	// spelling all use one form.
+	p.Subject = strings.ToLower(strings.TrimSpace(p.Subject))
 	if !loginSubjectPattern.MatchString(p.Subject) || len(p.Name) > 256 {
 		return PartnerUser{}, fmt.Errorf("invalid subject or name")
 	}
@@ -48,7 +54,11 @@ func (s *Store) ProvisionLogin(ctx context.Context, actor string, p LoginProvisi
 		return PartnerUser{}, err
 	}
 	var id string
-	err = tx.QueryRowContext(ctx, `SELECT user_id FROM partner_user_logins WHERE username=$1`, p.Subject).Scan(&id)
+	// Match case-insensitively so a differently spelled provision reuses the
+	// existing account instead of creating a case-variant twin. The ORDER BY
+	// keeps the pick stable on databases that still carry rows provisioned
+	// before this normalization.
+	err = tx.QueryRowContext(ctx, `SELECT user_id FROM partner_user_logins WHERE LOWER(username)=$1 ORDER BY is_current DESC, username LIMIT 1`, p.Subject).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		var b [16]byte
 		if _, err = rand.Read(b[:]); err != nil {
@@ -105,6 +115,26 @@ func (s *Store) ProvisionLogin(ctx context.Context, actor string, p LoginProvisi
 	return s.GetPartnerUser(ctx, id)
 }
 
+// PartnerUserIDByLogin resolves any login spelling, current or retained, to
+// its stable user ID with the exact resolution ProvisionLogin applies. The
+// management self-protection guard uses it to compare stable identities:
+// login spellings change when an account is renamed, and a retained login
+// still resolves to the renamed account.
+func (s *Store) PartnerUserIDByLogin(ctx context.Context, username string) (string, error) {
+	var id string
+	// The exact resolution ProvisionLogin applies — normalized and
+	// case-insensitive over every spelling, current or retained — so the
+	// management self-guard cannot be bypassed with a case or whitespace
+	// variant of a login. The ORDER BY keeps the pick stable on databases
+	// that still carry pre-normalization case variants.
+	username = strings.ToLower(strings.TrimSpace(username))
+	err := s.db.QueryRowContext(ctx, `SELECT user_id FROM partner_user_logins WHERE LOWER(username)=$1 ORDER BY is_current DESC, username LIMIT 1`, username).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrPartnerUserNotFound
+	}
+	return id, err
+}
+
 // ManagedPrice sets a future rate or snapshots a reviewed source under an alias.
 // Existing event charges are immutable; historical repricing is a separate API.
 type ManagedPrice struct {
@@ -134,8 +164,18 @@ func (s *Store) SetManagedPrice(ctx context.Context, actor string, p ManagedPric
 		if p.Input != nil || p.Output != nil || p.CacheWrite != nil || p.CacheRead != nil {
 			return fmt.Errorf("choose source_model or explicit rates")
 		}
+		if p.SourceModel == p.Model {
+			return fmt.Errorf("source model must differ from the target model")
+		}
 		if err = tx.QueryRowContext(ctx, `SELECT input_cost_per_mtok,output_cost_per_mtok,cache_write_cost_per_mtok,cache_read_cost_per_mtok FROM model_pricing WHERE model=$1`, p.SourceModel).Scan(&rates[0], &rates[1], &rates[2], &rates[3]); err != nil {
 			return err
+		}
+		// Rates copied from another row get the same validation as explicit
+		// ones; a malformed legacy source row must not install bad rates.
+		for _, v := range rates {
+			if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > 1000000 {
+				return fmt.Errorf("source model rates are not four nonnegative finite values")
+			}
 		}
 	} else {
 		for i, v := range []*float64{p.Input, p.Output, p.CacheWrite, p.CacheRead} {

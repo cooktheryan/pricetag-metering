@@ -26,8 +26,12 @@
   const link=event.target.closest('a[href]');if(!link||link.hasAttribute('download')||(link.target&&link.target!=='_self'))return;
   const url=new URL(link.href,location.href);
   if(url.origin!==location.origin||url.username||url.password||url.pathname!=='/admin/impersonate')return;
-  event.preventDefault();if(dialog.open)return;
   const target=(url.searchParams.get('as')||'').trim();
+  // Only intercept well-formed targets for the confirmation dialog; a
+  // malformed one is left to normal navigation so the server's own
+  // validation answers it.
+  if(target && (target.length>512 || /[\u0000-\u001f\u007f\s]/.test(target)))return;
+  event.preventDefault();if(dialog.open)return;
   const action=new URL('/admin/impersonate',location.origin);
   if(target)action.searchParams.set('as',target);
   if(['/manager','manager'].includes(url.searchParams.get('to')))action.searchParams.set('to','/manager');

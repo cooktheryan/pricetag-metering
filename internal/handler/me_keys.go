@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/redhat-et/pricetag-metering/internal/maasapi"
 	"github.com/redhat-et/pricetag-metering/internal/metrics"
+	"github.com/redhat-et/pricetag-metering/internal/storage"
 )
 
 // Self-service key endpoints. They are deliberately separate from
@@ -207,6 +209,34 @@ func (h *AdminHandler) myKeysCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	metrics.KeysMintedTotal.Inc()
+	if h.store != nil {
+		// The identity check above does not lock the account; a deactivation
+		// can commit while the mint is in flight. Re-check and revoke a key
+		// that slipped past the revocation sweep rather than hand out a live
+		// credential. This fails closed: an unreadable account state revokes
+		// a freshly minted key the caller can simply re-request. Outside
+		// management mode the identity check above derives identity from
+		// session groups, and those deployments legitimately serve users
+		// with no partner record; a missing record there is not a
+		// deactivation. The state-returning lookup keeps deactivated and
+		// revocation-pending accounts distinguishable from absent ones, so
+		// the exception below can never cover them.
+		profile, err := h.store.ManagedUserByLogin(r.Context(), username)
+		noRecord := h.cfg.ManagementAPISecret == "" && errors.Is(err, storage.ErrPartnerUserNotFound)
+		if !noRecord && (err != nil || !profile.Active || profile.KeyRevocationPending) {
+			if result.ID != "" {
+				cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Second)
+				defer cancel()
+				status, revokeErr := h.maasClient.RevokeUserAPIKey(cleanupCtx, result.ID, username, group)
+				if revokeErr != nil || status < 200 || status > 299 {
+					slog.Error("post-mint revocation failed; operator reconciliation required",
+						"user", username, "key_id", result.ID, "status", status, "error", revokeErr)
+				}
+			}
+			http.Error(w, "account is no longer active; key revoked", http.StatusForbidden)
+			return
+		}
+	}
 	writeJSON(w, result)
 }
 

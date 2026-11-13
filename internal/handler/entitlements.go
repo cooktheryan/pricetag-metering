@@ -152,6 +152,15 @@ func (h *EntitlementsHandler) HandleEntitlement(w http.ResponseWriter, r *http.R
 			return
 		}
 		if err != nil {
+			// A directory outage is an explicit availability decision, like
+			// every other store error on this endpoint: the 503 is answered
+			// per the gateway's external_metering fail_open setting (see
+			// GetMonthlyUsage). A fail-open gateway therefore keeps serving
+			// during the outage — including suspended or revocation-pending
+			// accounts, whose deny verdicts are unreadable while the
+			// directory is down. Deployments that need suspension to hold
+			// through an outage must configure the gateway to deny errors
+			// from this endpoint for managed accounts.
 			http.Error(w, "account directory unavailable", http.StatusServiceUnavailable)
 			return
 		}

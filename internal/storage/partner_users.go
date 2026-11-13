@@ -1087,6 +1087,37 @@ func (s *Store) ListPartnerUsernames(ctx context.Context, userID string) ([]stri
 	return usernames, rows.Err()
 }
 
+// ListPartnerUsernamesBatch resolves logins for many users in one query so
+// paginated listings do not issue a query per row. Ordering within each user
+// matches ListPartnerUsernames: current login first, then alphabetical.
+func (s *Store) ListPartnerUsernamesBatch(ctx context.Context, userIDs []string) (map[string][]string, error) {
+	out := make(map[string][]string, len(userIDs))
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	ids := make([]string, 0, len(userIDs))
+	for _, id := range userIDs {
+		normalized, err := normalizePartnerUserID(id)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, normalized)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT user_id,username FROM partner_user_logins WHERE user_id=ANY($1) ORDER BY user_id,is_current DESC,username`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var userID, username string
+		if err := rows.Scan(&userID, &username); err != nil {
+			return nil, err
+		}
+		out[userID] = append(out[userID], username)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ListPartnerUsers(ctx context.Context, tagFilters map[string]string, includeInactive bool, limit, offset int) (PartnerUserPage, error) {
 	if limit < 1 || limit > partnerUserMaxListLimit || offset < 0 {
 		return PartnerUserPage{}, fmt.Errorf("%w: limit must be 1-%d and offset non-negative", ErrInvalidPartnerUserQuery, partnerUserMaxListLimit)

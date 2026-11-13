@@ -3,7 +3,7 @@
 const {chromium}=require('playwright');
 const http=require('node:http');
 const assert=require('node:assert/strict');
-const fs=require('node:fs'),path=require('node:path');
+const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
 const component=fs.readFileSync(path.join(__dirname,'../../internal/dashboard/session-view-dialog.html'),'utf8');
 const html='<html><body><h1>Administration</h1><a id="view" href="/admin/impersonate?as=alice">View Alice</a> '+
  '<a id="self" href="/admin/impersonate?as=admin">My view as user</a> '+
@@ -42,24 +42,29 @@ const html='<html><body><h1>Administration</h1><a id="view" href="/admin/imperso
   assert.equal(await page.locator('#session-view-scope').isVisible(),false);
   await Promise.all([page.waitForURL('**/dashboard'),dialog.getByRole('button',{name:'Continue'}).click()]);
   assert.deepEqual(writes.at(-1),{as:null,to:null});checks++;
-  // URL-derived identity is text only and return destinations stay allowlisted.
+  // A malformed target (markup containing whitespace) is not intercepted
+  // by the dialog: it is left to normal navigation so the server's own
+  // validation answers it, and the payload only travels as URL-encoded data.
   await page.locator('#view').evaluate(link=>link.href='/admin/impersonate?as='+encodeURIComponent('<img src=x onerror=alert(1)>')+'&to=https://attacker.invalid');
-  await page.locator('#view').click();assert.equal(await dialog.locator('img').count(),0);
-  assert.match(await dialog.textContent(),/<img src=x onerror=alert\(1\)>/);
-  assert.equal(new URL(await page.locator('#session-view-form').getAttribute('action'),page.url()).searchParams.has('to'),false);
-  await dialog.getByRole('button',{name:'Cancel'}).click();checks++;
+  const malformedWrites=writes.length;
+  await Promise.all([page.waitForURL(/\/admin\/impersonate\?/),page.locator('#view').click()]);
+  assert.equal(new URL(page.url()).searchParams.get('as'),'<img src=x onerror=alert(1)>');
+  assert.equal((await page.content()).includes('<img'),false);
+  assert.equal(confirmationGets,1);assert.equal(writes.length,malformedWrites);checks++;
+  await page.goBack();
   await page.locator('#self').click();const before=writes.length;
   await Promise.all([page.waitForEvent('framenavigated'),page.locator('#session-view-form').evaluate(form=>{form.requestSubmit();form.requestSubmit();})]);
   await page.waitForLoadState();assert.equal(writes.length,before+1);checks++;
   // Alternate navigation still uses the server's GET confirmation fallback.
   await page.locator('#view').evaluate(link=>link.target='_blank');
   const popupPromise=page.waitForEvent('popup');await page.locator('#view').click();const popup=await popupPromise;
-  await popup.waitForLoadState();assert.equal(confirmationGets,1);assert.equal(writes.length,before+1);await popup.close();checks++;
+  await popup.waitForLoadState();assert.equal(confirmationGets,2);assert.equal(writes.length,before+1);await popup.close();checks++;
   await page.locator('#self').click();
-  await page.screenshot({path:'/tmp/pricetag-view-dialog-desktop.png',fullPage:true});
+  const shots=fs.mkdtempSync(path.join(os.tmpdir(),'pricetag-dialog-'));
+  await page.screenshot({path:path.join(shots,'view-dialog-desktop.png'),fullPage:true});
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.evaluate(()=>{const rect=document.getElementById('session-view-dialog').getBoundingClientRect();return rect.left>=16&&rect.right<=window.innerWidth-16;}),true);
-  await page.screenshot({path:'/tmp/pricetag-view-dialog-mobile.png',fullPage:true});checks++;
+  await page.screenshot({path:path.join(shots,'view-dialog-mobile.png'),fullPage:true});checks++;
   assert.deepEqual(errors,[]);
   console.log('PASS: '+checks+' impersonation confirmation browser scenarios');
  }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

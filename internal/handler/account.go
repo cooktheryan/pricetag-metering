@@ -38,7 +38,7 @@ func (h *AccountHandler) ServeAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	tables, err := fs.ReadFile(dashboard.FS, "management-table-controls.js")
 	if err != nil {
-		http.Error(w, "key controls unavailable", 500)
+		http.Error(w, "table controls unavailable", 500)
 		return
 	}
 	data = []byte(strings.Replace(string(data), "/* ACCOUNT_KEY_CONTROLS */", string(controls)+"\n"+string(tables), 1))

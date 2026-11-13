@@ -16,6 +16,8 @@ test('key status preserves revoked and expired records and fails closed for unkn
  assert.equal(c.state({status:'active',expirationDate:'2026-10-27T12:00:00Z'},now),'expired');
  assert.equal(c.state({status:'revoked',expirationDate:'2026-10-29T12:00:00Z'},now),'revoked');
  assert.equal(c.state({},now),'unknown');
+ assert.equal(c.state({status:'active'},now),'active');
+ assert.equal(c.state({status:'active',expirationDate:'not-a-timestamp'},now),'unknown');
  assert.equal(c.remaining({expirationDate:'2026-10-29T14:00:00Z'},now),'1d 2h remaining');
  assert.equal(c.remaining({expiresAt:'2026-10-28T12:01:30Z'},now),'1m 30s remaining');
  assert.equal(c.remaining({expirationDate:'2026-10-27T12:00:00Z'},now),'Expired');

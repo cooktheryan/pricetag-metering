@@ -127,7 +127,7 @@ func (s *Store) GetPartnerOrgUsage(ctx context.Context, rootUserID string, since
 			(m.user_id IS NOT NULL),
 			COALESCE(u.requests,0), COALESCE(u.total_tokens,0), COALESCE(u.cost_usd,0),
 			to_char(u.last_used, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-COALESCE(ov.monthly_usd,pol.default_monthly_usd), COALESCE(monthly.spent,0), pol.enforced, pu.role='super_admin'
+COALESCE(ov.monthly_usd,pol.default_monthly_usd,0), COALESCE(monthly.spent,0), COALESCE(pol.enforced,false), pu.role='super_admin'
 		FROM (SELECT DISTINCT user_id FROM subtree) st
 		JOIN partner_users pu ON pu.user_id = st.user_id
 		LEFT JOIN managers m ON m.user_id = st.user_id
@@ -137,7 +137,11 @@ COALESCE(ov.monthly_usd,pol.default_monthly_usd), COALESCE(monthly.spent,0), pol
 		) cl ON true
 		LEFT JOIN u ON u.user_id = st.user_id
 		LEFT JOIN monthly ON monthly.user_id=st.user_id
-		CROSS JOIN quota_policy pol
+		-- A missing quota_policy singleton must not empty the whole view;
+		-- default to no override, no default allowance, not enforced. Read the
+		-- singleton through a one-row subquery so corrupt multi-row data can
+		-- not duplicate every user either.
+		LEFT JOIN (SELECT default_monthly_usd, enforced FROM quota_policy ORDER BY id LIMIT 1) pol ON true
 		LEFT JOIN quota_overrides ov ON ov.scope='user' AND ov.principal=cl.username
 		ORDER BY 8 DESC, 2`, requests, cost, lastUsed, from, window, monthly, partnerFullNameExpr)
 	rows, err := s.db.QueryContext(ctx, query, rootUserID, since, until)

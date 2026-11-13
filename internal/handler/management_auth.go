@@ -33,9 +33,16 @@ func RequireManagement(cfg config.Config, store *storage.Store, auth func(http.H
 			http.Error(w, "management API is not configured", 503)
 			return
 		}
-		if raw := r.Header.Get("Authorization"); raw != "" {
-			token := strings.TrimPrefix(raw, "Bearer ")
-			if token == raw || subtle.ConstantTimeCompare([]byte(token), []byte(cfg.ManagementAPISecret)) != 1 {
+		// Only the Bearer scheme carries the management credential (the scheme
+		// is case-insensitive per RFC 7235). Any other Authorization value
+		// (for example a browser's Basic header) belongs to the session path
+		// and must not be read as a failed token attempt.
+		raw := r.Header.Get("Authorization")
+		const bearerScheme = "bearer "
+		if len(raw) >= len(bearerScheme) && strings.EqualFold(raw[:len(bearerScheme)], bearerScheme) {
+			// RFC 7235 allows one or more spaces between scheme and token.
+			token := strings.TrimSpace(raw[len(bearerScheme):])
+			if subtle.ConstantTimeCompare([]byte(token), []byte(cfg.ManagementAPISecret)) != 1 {
 				http.Error(w, "unauthorized", 401)
 				return
 			}

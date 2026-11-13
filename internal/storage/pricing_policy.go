@@ -26,6 +26,9 @@ func (s *Store) GetPricingDiscountPolicy(ctx context.Context) (pricing.DiscountP
 		decodeErr = json.Unmarshal(raw, &policy.Rules)
 	} else {
 		decodeErr = json.Unmarshal(raw, &policy)
+		// The stored version column is authoritative for legacy object-form
+		// rows too; a version only present in the column must not be lost.
+		policy.Version = version
 	}
 	if err := decodeErr; err != nil {
 		return pricing.DiscountPolicy{}, fmt.Errorf("decode discount policy: %w", err)

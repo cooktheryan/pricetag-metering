@@ -105,3 +105,141 @@ func TestPersonalKeysDoNotInheritOldAdministratorSession(t *testing.T) {
 		t.Fatalf("inactive session accepted: %d", w.Code)
 	}
 }
+
+// A deactivation that commits while a self-service mint is in flight must
+// not hand out a live credential: the fresh key is revoked and the caller is
+// told the account is no longer active.
+func TestPersonalKeyMintRevokedWhenAccountDeactivatedMidRequest(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL required")
+	}
+	store := openFreshStore(t, dsn)
+	cfg := config.Config{ManagementAPISecret: "fixture-only", UserHeader: "X-User", GroupsHeader: "X-Groups", PartnerUserKeyGroup: "system:authenticated"}
+	if _, err := store.ProvisionLogin(t.Context(), "test", storage.LoginProvision{Subject: "alice"}); err != nil {
+		t.Fatal(err)
+	}
+	revokes := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			// Deactivate the account while the mint is in flight.
+			inactive := false
+			if _, err := store.ProvisionLogin(t.Context(), "test", storage.LoginProvision{Subject: "alice", Active: &inactive}); err != nil {
+				t.Errorf("mid-mint deactivation: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"raced","key":"fixture-only-key"}`))
+		case http.MethodDelete:
+			revokes++
+			w.WriteHeader(204)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer upstream.Close()
+	h := NewAdminHandler(nil, maasapi.NewClient(upstream.URL, ""), cfg)
+	h.SetStore(store)
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/me/keys", strings.NewReader(`{"name":"Raced mint"}`))
+	r.Header.Set("X-User", "alice")
+	w := httptest.NewRecorder()
+	h.HandleMyKeys(w, r)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "fixture-only-key") {
+		t.Fatal("revoked key secret was disclosed")
+	}
+	if revokes != 1 {
+		t.Fatalf("revokes=%d want 1", revokes)
+	}
+}
+
+// Outside management mode, identity is derived from session groups and users
+// legitimately have no partner record. A missing record must not revoke a
+// freshly minted key: the post-mint recheck only guards managed accounts.
+func TestPersonalKeyMintSucceedsWithoutPartnerRecordOutsideManagement(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL required")
+	}
+	store := openFreshStore(t, dsn)
+	cfg := config.Config{UserHeader: "X-User", GroupsHeader: "X-Groups"}
+	revokes := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"plain","key":"fixture-only-key"}`))
+		case http.MethodDelete:
+			revokes++
+			w.WriteHeader(204)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer upstream.Close()
+	h := NewAdminHandler(nil, maasapi.NewClient(upstream.URL, ""), cfg)
+	h.SetStore(store)
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/me/keys", strings.NewReader(`{"name":"Plain mint"}`))
+	r.Header.Set("X-User", "alice")
+	r.Header.Set("X-Groups", `["team-a"]`)
+	w := httptest.NewRecorder()
+	h.HandleMyKeys(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if revokes != 0 {
+		t.Fatalf("revokes=%d want 0", revokes)
+	}
+	if !strings.Contains(w.Body.String(), "fixture-only-key") {
+		t.Fatal("minted key was not returned")
+	}
+}
+
+// Outside management mode a deactivated partner account must still fail the
+// post-mint recheck: deactivation is reachable through the partner-user
+// routes, and the recheck must distinguish an inactive record from an absent
+// one instead of treating both as "no partner record".
+func TestPersonalKeyMintRevokedForDeactivatedAccountOutsideManagement(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL required")
+	}
+	store := openFreshStore(t, dsn)
+	inactive := false
+	if _, err := store.ProvisionLogin(t.Context(), "test", storage.LoginProvision{Subject: "carol", Active: &inactive}); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{UserHeader: "X-User", GroupsHeader: "X-Groups"}
+	revokes := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"deactivated","key":"fixture-only-key"}`))
+		case http.MethodDelete:
+			revokes++
+			w.WriteHeader(204)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer upstream.Close()
+	h := NewAdminHandler(nil, maasapi.NewClient(upstream.URL, ""), cfg)
+	h.SetStore(store)
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/me/keys", strings.NewReader(`{"name":"Deactivated mint"}`))
+	r.Header.Set("X-User", "carol")
+	r.Header.Set("X-Groups", `["team-a"]`)
+	w := httptest.NewRecorder()
+	h.HandleMyKeys(w, r)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "fixture-only-key") {
+		t.Fatal("revoked key secret was disclosed")
+	}
+	if revokes != 1 {
+		t.Fatalf("revokes=%d want 1", revokes)
+	}
+}

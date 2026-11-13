@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/redhat-et/pricetag-metering/internal/config"
 	"github.com/redhat-et/pricetag-metering/internal/maasapi"
@@ -23,6 +26,12 @@ func NewManagementKeysHandler(store *storage.Store, cfg config.Config, maas *maa
 			http.Error(w, "key group not configured", 503)
 			return
 		}
+		// Minting a key for an arbitrary active user is an operator
+		// privilege: RequireManagement gates this endpoint on the shared
+		// management credential or a super-admin browser session, either of
+		// which is trusted to act for every account. Self-service minting
+		// stays on /api/v1/me/keys, which derives the subject from the
+		// signed session and can never target another user.
 		var body struct {
 			Subject   string `json:"subject"`
 			Name      string `json:"name"`
@@ -35,8 +44,33 @@ func NewManagementKeysHandler(store *storage.Store, cfg config.Config, maas *maa
 			http.Error(w, "name and finite lifetime are required", 400)
 			return
 		}
+		if strings.TrimSpace(body.Subject) == "" || len(body.Subject) > 128 {
+			http.Error(w, "subject is required", 400)
+			return
+		}
 		user, err := store.PartnerUserByMaaSUsername(r.Context(), body.Subject)
 		if err != nil || !user.Active || user.KeyRevocationPending {
+			http.Error(w, "active user required", 409)
+			return
+		}
+		// The storage lookup matches logins case-insensitively and ignores
+		// surrounding whitespace, but the key service and the audit record
+		// must use the account's stored login spelling: forwarding the raw
+		// request value could mint and record the key against two
+		// differently-normalized spellings of the same identity.
+		logins, err := store.ListPartnerUsernames(r.Context(), user.UserID)
+		if err != nil {
+			http.Error(w, "active user required", 409)
+			return
+		}
+		subject := ""
+		for _, login := range logins {
+			if strings.EqualFold(login, strings.TrimSpace(body.Subject)) {
+				subject = login
+				break
+			}
+		}
+		if subject == "" {
 			http.Error(w, "active user required", 409)
 			return
 		}
@@ -52,14 +86,25 @@ func NewManagementKeysHandler(store *storage.Store, cfg config.Config, maas *maa
 			http.Error(w, "invalid finite lifetime", 400)
 			return
 		}
-		key, err := maas.CreateUserAPIKey(r.Context(), body.Subject, cfg.PartnerUserKeyGroup, maasapi.CreateKeyRequest{Name: body.Name, ExpiresIn: expiry})
+		key, err := maas.CreateUserAPIKey(r.Context(), subject, cfg.PartnerUserKeyGroup, maasapi.CreateKeyRequest{Name: body.Name, ExpiresIn: expiry})
 		if err != nil {
 			http.Error(w, "key service rejected issuance", 502)
 			return
 		}
-		if err = store.RecordPartnerUserKey(r.Context(), r.Header.Get(cfg.UserHeader), user.UserID, key.ID, body.Subject, body.Name); err != nil {
-			_, revokeErr := maas.RevokeUserAPIKey(r.Context(), key.ID, body.Subject, cfg.PartnerUserKeyGroup)
-			if revokeErr != nil {
+		if err = store.RecordPartnerUserKey(r.Context(), r.Header.Get(cfg.UserHeader), user.UserID, key.ID, subject, body.Name); err != nil {
+			// The compensating revocation must run even when the caller has
+			// disconnected mid-request: detach from the (possibly cancelled)
+			// request context and bound the cleanup. RevokeUserAPIKey reports
+			// upstream HTTP failures as a status, not an error, so a non-2xx
+			// answer must take the reconciliation path too.
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Second)
+			defer cancel()
+			status, revokeErr := maas.RevokeUserAPIKey(cleanupCtx, key.ID, subject, cfg.PartnerUserKeyGroup)
+			if revokeErr != nil || status < 200 || status > 299 {
+				// The key is live in MaaS but unrecorded here. Log the id
+				// (never the secret) as the durable reconciliation signal.
+				slog.Error("key issuance compensation failed; operator reconciliation required",
+					"user_id", user.UserID, "key_id", key.ID, "status", status, "error", revokeErr)
 				http.Error(w, "key issuance failed; operator reconciliation required", 503)
 				return
 			}

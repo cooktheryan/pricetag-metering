@@ -784,8 +784,7 @@ function pieFmt(v,m){return m==='cost'?fmt$(v):fmtTok(v);}
 
 function chartFailure(error){
  const message=document.getElementById('chartsError');message.hidden=false;
- message.textContent='Charts could not be loaded. '+error.message+' Change the range to retry.';
- chartsCache=null;renderTimeline([]);renderPies();
+ message.textContent='Charts could not be loaded. '+(error instanceof Error?error.message:String(error))+' Change the range to retry.';
 }
 async function chartJSON(url){const response=await fetch(url,{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);return response.json();}
 async function loadCharts(){
@@ -1232,7 +1231,44 @@ async function loadSelf(){
     rows=await chartJSON('/api/v1/org/usage?range='+range);
     renderRows();
     await loadCharts();
-  }catch(error){document.getElementById('rows').innerHTML='<tr><td colspan="6" class="err">'+esc(error.message)+'</td></tr>';chartFailure(error);}
+  }catch(error){
+    if(error instanceof Error&&error.message==='HTTP 403'){
+      // No partner identity: the caller has no org root, so the org endpoints
+      // refuse. The dashboard rollups are self-scoped by the server, so map
+      // those UserSummary rows into the table shape — they lack the directory
+      // fields (slug, quota, last_used) — and take the budget from the
+      // caller's own quota, which init already loaded from /api/v1/whoami.
+      try{
+        const self=await chartJSON('/api/v1/dashboard/users?range='+range+'&sort=cost_usd&order=desc&limit=200');
+        rows=(Array.isArray(self)?self:[]).map(u=>({
+          slug:u.user_id||'',
+          full_name:u.display_name||u.username||'',
+          username:u.username||'',
+          is_manager:false,
+          requests:u.requests||0,
+          total_tokens:u.total_tokens||0,
+          cost_usd:u.cost_usd||0,
+          no_identity:!u.user_id,
+          quota_exempt:!!(me.quota&&me.quota.exempt),
+          quota_enforced:me.quota?!!me.quota.enforced:true,
+          quota_usd:(me.quota&&me.quota.limit_usd)||0,
+          quota_spent_usd:(me.quota&&me.quota.spent_usd)||0,
+          over_limit:!!(me.quota&&me.quota.limit_usd&&me.quota.spent_usd>=me.quota.limit_usd)
+        }));
+        renderRows();
+      }catch(e){
+        document.getElementById('rows').innerHTML='<tr><td colspan="6" class="err">'+esc(e instanceof Error?e.message:String(e))+'</td></tr>';
+      }
+      // The org charts would 403 the same way; the dashboard chart endpoints
+      // are self-scoped, so the pies, timeline and Saved card still load.
+      await loadSelfCharts();
+    }else{
+      // A usage-table failure must not wipe the charts: loadCharts reports its
+      // own failures through chartFailure, which preserves the last good data.
+      document.getElementById('rows').innerHTML='<tr><td colspan="6" class="err">'+esc(error instanceof Error?error.message:String(error))+'</td></tr>';
+      await loadCharts();
+    }
+  }
 }
 
 // ── Person detail (per-model spend + hosted savings) ──────────────────────

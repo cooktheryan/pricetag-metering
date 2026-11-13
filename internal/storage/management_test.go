@@ -27,6 +27,38 @@ func TestManagementLoginPreservesIdentity(t *testing.T) {
 	}
 }
 
+// Login resolution is case-insensitive everywhere (LOWER(username) =
+// LOWER($1)), so provisioning must not be able to mint a second case-variant
+// identity for a person whose login already exists: that would make the
+// single-row resolvers ambiguous about which account a lookup belongs to.
+func TestManagementLoginCaseVariantsResolveToOneAccount(t *testing.T) {
+	s, ctx := openTestStore(t)
+	first, err := s.ProvisionLogin(ctx, "test-admin", LoginProvision{Subject: "Alice@Example.com", Role: PartnerRoleAdmin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.ProvisionLogin(ctx, "test-admin", LoginProvision{Subject: "  alice@example.com  "})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.UserID != second.UserID {
+		t.Fatalf("case-variant provisioning created two accounts: %s vs %s", first.UserID, second.UserID)
+	}
+	for _, spelling := range []string{"alice@example.com", "Alice@Example.com", "ALICE@EXAMPLE.COM", " alice@example.com "} {
+		id, err := s.PartnerUserIDByLogin(ctx, spelling)
+		if err != nil || id != first.UserID {
+			t.Fatalf("PartnerUserIDByLogin(%q) = %s, %v; want %s", spelling, id, err, first.UserID)
+		}
+	}
+	var stored string
+	if err := s.db.QueryRowContext(ctx, `SELECT username FROM partner_user_logins WHERE user_id=$1 AND is_current`, first.UserID).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != "alice@example.com" {
+		t.Fatalf("stored login spelling = %q; want the canonical lowercase form", stored)
+	}
+}
+
 func TestManagementPendingRevocationRejectsActivationAtomically(t *testing.T) {
 	s, ctx := openTestStore(t)
 	user, err := s.ProvisionLogin(ctx, "test-admin", LoginProvision{Subject: "pending-user", Name: "Original"})
@@ -173,6 +205,30 @@ func TestManagedPriceSurvivesImportedPriceRefresh(t *testing.T) {
 	for _, price := range prices {
 		if price.Model == p.Model && (price.InputCost != 1 || price.OutputCost != 2 || !price.Managed) {
 			t.Fatal("refresh overwrote managed rates")
+		}
+	}
+}
+
+func TestSeedPricingMarksImportedRowManaged(t *testing.T) {
+	s, ctx := openTestStore(t)
+	if _, err := s.SeedPricing(ctx, []ModelPrice{{Model: "plain", Provider: "import", InputCost: 1, OutputCost: 2}}); err != nil {
+		t.Fatal(err)
+	}
+	// A seed entry flagged managed takes over an existing unmanaged row.
+	if count, err := s.SeedPricing(ctx, []ModelPrice{{Model: "plain", Provider: "import", InputCost: 4, OutputCost: 5, Managed: true}}); err != nil || count != 1 {
+		t.Fatalf("managed seed count=%d error=%v", count, err)
+	}
+	// A later unmanaged seed must not overwrite it.
+	if count, err := s.SeedPricing(ctx, []ModelPrice{{Model: "plain", Provider: "import", InputCost: 9, OutputCost: 9}}); err != nil || count != 0 {
+		t.Fatalf("later seed count=%d error=%v", count, err)
+	}
+	prices, err := s.GetCurrentPricing(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, price := range prices {
+		if price.Model == "plain" && (!price.Managed || price.InputCost != 4 || price.OutputCost != 5) {
+			t.Fatal("managed import did not take over the row or was later overwritten")
 		}
 	}
 }
