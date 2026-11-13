@@ -295,6 +295,9 @@ tr.clickable{cursor:pointer}
 .ab-user{font-size:12px;font-weight:700;color:#3dcc6e}
 .ab-user .role{color:var(--text2,var(--t2,#8090a8));font-weight:600;font-size:11px}
 .demo-pii{transition:filter .18s ease}.demo-private .demo-pii,.demo-private .user-name,.demo-private .user-mail,.demo-private .person-name,.demo-private .det-name,.demo-private .det-who{filter:blur(3px);user-select:none}.ab-user{cursor:default}.ab-user.demo-privacy-active .role{color:#e8a830;font-weight:800}
+.demo-badge{display:none;align-items:center;gap:5px;border:1px solid #e8a83066;background:#e8a8301f;color:#e8a830;border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}.demo-private .demo-badge{display:inline-flex}
+/* Demo mode is tokens-only: actual spend disappears, savings stay visible. */
+.demo-private .demo-cost{display:none!important}.demo-private #quota-banner{display:none!important}
 .ab-out{color:#e8554e;border:1px solid #2e3848;padding:6px 14px;border-radius:8px;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:12px;font-weight:600;line-height:18px;text-decoration:none}
 .ab-out:hover{border-color:#e8554e}
 @media(max-width:640px){.appbar{top:8px;padding:10px 14px;gap:10px}}
@@ -322,6 +325,7 @@ tr.clickable{cursor:pointer}
     <button id="refresh-btn" class="ab-btn" onclick="refresh(true)">Refresh</button>
     <a href="#" id="my-view-btn" class="ab-btn" style="display:none" title="See the dashboard as a regular user would">My view as user</a>
     <button class="ab-btn" onclick="openPricing()">Pricing</button>
+    <span class="demo-badge" id="demoBadge">Demo mode · costs hidden</span>
     <span class="ab-user" id="abUser" style="display:none"></span>
     <a href="/logout" class="ab-out" id="abOut" style="display:none">Sign out</a>
   </div>
@@ -438,7 +442,7 @@ tr.clickable{cursor:pointer}
     <div class="chart-head">
       <h2>By Model</h2>
       <div class="tl-toggle" id="model-metric-toggle" style="margin-bottom:0">
-        <button data-mm="cost">Cost</button>
+        <button data-mm="cost" class="demo-cost">Cost</button>
         <button data-mm="tokens" class="active">Tokens</button>
         <button data-mm="requests">Requests</button>
       </div>
@@ -467,7 +471,7 @@ tr.clickable{cursor:pointer}
   </div>
   <div class="chart-box">
     <div class="chart-head">
-      <h2>By Cost Center <span style="font-size:11px;color:var(--text2);font-weight:400">(cost)</span></h2>
+      <h2 id="cost-center-title">By Cost Center <span style="font-size:11px;color:var(--text2);font-weight:400">(cost)</span></h2>
     </div>
     <div class="pie-split">
       <canvas id="cost-center-chart" class="pie-canvas" width="220" height="220"></canvas>
@@ -493,7 +497,7 @@ tr.clickable{cursor:pointer}
         <th style="cursor:default" class="num">Cached</th>
         <th style="cursor:default" class="num">Cache Write</th>
         <th style="cursor:default" class="num">Total</th>
-        <th style="cursor:default" class="num">Cost</th>
+        <th style="cursor:default" class="num demo-cost">Cost</th>
       </tr></thead>
       <tbody id="recent-tbody"></tbody>
     </table>
@@ -527,7 +531,7 @@ tr.clickable{cursor:pointer}
     <div class="chart-head">
       <h2>By User <span style="font-size:11px;color:var(--text2);font-weight:400">(top 30)</span></h2>
       <div class="tl-toggle" id="user-metric-toggle" style="margin-bottom:0">
-        <button data-um="cost" class="active">Cost</button>
+        <button data-um="cost" class="active demo-cost">Cost</button>
         <button data-um="tokens">Tokens</button>
         <button data-um="requests">Requests</button>
       </div>
@@ -624,6 +628,9 @@ let savingsRef='claude-opus-4-8';
 let tokenChart=null, userCostChart=null, toolChart=null, costCenterChart=null;
 let cachedGroups=[], cachedModels=[], cachedTools=[], chartUsers=[], directoryUsers=[];
 let cachedGeo=[], cachedCostCenters=[];
+// Recent-activity rows from the last refresh, kept so demo mode can hide the
+// Cost column without waiting for the next poll.
+let cachedRecent=[];
 // Recent-event keys from the previous refresh, used to flash only genuinely
 // new live requests on the map rather than replaying the whole feed.
 let lastRecentKeys=new Set(), pendingGeoFlashes=[], geoActivityCycle=0;
@@ -795,6 +802,7 @@ function statusCell(code){
 }
 function renderRecent(data){
   const tbody=document.getElementById('recent-tbody');
+  cachedRecent=Array.isArray(data)?data:[];
   const nextKeys=new Set();
   const fresh=[];
   (data||[]).forEach(function(r){
@@ -835,7 +843,7 @@ function renderRecent(data){
       <td class="num" style="color:var(--cyan)">${fmtN(r.cached_input_tokens||0)}</td>
       <td class="num" style="color:var(--purple)">${fmtN(r.cache_creation_tokens||0)}</td>
       <td class="num">${fmtN(r.total_tokens)}</td>
-      <td class="num">${fmtC(r.cost_usd)}</td>
+      <td class="num demo-cost">${fmtC(r.cost_usd)}</td>
     </tr>`;
   }).join('');
 }
@@ -843,7 +851,8 @@ function renderRecent(data){
 function renderKPI(d){
   document.getElementById('kpi-requests').textContent=fmtN(d.total_requests);
   document.getElementById('kpi-tokens').textContent=fmtN(d.total_tokens);
-  document.getElementById('kpi-cost').textContent=fmtC(d.total_cost_usd);
+  document.getElementById('kpi-cost').textContent=demoPrivacyEnabled()?'Hidden':fmtC(d.total_cost_usd);
+  document.getElementById('kpi-cost').title=demoPrivacyEnabled()?'Actual spend is hidden in demo mode':'Estimated cost for the selected window';
   document.getElementById('kpi-users').textContent=d.active_users;
 }
 
@@ -1229,9 +1238,26 @@ function renderUserCostChart(){
   renderUserRank(data,userPieMetric);
 }
 
+function setMetricToggle(id,attr,value){
+  document.querySelectorAll('#'+id+' button').forEach(function(b){b.classList.toggle('active',b.dataset[attr]===value);});
+}
+function syncDemoMetrics(){
+  if(!demoPrivacyEnabled())return false;
+  var changed=false;
+  if(modelMetric==='cost'){modelMetric='tokens';setMetricToggle('model-metric-toggle','mm','tokens');changed=true;}
+  if(userPieMetric==='cost'){userPieMetric='tokens';setMetricToggle('user-metric-toggle','um','tokens');changed=true;}
+  return changed;
+}
 window.refreshDemoPrivacy=function(){
+  var changed=syncDemoMetrics();
+  if(cachedOverview)renderKPI(cachedOverview);
+  if(cachedRecent.length)renderRecent(cachedRecent);
+  renderModelChart();
+  renderCostCenterChart();
+  renderUserCostChart();
+  if(changed&&typeof refreshUserChartOnly==='function')refreshUserChartOnly().catch(function(){renderUserCostChart();});
   if(typeof updateUserFilterLabel==='function')updateUserFilterLabel();
-  if(typeof renderUserCostChart==='function')renderUserCostChart();
+  if(demoPrivacyEnabled()&&typeof closeQuotaModal==='function')closeQuotaModal();
 };
 
 async function refreshUserChartOnly(){
@@ -1287,20 +1313,29 @@ function costCenterSliceLabel(meta){
   const id=meta.center&&meta.center!==meta.desc?'('+meta.center+') ':'';
   return meta.pct+'% — '+id+meta.desc;
 }
-function costCenterTooltipLabel(metas,ctx){
+function costCenterTooltipLabel(metas,ctx,tokensOnly){
   const meta=metas[ctx.dataIndex];
   const id=meta.center&&meta.center!==meta.desc?'('+meta.center+') ':'';
-  return meta.pct+'% spent — '+id+meta.desc+' · '+fmtCostLabel(ctx.raw);
+  const share=tokensOnly?'% of tokens':'% spent';
+  const amount=tokensOnly?fmtN(ctx.raw)+' tokens':fmtCostLabel(ctx.raw);
+  return meta.pct+share+' — '+id+meta.desc+' · '+amount;
 }
 function renderCostCenterChart(){
   const items=cachedCostCenters||[];
-  const total=items.reduce(function(sum,d){return sum+(d.cost_usd||0);},0);
-  const data=topFiveItems(items,function(d){return d.cost_usd||0;},function(d){return d.cost_center_description||'Unknown';},9);
+  // Demo mode is tokens-only: cost centers still matter, but their actual
+  // spend is confidential. The API returns both columns, so switching is
+  // client-side and the widget keeps its shape.
+  const tokensOnly=demoPrivacyEnabled();
+  const valueFn=tokensOnly?function(d){return d.total_tokens||0;}:function(d){return d.cost_usd||0;};
+  const total=items.reduce(function(sum,d){return sum+valueFn(d);},0);
+  const data=topFiveItems(items,valueFn,function(d){return d.cost_center_description||'Unknown';},9);
   const vals=data.map(d=>d.value);
   const metas=data.map(function(d){return costCenterSliceMeta(d,total);});
   const labels=metas.map(costCenterSliceLabel);
   const colors=data.map((d,i)=>d.item===null?OTHER_SLICE_COLOR:COLORS[i%COLORS.length]);
-  const tooltipLabel=function(ctx){return costCenterTooltipLabel(metas,ctx);};
+  const title=document.getElementById('cost-center-title');
+  if(title)title.innerHTML='By Cost Center <span style="font-size:11px;color:var(--text2);font-weight:400">('+(tokensOnly?'tokens':'cost')+')</span>';
+  const tooltipLabel=function(ctx){return costCenterTooltipLabel(metas,ctx,tokensOnly);};
   if(costCenterChart){
     costCenterChart.data.labels=labels;
     costCenterChart.data.datasets[0].data=vals;
@@ -1823,6 +1858,7 @@ document.getElementById('range-btns').addEventListener('click',e=>{
 
 document.getElementById('model-metric-toggle').addEventListener('click',e=>{
   if(e.target.tagName!=='BUTTON')return;
+  if(demoPrivacyEnabled()&&e.target.dataset.mm==='cost')return;
   document.querySelector('#model-metric-toggle .active').classList.remove('active');
   e.target.classList.add('active');
   modelMetric=e.target.dataset.mm;
@@ -1838,6 +1874,7 @@ document.getElementById('tool-metric-toggle').addEventListener('click',e=>{
 
 document.getElementById('user-metric-toggle').addEventListener('click',e=>{
   if(e.target.tagName!=='BUTTON')return;
+  if(demoPrivacyEnabled()&&e.target.dataset.um==='cost')return;
   document.querySelector('#user-metric-toggle .active').classList.remove('active');
   e.target.classList.add('active');
   userPieMetric=e.target.dataset.um;

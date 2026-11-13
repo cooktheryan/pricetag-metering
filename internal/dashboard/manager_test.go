@@ -30,6 +30,26 @@ func TestManagerPickerReviewGuards(t *testing.T) {
 	}
 }
 
+func TestManagerDemoModeHidesActualSpend(t *testing.T) {
+	data, err := FS.ReadFile("manager.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Demo mode · costs hidden",
+		".demo-private .demo-cost{display:none!important}",
+		"function syncDemoMetrics()",
+		`class="num demo-cost" data-s="CostUSD">Spend`,
+		`class="num demo-cost">'+fmt$(m.cost_usd)`,
+		"if(demoPrivacyEnabled()&&b.dataset.um==='cost')return;",
+		"if(demoPrivacyEnabled()&&b.dataset.tm==='cost')return;",
+	} {
+		if !bytes.Contains(data, []byte(want)) {
+			t.Errorf("manager.html no longer contains %q", want)
+		}
+	}
+}
+
 func TestManagerTimelineRanksByUsage(t *testing.T) {
 	data, err := FS.ReadFile("manager.html")
 	if err != nil {
